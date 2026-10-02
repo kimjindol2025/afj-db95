@@ -11,9 +11,11 @@
 4096-byte page limit과 손상 WAL 차단(`WAL_CORRUPT`)도 통과했다.
 `durable-store.fls`에서 fd_fsync prepare/commit, row 적용, torn prepare
 제외 재복구까지 통합 검증했다.
-다음 작업은 대규모 장애 주입과 외부 호환성 corpus다.
 마지막 torn WAL tail 무시는 구현했고, 중간 WAL 손상 거부까지 fault
-injection 계약으로 검증했다.
+injection 계약으로 검증했다. `fault-injection-restart.fls`에서 실제
+FreeLang 프로세스를 강제 종료한 뒤 재시작해 committed row 보존과
+미완료 prepare 폐기를 검증했다. 다음 작업은 대규모 장애 주입과 외부
+호환성 corpus다.
 
 ## M2 — SQL
 

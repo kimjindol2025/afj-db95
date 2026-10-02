@@ -1,0 +1,75 @@
+;; Real process-kill WAL recovery contract.
+;; First invocation writes a committed row and a prepare-only row, then waits.
+;; The harness kills that process. The next invocation recovers the same WAL.
+
+(define fi-wal "/tmp/afj-db95-fault-injection.wal")
+(define fi-catalog (atom {}))
+
+(defn fi-append [event]
+  (let [fd (fd_open fi-wal "a")]
+    (fd_write fd (str (json_str event) "\n"))
+    (fd_fsync fd)
+    (fd_close fd))
+  event)
+
+(defn fi-apply [write]
+  (let [op (get write "op")
+        table (get write "table")]
+    (if (= op "create")
+      (swap! fi-catalog assoc table {"name" table "rows" []})
+      (if (= op "insert")
+        (let [current (get (deref fi-catalog) table)
+              rows (conj (get current "rows") (get write "row"))]
+          (swap! fi-catalog assoc table (assoc current "rows" rows)))
+        nil))))
+
+(defn fi-recover-lines [lines index prepared]
+  (if (>= index (count lines))
+    true
+    (let [event (json-parse (get lines index))
+          tx (get event "tx")]
+      (if (= (get event "type") "prepare")
+        (swap! prepared assoc tx event)
+        (if (= (get event "type") "commit")
+          (let [pending (get (deref prepared) tx)]
+            (if (and (not (nil? pending))
+                     (= (get pending "checksum") (get event "checksum")))
+              (doseq [write (get pending "writes")] (fi-apply write))
+              nil))
+          nil))
+      (fi-recover-lines lines (+ index 1) prepared))))
+
+(defn fi-recover []
+  (reset! fi-catalog {})
+  (fi-recover-lines
+    (filter (fn [line] (not (= (str_trim line) "")))
+            (str_lines (file_read fi-wal)))
+    0
+    (atom {}))
+  (deref fi-catalog))
+
+(if (file_exists fi-wal)
+  (let [catalog (fi-recover)
+        rows (get (get catalog "users") "rows")]
+    (if (and (= (count rows) 1)
+             (= (get (first rows) "name") "Committed"))
+      (do
+        (println "afj-db95 forced-kill WAL recovery PASS")
+        (file_delete fi-wal))
+      (throw "forced-kill recovery changed committed rows")))
+  (do
+    (let [checksum (sha256 (json_str [{"op" "create" "table" "users"}
+                                      {"op" "insert" "table" "users"
+                                       "row" {"id" 1 "name" "Committed"}}]))]
+      (fi-append {"type" "prepare" "tx" 1
+                  "writes" [{"op" "create" "table" "users"}
+                            {"op" "insert" "table" "users"
+                             "row" {"id" 1 "name" "Committed"}}]
+                  "checksum" checksum})
+      (fi-append {"type" "commit" "tx" 1 "checksum" checksum}))
+    (fi-append {"type" "prepare" "tx" 2
+                "writes" [{"op" "insert" "table" "users"
+                            "row" {"id" 2 "name" "LostAfterKill"}}]
+                "checksum" "pending-only"})
+    (println "afj-db95 forced-kill WAL writer READY")
+    (set-timeout (fn [] (println "afj-db95 forced-kill WAL writer TIMEOUT")) 60000)))
