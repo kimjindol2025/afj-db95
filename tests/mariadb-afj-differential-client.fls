@@ -1,0 +1,62 @@
+;; AFJ side of the MariaDB/AFJ-DB differential runner.
+;; It reads and sends the same expanded SQL corpus used by mariadb.
+
+(load "/root/kilo-freelang/projects/afj-db95/src/tcp-server.fls")
+
+(define diff-sql-file
+  "/root/kilo-freelang/projects/afj-db95/tests/mariadb-compatibility-expanded.sql")
+
+(defn diff-request [token statement]
+  (try
+    (json-parse
+      (tcp-send "127.0.0.1" afj-tcp-port
+                (json_str {"type" "query" "token" token
+                           "statement" statement})
+                3000))
+    (catch [error]
+      {"ok" false "error" (error_message error)})))
+
+(defn diff-status [response]
+  (if (get response "ok")
+    "PASS"
+    (if (regex_match_i (get response "error")
+                       "unsupported|not supported|database|transaction")
+      "UNSUPPORTED"
+      "FAIL")))
+
+(defn diff-run [statements index token passed unsupported failed]
+  (if (>= index (count statements))
+    (println (json_str {"type" "summary"
+                        "total" (count statements)
+                        "passed" (deref passed)
+                        "unsupported" (deref unsupported)
+                        "failed" (deref failed)}))
+    (let [statement (str_trim (get statements index))
+          response (diff-request token statement)
+          status (diff-status response)]
+      (if (= status "PASS")
+        (swap! passed + 1)
+        (if (= status "UNSUPPORTED")
+          (swap! unsupported + 1)
+          (swap! failed + 1)))
+      (println (json_str {"type" "case" "case" (+ index 1)
+                          "sql" statement "status" status
+                          "response" response}))
+      (diff-run statements (+ index 1) token passed unsupported failed))))
+
+(let [login (json-parse
+              (tcp-send "127.0.0.1" afj-tcp-port
+                        (json_str {"type" "login" "user" "root"
+                                   "password" "development-only"})
+                        3000))
+      token (get login "token")
+      source (str_replace (file_read diff-sql-file) "\n" " ")
+      without-comment (str_replace source
+                                   "-- Expanded MariaDB comparison corpus for the currently supported AFJ-DB subset."
+                                   "")
+      statements (filter (fn [statement]
+                           (not (= (str_trim statement) "")))
+                         (str_split without-comment ";"))]
+  (if (get login "ok")
+    (diff-run statements 0 token (atom 0) (atom 0) (atom 0))
+    (throw "differential client login failure")))
