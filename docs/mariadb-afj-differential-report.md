@@ -67,11 +67,12 @@ bash tests/mariadb-afj-differential-runner.sh
 
 ### Case 17 상태 영향
 
-Case 17의 오류는 case 14/16의 transaction 상태가 남아서 생긴 것이
-아니다. 동일한 초기 catalog에서 단독으로 실행해도
-`SELECT id,active FROM users WHERE id=2`는 명시적 projection parser
-분기가 없어 `SQL_ERROR`가 난다. 따라서 상태 불일치가 아니라 parser
-미지원으로 확정한다.
+Case 17의 오류는 case 14/16의 transaction 상태가 남아서 생긴 것으로
+보이지 않는다. 전체 runner의 동일 초기 상태 결과와 `parse-select`의
+projection 분기 소스를 함께 확인하면
+`SELECT id,active FROM users WHERE id=2`는 기본 parser 경로에서
+`SQL_ERROR`가 난다. 따라서 상태 불일치가 아니라 parser 미지원으로
+확정한다.
 
 ### Triage conclusion
 
@@ -82,4 +83,6 @@ Case 17의 오류는 case 14/16의 transaction 상태가 남아서 생긴 것이
 - `ROOT_CAUSE=CONFIRMED` for all nine cases
 - `runner normalization error`: 없음. AFJ 응답은 원문 `SQL_ERROR`이며,
   runner는 이를 숨기거나 `UNSUPPORTED`로 변환하지 않았다.
+- 분류별 건수: 파서 미지원 7건, 프로토콜/파서 미지원 2건, 실행기 미지원 0건,
+  의미/상태 불일치 0건, runner 정규화 오류 0건, 원인 미확정 0건.
 - `CODE_CHANGE=NO`: 이 triage 단계에서는 구현 파일을 수정하지 않았다.
