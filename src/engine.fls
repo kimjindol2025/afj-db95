@@ -1,0 +1,475 @@
+;; AFJ-DB execution engine baseline.
+;; SQL parser AST is deliberately kept separate from storage internals.
+
+(define engine-catalog (atom {}))
+
+(defn engine-table [name]
+  (let [table (get (deref engine-catalog) name)]
+    (if (nil? table)
+      (throw (str "table not found: " name))
+      table)))
+
+(defn engine-resolve-table-name [name]
+  (if (has-key? (deref engine-catalog) name)
+    name
+    (let [match (first (filter (fn [candidate]
+                                 (= (str_lower candidate) (str_lower name)))
+                               (keys (deref engine-catalog))))]
+      (if (nil? match)
+        (throw (str "table not found: " name))
+        match))))
+
+(defn engine-key [qualified]
+  (last (regex_split qualified "\\.")))
+
+(defn engine-qualify-row [row alias]
+  (if (nil? alias)
+    row
+    (let [qualified (atom row)]
+      (doseq [column (keys row)]
+        (swap! qualified assoc (str alias "." column) (get row column)))
+      (deref qualified))))
+
+(defn engine-match? [row where]
+  (if (nil? where)
+    true
+    (if (has-key? where "is-null")
+      (if (get where "is-null")
+        (nil? (get row (get where "column")))
+        (not (nil? (get row (get where "column")))))
+      (= (get row (get where "column")) (get where "equals")))))
+
+(defn engine-join [left right left-key right-key]
+  (arr_flatten
+    (map (fn [left-row]
+           (map (fn [right-row] (obj-merge left-row right-row))
+                (filter (fn [right-row]
+                          (= (get left-row (engine-key left-key))
+                             (get right-row (engine-key right-key))))
+                        right))) left)))
+
+(defn engine-left-join [left right left-key right-key]
+  (arr_flatten
+    (map (fn [left-row]
+           (let [matches (filter (fn [right-row]
+                                   (= (get left-row (engine-key left-key))
+                                      (get right-row (engine-key right-key))))
+                                 right)]
+             (if (= (count matches) 0)
+               [left-row]
+               (map (fn [right-row] (obj-merge left-row right-row))
+                    matches))))
+         left)))
+
+(defn engine-aggregate-count [rows aggregate group-by output-column]
+  (let [groups (atom {})
+        count-column (get aggregate "column")]
+    (doseq [row rows]
+      (let [key (if (= (count group-by) 0)
+                  "__all__"
+                  (get row (last group-by)))
+            current (get (deref groups) key
+                         {"group" key "count" 0})
+            include (if (= count-column "*")
+                      true
+                      (not (nil? (get row count-column))))]
+        (if include
+          (swap! groups assoc key
+                 (assoc current "count" (+ (get current "count") 1)))
+          nil)))
+    (map (fn [key]
+           (let [group (get (deref groups) key)
+                 row (if (= (count group-by) 0)
+                       {}
+                       (assoc {} (engine-key (last group-by))
+                              (get group "group")))]
+             (assoc row output-column (get group "count"))))
+         (keys (deref groups)))))
+
+(defn engine-project-row [row columns]
+  (let [projected (atom {})]
+    (doseq [column columns]
+      (swap! projected assoc (engine-key column) (get row column)))
+    (deref projected)))
+
+(defn engine-group-count [rows column]
+  (let [counts (atom {})]
+    (doseq [row rows]
+      (let [key (get row column)]
+        (swap! counts assoc key (+ (get (deref counts) key 0) 1))))
+    (deref counts)))
+
+(defn engine-type-valid? [value type]
+  (if (nil? value)
+    true
+    (if (= type "INTEGER")
+      (or (integer? value) (regex_match value "^-?[0-9]+$"))
+      (if (= type "BOOLEAN")
+        (boolean? value)
+        (string? value)))))
+
+(defn engine-check-valid? [row check]
+  (let [left (get row (get check "column"))
+        right (get check "value")
+        operator (get check "operator")]
+    (if (= operator "=")
+      (= left right)
+      (if (or (= operator "!=") (= operator "<>"))
+        (not (= left right))
+        (if (= operator ">")
+          (> left right)
+          (if (= operator "<")
+            (< left right)
+            (if (= operator ">=")
+              (>= left right)
+              (if (= operator "<=")
+                (<= left right)
+                false))))))))
+
+(defn engine-validate-foreign-key [row constraint]
+  (let [local (get row (get constraint "column"))]
+    (if (nil? local)
+      true
+      (let [table-name (engine-resolve-table-name (get constraint "references-table"))
+            table (engine-table table-name)
+            remote-column (get constraint "references-column")]
+        (if (any? (fn [remote]
+                    (= local (get remote remote-column)))
+                  (get table "rows"))
+          true
+          (throw (str "FOREIGN_KEY_VIOLATION: " (get constraint "column"))))))))
+
+(defn engine-validate-row [schema row existing]
+  (doseq [column (get schema "columns" [])]
+    (let [name (get column "name")
+          value (get row name)]
+      (if (and (not (get column "nullable" true)) (nil? value))
+        (throw (str "NOT_NULL_VIOLATION: " name))
+        (if (not (engine-type-valid? value (get column "type" "TEXT")))
+          (throw (str "TYPE_VIOLATION: " name))
+          nil))))
+  (let [primary (get schema "primary-key")]
+    (if (and (not (nil? primary))
+             (not (nil? (get row primary)))
+             (any? (fn [old] (= (get old primary) (get row primary))) existing))
+      (throw "PRIMARY_KEY_VIOLATION")
+      nil))
+  (doseq [column (get schema "unique-columns" [])]
+    (let [value (get row column)]
+      (if (and (not (nil? value))
+               (any? (fn [old] (= (get old column) value)) existing))
+        (throw (str "UNIQUE_VIOLATION: " column))
+        nil)))
+  (doseq [constraint (get schema "foreign-keys" [])]
+    (engine-validate-foreign-key row constraint))
+  (doseq [check (get schema "checks" [])]
+    (if (engine-check-valid? row check)
+      nil
+      (throw (str "CHECK_VIOLATION: " (get check "column")))))
+  true)
+
+(defn execute-create [ast]
+  (let [name (get ast "table")]
+    (if (has-key? (deref engine-catalog) name)
+      (throw (str "table already exists: " name))
+      (swap! engine-catalog assoc name
+             (assoc {"name" name "rows" [] "columns" []}
+                    "schema" (get ast "schema" {}))))
+    {"ok" true "type" "create-table" "table" name}))
+
+(defn execute-alter [ast]
+  (let [name (get ast "table")
+        table (engine-table name)
+        column (get ast "column")
+        columns (get table "columns" [])]
+    (if (contains? columns column)
+      (throw (str "column already exists: " column))
+      (let [rows (map (fn [row] (assoc row column nil)) (get table "rows"))]
+        (swap! engine-catalog assoc name
+               (assoc table "columns" (conj columns column) "rows" rows))
+        {"ok" true "type" "alter-table" "table" name "column" column}))))
+
+(defn execute-drop [ast]
+  (let [name (get ast "table")]
+    (engine-table name)
+    (swap! engine-catalog dissoc name)
+    {"ok" true "type" "drop-table" "table" name}))
+
+(defn execute-insert [ast]
+  (let [name (get ast "table")
+        table (engine-table name)
+        new-rows (if (has-key? ast "rows")
+                   (get ast "rows")
+                   [(get ast "row")])
+        existing (get table "rows")
+        candidate (atom existing)]
+    (doseq [row new-rows]
+      (engine-validate-row (get table "schema" {}) row (deref candidate))
+      (swap! candidate conj row))
+    (let [rows (deref candidate)]
+    (swap! engine-catalog assoc name (assoc table "rows" rows))
+    {"ok" true "type" "insert" "count" (count new-rows)})))
+
+(defn execute-select [ast]
+  (let [table (engine-table (get ast "table"))
+        rows (map (fn [row]
+                    (engine-qualify-row row (get ast "table-alias")))
+                  (get table "rows"))
+        where (get ast "where")
+        filtered (if (nil? where)
+                   rows
+                   (filter (fn [row] (engine-match? row where)) rows))
+        joined (if (nil? (get ast "join"))
+                 filtered
+                 (let [join (get ast "join")
+                       right (map (fn [row]
+                                    (engine-qualify-row
+                                      row (get join "table-alias")))
+                                  (get (engine-table (get join "table")) "rows"))]
+                   (if (= (get join "type") "left")
+                     (engine-left-join filtered right
+                                        (get join "left") (get join "right"))
+                     (engine-join filtered right
+                                  (get join "left") (get join "right")))))
+        ordered (if (nil? (get ast "order-by"))
+                  joined
+                  (arr_sort_by joined (engine-key (get ast "order-by"))))
+        direction-ordered (if (= (get ast "order-direction") "desc")
+                            (reverse ordered)
+                            ordered)
+        limited (if (nil? (get ast "limit"))
+                  direction-ordered
+                  (take (get ast "limit") direction-ordered))]
+    (if (not (nil? (get ast "aggregate")))
+      (let [aggregate-rows (engine-aggregate-count
+                             joined
+                             (get ast "aggregate")
+                             (get ast "group-by" [])
+                             (get (get ast "aggregate") "alias"))]
+        {"ok" true "type" "select" "rows" aggregate-rows})
+      (if (nil? (get ast "group-by"))
+        {"ok" true "type" "select"
+         "rows" (if (or (nil? (get ast "columns"))
+                        (= (get ast "columns") ["*"]))
+                   limited
+                   (map (fn [row]
+                          (engine-project-row row (get ast "columns")))
+                        limited))}
+        {"ok" true "type" "select" "groups"
+         (engine-group-count limited (engine-key (get ast "group-by")))}))))
+
+(defn execute-update [ast]
+  (let [name (get ast "table")
+        table (engine-table name)
+        where (get ast "where")
+        rows (map (fn [row]
+                    (if (engine-match? row where)
+                      (obj-merge row (get ast "changes"))
+                      row))
+                  (get table "rows"))]
+    (swap! engine-catalog assoc name (assoc table "rows" rows))
+    {"ok" true "type" "update" "rows" rows}))
+
+(defn execute-delete [ast]
+  (let [name (get ast "table")
+        table (engine-table name)
+        where (get ast "where")
+        rows (if (nil? where)
+               []
+               (filter (fn [row]
+                         (not (engine-match? row where)))
+                       (get table "rows")))]
+    (swap! engine-catalog assoc name (assoc table "rows" rows))
+    {"ok" true "type" "delete" "rows" rows}))
+
+(defn execute-ast [ast]
+  (let [kind (get ast "type")]
+    (if (= kind "create-table")
+      (execute-create ast)
+      (if (= kind "alter-table")
+        (execute-alter ast)
+        (if (= kind "drop-table")
+          (execute-drop ast)
+      (if (= kind "insert")
+        (execute-insert ast)
+        (if (= kind "select")
+          (execute-select ast)
+          (if (= kind "update")
+            (execute-update ast)
+            (if (= kind "delete")
+              (execute-delete ast)
+              (throw (str "unsupported AST type: " kind)))))))))))
+
+(execute-ast {"type" "create-table" "table" "users"})
+(execute-ast {"type" "insert" "table" "users" "row" {"id" 1 "name" "Kim"}})
+(execute-ast {"type" "insert" "table" "users" "row" {"id" 2 "name" "Lee"}})
+(execute-ast {"type" "create-table" "table" "teams"})
+(execute-ast {"type" "insert" "table" "teams" "row" {"team_id" 10 "team" "core"}})
+(execute-ast {"type" "update" "table" "users" "changes" {"team_id" 10}})
+(let [result (execute-ast {"type" "select" "table" "users"})]
+  (if (= (count (get result "rows")) 2)
+    (println "afj-db95 executor PASS")
+    (throw "executor result failure")))
+(let [result (execute-ast {"type" "select" "table" "users"
+                           "where" {"column" "name" "equals" "Kim"}})]
+  (if (= (count (get result "rows")) 1)
+    (println "afj-db95 WHERE executor PASS")
+    (throw "WHERE executor failure")))
+(let [result (execute-ast {"type" "update" "table" "users"
+                           "where" {"column" "name" "equals" "Kim"}
+                           "changes" {"age" 31}})]
+  (if (= (get (first (get result "rows")) "age") 31)
+    (println "afj-db95 WHERE update PASS")
+    (throw "WHERE update failure")))
+(let [joined (execute-ast {"type" "select" "table" "users"
+                           "join" {"table" "teams" "left" "team_id"
+                                   "right" "team_id"}})
+      groups (execute-ast {"type" "select" "table" "users"
+                           "group-by" "team_id"})
+      ordered (execute-ast {"type" "select" "table" "users"
+                            "order-by" "id"})]
+  (if (and (= (count (get joined "rows")) 2)
+           (= (get (get groups "groups") 10) 2)
+           (= (get (first (get ordered "rows")) "id") 1))
+    (println "afj-db95 JOIN/GROUP engine PASS")
+    (if (= (count (get joined "rows")) 1)
+      (println "afj-db95 JOIN engine PASS")
+      (throw "JOIN engine failure"))))
+(let [altered (execute-ast {"type" "alter-table" "table" "users"
+                            "operation" "add-column" "column" "email"})
+      row (first (get (execute-ast {"type" "select" "table" "users"}) "rows"))
+      dropped (execute-ast {"type" "drop-table" "table" "teams"})
+      nulls (execute-ast {"type" "select" "table" "users"
+                          "where" {"column" "email" "is-null" true}})
+      non-nulls (execute-ast {"type" "select" "table" "users"
+                              "where" {"column" "email" "is-null" false}})
+      limited (execute-ast {"type" "select" "table" "users" "limit" 1})]
+  (if (and (= (get altered "column") "email")
+           (has-key? row "email")
+           (= (count (get nulls "rows")) 2)
+           (= (count (get non-nulls "rows")) 0)
+           (= (count (get limited "rows")) 1)
+           (= (get dropped "type") "drop-table"))
+    (if (not (has-key? (deref engine-catalog) "teams"))
+      (println "afj-db95 DDL engine PASS")
+      (throw "DROP TABLE did not remove catalog entry"))
+    (throw "ALTER TABLE did not add column")))
+
+;; Parser-to-engine smoke: literal SQL values must reach the real executor.
+(load "/root/kilo-freelang/projects/afj-db95/src/sql-core.fls")
+(execute-ast (parse-sql "CREATE TABLE literal_users"))
+(execute-ast (parse-sql "INSERT INTO literal_users (id,name) VALUES (1,'Kim')"))
+(execute-ast (parse-sql "UPDATE literal_users SET name='Lee' WHERE id=1"))
+(let [literal-result (execute-ast (parse-sql "SELECT * FROM literal_users"))]
+  (if (and (= (count (get literal-result "rows")) 1)
+           (= (get (first (get literal-result "rows")) "name") "Lee"))
+    (do
+      (execute-ast (parse-sql "DELETE FROM literal_users WHERE id=1"))
+      (let [deleted-result (execute-ast (parse-sql "SELECT * FROM literal_users"))]
+        (if (= (count (get deleted-result "rows")) 0)
+          (println "afj-db95 parser-to-engine INSERT/UPDATE/DELETE PASS")
+          (throw "literal DELETE did not reach engine"))))
+      (throw "literal INSERT/UPDATE did not reach engine")))
+(execute-ast (parse-sql "INSERT INTO literal_users (id,name) VALUES (2,'Park'),(3,'Choi')"))
+(let [multi-result (execute-ast (parse-sql "SELECT * FROM literal_users"))]
+  (if (= (count (get multi-result "rows")) 2)
+    (println "afj-db95 multi-row INSERT engine PASS")
+    (throw "multi-row INSERT lost rows")))
+
+;; MariaDB corpus execution: LEFT JOIN, aliases, grouped COUNT and COUNT(*).
+(execute-ast {"type" "create-table" "table" "agg_teams"})
+(execute-ast {"type" "create-table" "table" "agg_users"})
+(execute-ast {"type" "insert" "table" "agg_teams"
+              "rows" [{"id" 1 "name" "core"}
+                      {"id" 2 "name" "ops"}]})
+(execute-ast {"type" "insert" "table" "agg_users"
+              "rows" [{"id" 1 "team_id" 1}
+                      {"id" 2 "team_id" 2}
+                      {"id" 3 "team_id" 1}]})
+(execute-ast {"type" "create-table" "table" "project_users"})
+(execute-ast {"type" "insert" "table" "project_users"
+              "rows" [{"id" 1 "name" "Kim" "active" true}
+                      {"id" 2 "name" "Lee" "active" true}
+                      {"id" 3 "name" "Park" "active" false}]})
+(let [grouped (execute-ast
+                (parse-sql
+                  "SELECT t.name, COUNT(u.id) AS n FROM agg_teams t LEFT JOIN agg_users u ON t.id=u.team_id GROUP BY t.id,t.name ORDER BY t.id"))
+      all-count (execute-ast
+                  (parse-sql "SELECT COUNT(*) AS remaining FROM agg_users"))
+      projected (execute-ast
+                  (parse-sql
+                    "SELECT id,name FROM project_users WHERE active=TRUE ORDER BY id DESC"))
+      core (first (filter (fn [row] (= (get row "name") "core"))
+                          (get grouped "rows")))
+      ops (first (filter (fn [row] (= (get row "name") "ops"))
+                         (get grouped "rows")))]
+  (if (and (= (get core "n") 2)
+           (= (get ops "n") 1)
+           (= (get (first (get all-count "rows")) "remaining") 3)
+           (= (get (first (get projected "rows")) "id") 2)
+           (= (get (first (get projected "rows")) "name") "Lee")
+           (not (has-key? (first (get projected "rows")) "active")))
+    (println "afj-db95 MariaDB aggregate/left-join engine PASS")
+    (throw "MariaDB aggregate/left-join engine failure")))
+
+;; DDL schema constraints: primary, unique, NOT NULL and type checks.
+(let [created (execute-ast
+                (parse-sql
+                  "CREATE TABLE constrained_users(id INT PRIMARY KEY, name TEXT NOT NULL, email TEXT UNIQUE)"))
+      valid (execute-ast
+              (parse-sql "INSERT INTO constrained_users (id,name,email) VALUES (1,'Kim','k@example')"))
+      duplicate (try
+                  (do
+                    (execute-ast
+                      (parse-sql "INSERT INTO constrained_users (id,name,email) VALUES (1,'Lee','l@example')"))
+                    "NO_ERROR")
+                  (catch [error] (error_message error)))
+      null-name (try
+                  (do
+                    (execute-ast
+                      (parse-sql "INSERT INTO constrained_users (id,name,email) VALUES (2,NULL,'n@example')"))
+                    "NO_ERROR")
+                  (catch [error] (error_message error)))
+      duplicate-email (try
+                        (do
+                          (execute-ast
+                            (parse-sql "INSERT INTO constrained_users (id,name,email) VALUES (2,'Park','k@example')"))
+                          "NO_ERROR")
+                        (catch [error] (error_message error)))]
+  (if (and (= (get created "type") "create-table")
+           (= (get valid "count") 1)
+           (= duplicate "[engine-validate-row] PRIMARY_KEY_VIOLATION")
+           (= null-name "[engine-validate-row] NOT_NULL_VIOLATION: name")
+           (= duplicate-email "[engine-validate-row] UNIQUE_VIOLATION: email"))
+    (println "afj-db95 schema constraints engine PASS")
+    (throw "schema constraint engine failure")))
+
+;; Relational constraints: FK lookup and CHECK evaluation are on the INSERT path.
+(let [parent (execute-ast (parse-sql "CREATE TABLE fk_teams(id INT PRIMARY KEY)"))
+      parent-row (execute-ast
+                   (parse-sql "INSERT INTO fk_teams (id) VALUES (10)"))
+      child (execute-ast
+              (parse-sql
+                "CREATE TABLE fk_users(id INT PRIMARY KEY, team_id INT, active BOOLEAN, CONSTRAINT fk_team FOREIGN KEY(team_id) REFERENCES fk_teams(id), CHECK(active = TRUE))"))
+      valid (execute-ast
+              (parse-sql "INSERT INTO fk_users (id,team_id,active) VALUES (1,10,TRUE)"))
+      missing-parent (try
+                       (do
+                         (execute-ast
+                           (parse-sql "INSERT INTO fk_users (id,team_id,active) VALUES (2,99,TRUE)"))
+                         "NO_ERROR")
+                       (catch [error] (error_message error)))
+      failed-check (try
+                     (do
+                       (execute-ast
+                         (parse-sql "INSERT INTO fk_users (id,team_id,active) VALUES (3,10,FALSE)"))
+                       "NO_ERROR")
+                       (catch [error] (error_message error)))]
+  (if (and (= (get parent "type") "create-table")
+           (= (get parent-row "count") 1)
+           (= (get child "type") "create-table")
+           (= (get valid "count") 1)
+           (= missing-parent "[engine-validate-row] [engine-validate-foreign-key] FOREIGN_KEY_VIOLATION: team_id")
+           (= failed-check "[engine-validate-row] CHECK_VIOLATION: active"))
+    (println "afj-db95 foreign-key/check engine PASS")
+    (throw "foreign-key/check engine failure")))

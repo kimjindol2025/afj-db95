@@ -1,0 +1,37 @@
+;; AFJ-DB lock manager + engine mutation integration.
+
+(load "/root/kilo-freelang/projects/afj-db95/src/engine.fls")
+(load "/root/kilo-freelang/projects/afj-db95/src/locking.fls")
+
+(defn locked-update [tx table id changes]
+  (let [resource (str table ":" id)
+        lock (acquire-lock tx resource "X")]
+    (if (not (get lock "ok"))
+      lock
+      (do
+        (let [result (execute-ast {"type" "update" "table" table
+                                   "where" {"column" "id" "equals" id}
+                                   "changes" changes})]
+          (release-lock tx resource)
+          result)))))
+
+(execute-ast {"type" "create-table" "table" "concurrent_users"})
+(execute-ast {"type" "insert" "table" "concurrent_users"
+              "row" {"id" 1 "name" "Kim"}})
+
+;; A conflicting writer is rejected before it can mutate the engine row.
+(acquire-lock 101 "concurrent_users:1" "X")
+(let [blocked (locked-update 102 "concurrent_users" 1 {"name" "Blocked"})
+      unchanged (execute-ast {"type" "select" "table" "concurrent_users"})]
+  (if (and (= (get blocked "error") "LOCK_CONFLICT")
+           (= (get (first (get unchanged "rows")) "name") "Kim") )
+    (println "afj-db95 concurrent lock conflict PASS")
+    (throw "lock conflict mutated engine row")))
+(release-all 101)
+
+;; After the owner releases, the next writer can update the same row.
+(let [updated (locked-update 102 "concurrent_users" 1 {"name" "Lee"})]
+  (if (= (get (first (get updated "rows")) "name") "Lee")
+    (println "afj-db95 concurrent engine update PASS")
+    (throw "released lock did not permit engine update")))
+(release-all 102)

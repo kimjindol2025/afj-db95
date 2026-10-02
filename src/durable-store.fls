@@ -1,0 +1,114 @@
+;; AFJ-DB integrated durable transactional store.
+
+(define ds-next-tx (atom 0))
+(define ds-catalog (atom {}))
+(define ds-wal "/tmp/afj-db95-integrated.wal")
+
+(defn ds-append [event]
+  (let [fd (fd_open ds-wal "a")]
+    (fd_write fd (str (json_str event) "\n"))
+    (fd_fsync fd)
+    (fd_close fd))
+  event)
+
+(defn ds-apply-write [write]
+  (let [op (get write "op")
+        table (get write "table")]
+    (if (= op "create")
+      (swap! ds-catalog assoc table {"name" table "rows" []})
+      (if (= op "insert")
+        (let [current (get (deref ds-catalog) table)
+              rows (conj (get current "rows") (get write "row"))]
+          (swap! ds-catalog assoc table (assoc current "rows" rows)))
+        nil))))
+
+(defn ds-begin []
+  (swap! ds-next-tx + 1))
+
+(defn ds-commit [tx writes]
+  (let [checksum (sha256 (json_str writes))]
+    (ds-append {"type" "prepare" "tx" tx "writes" writes "checksum" checksum})
+    (ds-append {"type" "commit" "tx" tx "checksum" checksum})
+    (doseq [write writes] (ds-apply-write write))
+    {"ok" true "tx" tx "writes" (count writes)}))
+
+(defn ds-recover-lines [lines index prepared]
+  (if (>= index (count lines))
+    true
+    (let [line (get lines index)
+          last-line (= index (- (count lines) 1))
+          event (if last-line
+                  (try
+                    (json-parse line)
+                    (catch [error] nil))
+                  (json-parse line))]
+      (if (nil? event)
+        (if last-line
+          true
+          (throw "WAL_CORRUPT"))
+        (let [tx (get event "tx")]
+          (if (= (get event "type") "prepare")
+            (swap! prepared assoc tx event)
+            (if (= (get event "type") "commit")
+              (let [pending (get (deref prepared) tx)]
+                (if (and (not (nil? pending))
+                         (= (get pending "checksum") (get event "checksum")))
+                  (doseq [write (get pending "writes")] (ds-apply-write write))
+                  nil))
+              nil))
+          (ds-recover-lines lines (+ index 1) prepared))))))
+
+(defn ds-recover []
+  (do
+    (reset! ds-catalog {})
+    (let [prepared (atom {})]
+      (if (file_exists ds-wal)
+        (try
+          (ds-recover-lines
+            (filter (fn [line] (not (= (str_trim line) "")))
+                    (str_lines (file_read ds-wal)))
+            0 prepared)
+          (catch [error] (throw "WAL_CORRUPT")))
+        nil))
+    (deref ds-catalog)))
+
+(if (file_exists ds-wal) (file_delete ds-wal) true)
+(let [committed (ds-begin)
+      uncommitted (ds-begin)
+      mismatched (ds-begin)]
+  (ds-commit committed [{"op" "create" "table" "users"}
+                        {"op" "insert" "table" "users"
+                         "row" {"id" 1 "name" "Kim"}}])
+  ;; This prepare has no commit marker and must disappear after recovery.
+  (ds-append {"type" "prepare" "tx" uncommitted
+              "writes" [{"op" "insert" "table" "users"
+                          "row" {"id" 2 "name" "Lost"}}]
+              "checksum" "torn"})
+  (ds-append {"type" "prepare" "tx" mismatched
+              "writes" [{"op" "insert" "table" "users"
+                          "row" {"id" 3 "name" "Bad"}}]
+              "checksum" "good"})
+  (ds-append {"type" "commit" "tx" mismatched "checksum" "wrong"})
+  (ds-recover)
+  (let [rows (get (get (deref ds-catalog) "users") "rows")]
+    (if (and (= (count rows) 1)
+             (= (get (first rows) "name") "Kim"))
+      (println "afj-db95 integrated durable store PASS")
+      (throw "integrated recovery failure"))))
+(file_append ds-wal "{\"type\":\"prepare\",\"tx\":999")
+(ds-recover)
+(let [rows (get (get (deref ds-catalog) "users") "rows")]
+  (if (and (= (count rows) 1)
+           (= (get (first rows) "name") "Kim"))
+    (println "afj-db95 torn WAL tail recovery PASS")
+    (throw "torn WAL tail changed committed rows")))
+(file_write ds-wal "{not-json}\n{}\n")
+(try
+  (do
+    (ds-recover)
+    (throw "middle WAL corruption accepted"))
+  (catch [error]
+    (if (= (error_message error) "WAL_CORRUPT")
+      (println "afj-db95 middle WAL corruption rejection PASS")
+      (throw error))))
+(file_delete ds-wal)

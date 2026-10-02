@@ -1,0 +1,89 @@
+;; AFJ-DB transaction/engine integration.
+;; The transaction boundary owns a catalog snapshot and delegates SQL changes
+;; to the engine. Rollback restores the exact pre-transaction catalog.
+
+(load "/root/kilo-freelang/projects/afj-db95/src/engine.fls")
+
+(define tx-engine-state (atom {"status" "idle" "snapshot" nil "savepoints" {}}))
+
+(defn tx-copy [value]
+  (json-parse (json_str value)))
+
+(defn tx-begin-engine []
+  (if (= (get (deref tx-engine-state) "status") "active")
+    (throw "TX_ALREADY_ACTIVE")
+    (reset! tx-engine-state
+            {"status" "active"
+             "snapshot" (tx-copy (deref engine-catalog))
+             "savepoints" {}})))
+
+(defn tx-assert-active []
+  (if (= (get (deref tx-engine-state) "status") "active")
+    true
+    (throw "TX_NOT_ACTIVE")))
+
+(defn tx-execute-engine [ast]
+  (tx-assert-active)
+  (execute-ast ast))
+
+(defn tx-savepoint-engine [name]
+  (tx-assert-active)
+  (swap! tx-engine-state assoc "savepoints"
+         (assoc (get (deref tx-engine-state) "savepoints")
+                name (tx-copy (deref engine-catalog))))
+  name)
+
+(defn tx-rollback-to-engine [name]
+  (tx-assert-active)
+  (let [savepoints (get (deref tx-engine-state) "savepoints")
+        snapshot (get savepoints name)]
+    (if (nil? snapshot)
+      (throw "SAVEPOINT_NOT_FOUND")
+      (reset! engine-catalog (tx-copy snapshot)))))
+
+(defn tx-rollback-engine []
+  (tx-assert-active)
+  (reset! engine-catalog (tx-copy (get (deref tx-engine-state) "snapshot")))
+  (reset! tx-engine-state {"status" "idle" "snapshot" nil "savepoints" {}})
+  {"ok" true "status" "rolled-back"})
+
+(defn tx-commit-engine []
+  (tx-assert-active)
+  (reset! tx-engine-state {"status" "idle" "snapshot" nil "savepoints" {}})
+  {"ok" true "status" "committed"})
+
+;; Rollback removes all changes made in the transaction.
+(tx-begin-engine)
+(tx-execute-engine {"type" "create-table" "table" "rollback_users"})
+(tx-execute-engine {"type" "insert" "table" "rollback_users"
+                    "row" {"id" 1 "name" "Transient"}})
+(tx-rollback-engine)
+(if (has-key? (deref engine-catalog) "rollback_users")
+  (throw "transaction rollback leaked catalog changes")
+  nil)
+
+;; Commit preserves the same engine changes.
+(tx-begin-engine)
+(tx-execute-engine {"type" "create-table" "table" "commit_users"})
+(tx-execute-engine {"type" "insert" "table" "commit_users"
+                    "row" {"id" 1 "name" "Durable"}})
+(tx-commit-engine)
+(let [committed (execute-ast {"type" "select" "table" "commit_users"})]
+  (if (= (count (get committed "rows")) 1)
+    (println "afj-db95 transaction engine COMMIT/ROLLBACK PASS")
+    (throw "transaction commit lost engine changes")))
+
+;; Savepoint rollback keeps changes before the savepoint and removes later ones.
+(tx-begin-engine)
+(tx-execute-engine {"type" "insert" "table" "commit_users"
+                    "row" {"id" 2 "name" "BeforeSavepoint"}})
+(tx-savepoint-engine "before-second")
+(tx-execute-engine {"type" "insert" "table" "commit_users"
+                    "row" {"id" 3 "name" "AfterSavepoint"}})
+(tx-rollback-to-engine "before-second")
+(let [after-savepoint (execute-ast {"type" "select" "table" "commit_users"})]
+  (if (= (count (get after-savepoint "rows")) 2)
+    (do
+      (tx-rollback-engine)
+      (println "afj-db95 transaction engine SAVEPOINT PASS"))
+    (throw "savepoint rollback restored wrong catalog")))

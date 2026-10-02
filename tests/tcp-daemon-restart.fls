@@ -1,0 +1,14 @@
+;; Bounded daemon harness for the two-process WAL restart contract.
+(load "/root/kilo-freelang/projects/afj-db95/src/tcp-server.fls")
+
+(let [started (start-afj-tcp)]
+  (if (get started "ok")
+    (do
+      (println "afj-db95 TCP restart daemon STARTED")
+      (set-timeout
+        (fn []
+          (do
+            (stop-afj-tcp)
+            (println "afj-db95 TCP restart daemon STOPPED")))
+        30000))
+    (throw "TCP restart daemon start failure")))

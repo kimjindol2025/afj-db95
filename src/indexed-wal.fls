@@ -1,0 +1,46 @@
+;; AFJ-DB incremental index WAL contract.
+
+(load "/root/kilo-freelang/projects/afj-db95/src/btree.fls")
+
+(define indexed-wal-path (atom nil))
+(define indexed-tree (atom []))
+
+(defn indexed-wal-apply [event]
+  (if (= (get event "op") "add")
+    (swap! indexed-tree btree-add (get event "key") (get event "row-id"))
+    (if (= (get event "op") "remove")
+      (reset! indexed-tree
+              (btree-remove (deref indexed-tree)
+                            (get event "key") (get event "row-id")))
+      (throw "INDEX_WAL_UNKNOWN_OP")))
+  event)
+
+(defn indexed-wal-append [event]
+  (let [fd (fd_open (deref indexed-wal-path) "a")]
+    (fd_write fd (str (json_str event) "\n"))
+    (fd_fsync fd)
+    (fd_close fd))
+  (indexed-wal-apply event))
+
+(defn indexed-wal-open [path]
+  (if (not (file_exists path)) (file_write path "") true)
+  (reset! indexed-wal-path path)
+  (reset! indexed-tree [])
+  (doseq [line (filter (fn [line] (not (= (str_trim line) "")))
+                       (str_lines (file_read path)))]
+    (indexed-wal-apply (json-parse line)))
+  (deref indexed-tree))
+
+(let [path "/tmp/afj-db95-index.wal"]
+  (if (file_exists path) (file_delete path) true)
+  (indexed-wal-open path)
+  (indexed-wal-append {"op" "add" "key" "Kim" "row-id" 1})
+  (indexed-wal-append {"op" "add" "key" "Kim" "row-id" 3})
+  (indexed-wal-append {"op" "add" "key" "Lee" "row-id" 2})
+  (indexed-wal-append {"op" "remove" "key" "Kim" "row-id" 1})
+  (indexed-wal-open path)
+  (if (and (= (btree-get (deref indexed-tree) "Kim") [3])
+           (= (btree-get (deref indexed-tree) "Lee") [2]))
+    (println "afj-db95 incremental index WAL PASS")
+    (throw "incremental index WAL replay mismatch"))
+  (file_delete path))

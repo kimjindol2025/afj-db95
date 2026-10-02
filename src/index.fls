@@ -1,0 +1,26 @@
+;; AFJ-DB P3 index baseline.
+;; Hash index is the first executable index; B+Tree replaces it before 1.0.
+
+(defn index-empty [] {})
+
+(defn index-add [index key row-id]
+  (let [bucket (get index key)]
+    (if (nil? bucket)
+      (assoc index key [row-id])
+      (assoc index key (conj bucket row-id)))))
+
+(defn index-remove [index key row-id]
+  (let [bucket (get index key)]
+    (if (nil? bucket)
+      index
+      (assoc index key (filter (fn [id] (not (= id row-id))) bucket)))))
+
+(defn index-lookup [index key]
+  (let [bucket (get index key)]
+    (if (nil? bucket) [] bucket)))
+
+(let [index (index-empty)
+      indexed (index-add (index-add index "Kim" 1) "Kim" 2)]
+  (if (= (index-lookup indexed "Kim") [1 2])
+    (println "afj-db95 index PASS")
+    (throw "index lookup failure")))

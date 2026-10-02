@@ -1,0 +1,54 @@
+;; Session transaction contract over the real TCP server.
+(load "/root/kilo-freelang/projects/afj-db95/src/tcp-server.fls")
+
+(defn tx-request [body]
+  (let [response (json-parse
+                   (tcp-send "127.0.0.1" afj-tcp-port (json_str body) 3000))]
+    response))
+
+(let [login (tx-request {"type" "login" "user" "root"
+                          "password" "development-only"})
+      token (get login "token")
+      login2 (tx-request {"type" "login" "user" "root"
+                           "password" "development-only"})
+      token2 (get login2 "token")
+      create (tx-request {"type" "query" "token" token
+                          "statement" "CREATE TABLE tcp_tx_users"})
+      begin-1 (tx-request {"type" "tx" "token" token "op" "BEGIN"})
+      staged (tx-request {"type" "query" "token" token
+                          "statement" "INSERT INTO tcp_tx_users (id,name) VALUES (1,'Transient')"})
+      disjoint-read (tx-request {"type" "query" "token" token2
+                                 "statement" "SELECT * FROM tcp_tx_users WHERE id=2"})
+      blocked-read (tx-request {"type" "query" "token" token2
+                                "statement" "SELECT * FROM tcp_tx_users"})
+      rollback (tx-request {"type" "tx" "token" token "op" "ROLLBACK"})
+      after-rollback (tx-request {"type" "query" "token" token
+                                  "statement" "SELECT * FROM tcp_tx_users"})
+      begin-2 (tx-request {"type" "tx" "token" token "op" "BEGIN"})
+      committed (tx-request {"type" "query" "token" token
+                             "statement" "INSERT INTO tcp_tx_users (id,name) VALUES (2,'Committed')"})
+      commit (tx-request {"type" "tx" "token" token "op" "COMMIT"})
+      after-commit (tx-request {"type" "query" "token" token
+                                "statement" "SELECT * FROM tcp_tx_users"})]
+  (println (json_str {"begin-1" begin-1 "staged" staged
+                      "disjoint-read" disjoint-read "blocked-read" blocked-read
+                      "rollback" rollback "after-rollback" after-rollback
+                      "begin-2" begin-2 "committed" committed
+                      "commit" commit "after-commit" after-commit}))
+  (if (and (get login "ok")
+           (get create "ok")
+           (get begin-1 "ok")
+           (get staged "ok")
+           (get disjoint-read "ok")
+           (= (count (get (get disjoint-read "result") "rows")) 0)
+           (= (get blocked-read "error") "TX_CONFLICT")
+           (get rollback "ok")
+           (= (count (get (get after-rollback "result") "rows")) 0)
+           (get begin-2 "ok")
+           (get committed "ok")
+           (get commit "ok")
+           (= (count (get (get after-commit "result") "rows")) 1)
+           (= (get (first (get (get after-commit "result") "rows")) "name")
+              "Committed"))
+    (println "afj-db95 TCP session transaction PASS")
+    (throw "TCP session transaction failure")))

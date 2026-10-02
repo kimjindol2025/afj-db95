@@ -1,0 +1,51 @@
+;; AFJ-DB P5 authentication and authorization baseline.
+
+(define users (atom {}))
+(define roles (atom {}))
+
+(defn create-role [name]
+  (swap! roles assoc name {"name" name "permissions" []})
+  name)
+
+(defn grant [role permission]
+  (let [current (get (deref roles) role)]
+    (if (nil? current)
+      (throw (str "role not found: " role))
+      (swap! roles assoc role
+             (assoc current "permissions"
+                    (conj (get current "permissions") permission)))))
+  role)
+
+(defn create-user [name password role]
+  (if (nil? (get (deref roles) role))
+    (throw (str "role not found: " role))
+    (swap! users assoc name {"name" name
+                             "password-hash" (sha256 password)
+                             "role" role}))
+  name)
+
+(defn authenticate [name password]
+  (let [user (get (deref users) name)]
+    (if (and (not (nil? user))
+             (= (get user "password-hash") (sha256 password)))
+      {"ok" true "user" name "role" (get user "role")}
+      {"ok" false "user" name})))
+
+(defn authorize [name permission]
+  (let [user (get (deref users) name)
+        role (if (nil? user) nil (get user "role"))
+        role-data (if (nil? role) nil (get (deref roles) role))]
+    (if (nil? role-data)
+      false
+      (contains? (get role-data "permissions") permission))))
+
+(create-role "admin")
+(grant "admin" "db.read")
+(grant "admin" "db.write")
+(create-user "root" "development-only" "admin")
+
+(if (and (get (authenticate "root" "development-only") "ok")
+         (authorize "root" "db.write")
+         (not (get (authenticate "root" "wrong") "ok")))
+  (println "afj-db95 auth PASS")
+  (throw "auth contract failure"))

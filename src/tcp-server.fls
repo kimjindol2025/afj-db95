@@ -1,0 +1,267 @@
+;; AFJ-DB95 line-delimited JSON TCP server.
+;; The FreeLang runtime owns sockets; this module owns protocol, auth and SQL.
+
+(load "/root/kilo-freelang/projects/afj-db95/src/engine.fls")
+(load "/root/kilo-freelang/projects/afj-db95/src/sql-core.fls")
+(load "/root/kilo-freelang/projects/afj-db95/src/protocol.fls")
+(load "/root/kilo-freelang/projects/afj-db95/src/auth.fls")
+
+(define afj-tcp-port 43995)
+(define afj-tcp-sessions (atom {}))
+(define afj-tcp-transactions (atom {}))
+(define afj-tcp-locks (atom {}))
+(define afj-tcp-wal "/tmp/afj-db95-tcp-catalog.wal")
+
+(defn afj-tcp-wal-append [event]
+  (let [fd (fd_open afj-tcp-wal "a")]
+    (fd_write fd (str (json_str event) "\n"))
+    (fd_fsync fd)
+    (fd_close fd))
+  event)
+
+(defn afj-tcp-recover-lines [lines index prepared]
+  (if (>= index (count lines))
+    true
+    (let [line (get lines index)
+          last-line (= index (- (count lines) 1))
+          event (if last-line
+                  (try (json-parse line) (catch [error] nil))
+                  (json-parse line))]
+      (if (nil? event)
+        (if last-line true (throw "WAL_CORRUPT"))
+        (let [tx (get event "tx")]
+          (do
+            (if (= (get event "type") "prepare")
+              (swap! prepared assoc tx event)
+              (if (= (get event "type") "commit")
+                (let [pending (get (deref prepared) tx)
+                      body (if (nil? pending) nil (get pending "body"))]
+                (if (and (not (nil? body))
+                         (= (get pending "checksum") (get event "checksum")))
+                  (if (has-key? body "asts")
+                    (doseq [ast (get body "asts")] (execute-ast ast))
+                    (let [replayed (execute-ast (get body "ast"))]
+                      replayed))
+                  nil))
+                nil))
+            (afj-tcp-recover-lines lines (+ index 1) prepared)))))))
+
+(defn afj-tcp-recover []
+  (do
+    (reset! engine-catalog {})
+    (if (file_exists afj-tcp-wal)
+      (try
+        (afj-tcp-recover-lines
+          (filter (fn [line] (not (= (str_trim line) "")))
+                  (str_lines (file_read afj-tcp-wal)))
+          0 (atom {}))
+        (catch [error] (throw "WAL_CORRUPT")))
+      nil)
+    true))
+
+(defn afj-tcp-record-asts [asts]
+  (let [tx (uuid_short)
+        body {"asts" asts}
+        checksum (sha256 (json_str body))]
+    (afj-tcp-wal-append {"type" "prepare" "tx" tx
+                          "body" body "checksum" checksum})
+    (afj-tcp-wal-append {"type" "commit" "tx" tx
+                          "checksum" checksum})
+    true))
+
+(defn afj-tcp-commit-asts [asts]
+  (let [result (atom nil)]
+    (afj-tcp-record-asts asts)
+    (doseq [ast asts]
+      (reset! result (execute-ast ast)))
+    (deref result)))
+
+(defn afj-tcp-commit-ast [ast]
+  (afj-tcp-commit-asts [ast]))
+
+(defn afj-tcp-copy [value]
+  (json-parse (json_str value)))
+
+(defn afj-tcp-lock-table [token table]
+  (let [owner (get (deref afj-tcp-locks) table)]
+    (if (or (nil? owner) (= owner token))
+      (do
+        (swap! afj-tcp-locks assoc table token)
+        true)
+      false)))
+
+(defn afj-tcp-release-token [token]
+  (do
+    (doseq [table (keys (deref afj-tcp-locks))]
+      (if (= (get (deref afj-tcp-locks) table) token)
+        (swap! afj-tcp-locks dissoc table)
+        nil))
+    true))
+
+(defn afj-tcp-resource [ast]
+  (let [table (get ast "table")
+        where (get ast "where")
+        rows (get ast "rows")]
+    (if (and (= (get ast "type") "insert")
+             (not (nil? rows))
+             (= (count rows) 1)
+             (has-key? (first rows) "id"))
+      (str table ":" (get (first rows) "id"))
+      (if (and (not (nil? where))
+               (= (get where "column") "id")
+               (has-key? where "equals"))
+        (str table ":" (get where "equals"))
+        table))))
+
+(defn afj-tcp-conflicting-owner [token resource table]
+  (let [conflict (atom nil)]
+    (doseq [key (keys (deref afj-tcp-locks))]
+      (let [owner (get (deref afj-tcp-locks) key)
+            row-key (str table ":")
+            relevant (or (= key resource)
+                         (= key table)
+                         (and (= resource table)
+                              (str_starts_with key row-key)))]
+        (if (and relevant (not (= owner token)))
+          (reset! conflict owner)
+          nil)))
+    (deref conflict)))
+
+(defn afj-tcp-begin [token]
+  (let [current (get (deref afj-tcp-transactions) token)]
+    (if (and (not (nil? current))
+             (= (get current "status") "active"))
+      {"ok" false "error" "TX_ALREADY_ACTIVE"}
+      (do
+        (swap! afj-tcp-transactions assoc token
+               {"status" "active"
+                "snapshot" (afj-tcp-copy (deref engine-catalog))
+                "asts" []})
+        {"ok" true "status" "active"}))))
+
+(defn afj-tcp-rollback [token]
+  (let [current (get (deref afj-tcp-transactions) token)]
+    (if (or (nil? current) (not (= (get current "status") "active")))
+      {"ok" false "error" "TX_NOT_ACTIVE"}
+      (do
+        (reset! engine-catalog (afj-tcp-copy (get current "snapshot")))
+        (swap! afj-tcp-transactions dissoc token)
+        (afj-tcp-release-token token)
+        {"ok" true "status" "rolled-back"}))))
+
+(defn afj-tcp-commit [token]
+  (let [current (get (deref afj-tcp-transactions) token)]
+    (if (or (nil? current) (not (= (get current "status") "active")))
+      {"ok" false "error" "TX_NOT_ACTIVE"}
+      (let [result (afj-tcp-record-asts (get current "asts"))]
+        (swap! afj-tcp-transactions dissoc token)
+        (afj-tcp-release-token token)
+        {"ok" true "status" "committed"
+         "statements" (count (get current "asts"))}))))
+
+(defn afj-tcp-tx-request [request]
+  (let [token (get request "token")
+        op (get request "op")]
+    (if (nil? (get (deref afj-tcp-sessions) token))
+      {"ok" false "error" "AUTH_REQUIRED"}
+      (if (= op "BEGIN")
+        (afj-tcp-begin token)
+        (if (= op "COMMIT")
+          (afj-tcp-commit token)
+          (if (= op "ROLLBACK")
+            (afj-tcp-rollback token)
+            {"ok" false "error" "TX_UNKNOWN_OPERATION"}))))))
+
+(defn afj-tcp-send [conn body]
+  (tcp-write conn (str (json_str body) "\n")))
+
+(defn afj-tcp-permission [statement]
+  (if (= (get (parse-sql statement) "type") "select")
+    "db.read"
+    "db.write"))
+
+(defn afj-tcp-query [request]
+  (let [token (get request "token")
+        statement (get request "statement")
+        user (get (deref afj-tcp-sessions) token)
+        ast (parse-sql statement)
+        table (get ast "table")
+        resource (afj-tcp-resource ast)
+        owner (afj-tcp-conflicting-owner token resource table)
+        blocked (not (nil? owner))]
+    (if (nil? user)
+      {"ok" false "error" "AUTH_REQUIRED"}
+      (let [permission (afj-tcp-permission statement)]
+        (if (not (authorize user permission))
+          {"ok" false "error" "PERMISSION_DENIED" "permission" permission}
+          (let [tx-state (get (deref afj-tcp-transactions) token)
+                active (and (not (nil? tx-state))
+                            (= (get tx-state "status") "active"))
+                acquired (if (and (= permission "db.write") active)
+                           (afj-tcp-lock-table token resource)
+                           true)]
+            (if (or blocked (not acquired))
+              {"ok" false "error" "TX_CONFLICT" "table" table}
+              (let [result (if (and (= permission "db.write") active)
+                             (let [applied (execute-ast ast)]
+                               (swap! afj-tcp-transactions assoc token
+                                      (assoc tx-state "asts"
+                                             (conj (get tx-state "asts") ast)))
+                               applied)
+                             (if (= permission "db.read")
+                               (execute-ast ast)
+                               (let [committed (afj-tcp-commit-ast ast)]
+                                 (afj-tcp-release-token token)
+                                 committed)))]
+                {"ok" true "result" result}))))))))
+
+(defn afj-tcp-line [conn line]
+  (let [request (try
+                  (json-parse line)
+                  (catch [error] nil))]
+    (if (nil? request)
+      (afj-tcp-send conn {"ok" false "error" "INVALID_JSON"})
+      (if (= (get request "type") "login")
+        (let [auth (authenticate (get request "user")
+                                 (get request "password"))]
+          (if (get auth "ok")
+            (let [login (server-login (get request "user"))
+                  token (get login "token")]
+              (swap! afj-tcp-sessions assoc token (get request "user"))
+              (afj-tcp-send conn {"ok" true "token" token
+                                   "user" (get request "user")}))
+            (afj-tcp-send conn {"ok" false "error" "AUTH_FAILED"})))
+        (if (= (get request "type") "tx")
+          (afj-tcp-send conn (afj-tcp-tx-request request))
+          (if (= (get request "type") "query")
+          (try
+            (afj-tcp-send conn (afj-tcp-query request))
+            (catch [error]
+              (afj-tcp-send conn {"ok" false "error" "SQL_ERROR"})))
+          (if (= (get request "type") "ping")
+            (afj-tcp-send conn {"ok" true "type" "pong"})
+            (afj-tcp-send conn {"ok" false "error" "UNKNOWN_REQUEST"}))))))))
+
+(defn afj-db-tcp-handler [event conn payload]
+  (if (= event "data")
+    (let [line (str_trim payload)]
+      (if (not (= line ""))
+        (afj-tcp-line conn line)
+        nil))
+    nil))
+
+(defn start-afj-tcp []
+  (do
+    (afj-tcp-recover)
+    (reset! afj-tcp-transactions {})
+    (reset! afj-tcp-locks {})
+    (server-start "afj-db95-tcp")
+    (let [started (tcp-server-raw afj-tcp-port "afj-db-tcp-handler")]
+      (if (= started "ok")
+        {"ok" true "port" afj-tcp-port}
+        {"ok" false "error" "TCP_START_FAILED" "detail" started}))))
+
+(defn stop-afj-tcp []
+  (do
+    (tcp-server-stop afj-tcp-port)
+    (server-stop)))

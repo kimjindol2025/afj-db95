@@ -1,0 +1,26 @@
+;; Independent-process TCP client contract.
+(load "/root/kilo-freelang/projects/afj-db95/src/tcp-server.fls")
+
+(defn tcp-request [body]
+  (json-parse (tcp-send "127.0.0.1" afj-tcp-port (json_str body) 3000)))
+
+(let [login (tcp-request {"type" "login" "user" "root"
+                          "password" "development-only"})
+      token (get login "token")
+      create (tcp-request {"type" "query" "token" token
+                           "statement" "CREATE TABLE tcp_users"})
+      insert (tcp-request {"type" "query" "token" token
+                           "statement" "INSERT INTO tcp_users (id,name) VALUES (1,'Kim')"})
+      selected (tcp-request {"type" "query" "token" token
+                             "statement" "SELECT * FROM tcp_users"})
+      denied (tcp-request {"type" "query" "token" "bad"
+                           "statement" "SELECT * FROM tcp_users"})]
+  (println (json_str {"login" login "create" create "insert" insert
+                      "selected" selected "denied" denied}))
+  (if (and (get login "ok")
+           (get create "ok")
+           (get insert "ok")
+           (= (count (get (get selected "result") "rows")) 1)
+           (= (get denied "error") "AUTH_REQUIRED"))
+    (println "afj-db95 TCP auth/query independent-process PASS")
+    (throw "TCP independent-process contract failure")))

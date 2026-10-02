@@ -1,0 +1,90 @@
+;; AFJ-DB ordered index baseline.
+;; Page-backed node splitting is a later storage-engine step.
+
+(defn btree-empty [] [])
+
+(defn btree-put [tree key row-id]
+  (let [entry {"key" key "row-id" row-id}
+        without-key (filter (fn [item] (not (= (get item "key") key))) tree)]
+    (arr_sort_by (conj without-key entry) "key")))
+
+;; Secondary indexes may contain duplicate keys; keep every row-id.
+(defn btree-add [tree key row-id]
+  (arr_sort_by (conj tree {"key" key "row-id" row-id}) "key"))
+
+(defn btree-remove [tree key row-id]
+  (filter (fn [item]
+            (not (and (= (get item "key") key)
+                      (= (get item "row-id") row-id))))
+          tree))
+
+(defn btree-get [tree key]
+  (map (fn [item] (get item "row-id"))
+       (filter (fn [item] (= (get item "key") key)) tree)))
+
+(defn btree-range [tree low high]
+  (filter (fn [item]
+            (and (>= (get item "key") low)
+                 (<= (get item "key") high))) tree))
+
+(defn btree-split-leaf [tree]
+  (let [middle (floor (/ (count tree) 2))
+        left (take middle tree)
+        right (drop middle tree)]
+    {"left" left
+     "right" right
+     "separator" (get (first right) "key")}))
+
+(defn btree-root [entries]
+  {"leaf" true "entries" entries})
+
+(defn btree-root-insert [root entry max-entries]
+  (if (get root "leaf")
+    (let [entries (arr_sort_by (conj (get root "entries") entry) "key")]
+      (if (<= (count entries) max-entries)
+        {"leaf" true "entries" entries}
+        (let [split (btree-split-leaf entries)]
+          {"leaf" false
+           "separator" (get split "separator")
+           "children" [{"leaf" true "entries" (get split "left")}
+                        {"leaf" true "entries" (get split "right")}]})))
+    root))
+
+(defn btree-root-get [root key]
+  (if (get root "leaf")
+    (btree-get (get root "entries") key)
+    (let [separator (get root "separator")
+          children (get root "children")
+          child (if (< key separator) (first children) (last children))]
+      (btree-get (get child "entries") key))))
+
+(let [tree (btree-put (btree-put (btree-empty) 20 2) 10 1)]
+  (if (and (= (get (first tree) "key") 10)
+           (= (btree-get tree 20) [2]))
+    (println "afj-db95 btree baseline PASS")
+    (throw "btree baseline failure")))
+
+(let [tree (btree-add (btree-add (btree-empty) "Kim" 1) "Kim" 2)]
+  (if (= (btree-get tree "Kim") [1 2])
+    (println "afj-db95 btree duplicate-key PASS")
+    (throw "btree duplicate key lost row ids")))
+
+(let [tree [{"key" 10 "row-id" 1}
+            {"key" 20 "row-id" 2}
+            {"key" 30 "row-id" 3}
+            {"key" 40 "row-id" 4}]
+      split (btree-split-leaf tree)]
+  (if (and (= (count (get split "left")) 2)
+           (= (count (get split "right")) 2)
+           (= (get split "separator") 30))
+    (println "afj-db95 btree leaf split PASS")
+    (throw "btree leaf split failure")))
+
+(let [root (btree-root [])
+      one (btree-root-insert root {"key" 10 "row-id" 1} 2)
+      two (btree-root-insert one {"key" 20 "row-id" 2} 2)
+      split (btree-root-insert two {"key" 30 "row-id" 3} 2)]
+  (if (and (not (get split "leaf"))
+           (= (get (btree-root-get split 30) 0) 3))
+    (println "afj-db95 btree root/leaf PASS")
+    (throw "btree root split failure")))

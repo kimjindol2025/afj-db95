@@ -1,0 +1,46 @@
+;; AFJ-DB MVCC baseline.
+;; Rows are immutable versions. Deletes write a tombstone transaction id.
+
+(define mvcc-next-tx (atom 0))
+(define mvcc-rows (atom {}))
+
+(defn mvcc-begin []
+  (swap! mvcc-next-tx + 1))
+
+(defn mvcc-table [name]
+  (get (deref mvcc-rows) name []))
+
+(defn mvcc-visible? [version reader-tx]
+  (and (<= (get version "created") reader-tx)
+       (or (nil? (get version "deleted"))
+           (> (get version "deleted") reader-tx))))
+
+(defn mvcc-insert [tx table row]
+  (let [version {"row" row "created" tx "deleted" nil}]
+    (swap! mvcc-rows assoc table (conj (mvcc-table table) version))
+    version))
+
+(defn mvcc-select [reader-tx table]
+  (map (fn [version] (get version "row"))
+       (filter (fn [version] (mvcc-visible? version reader-tx))
+               (mvcc-table table))))
+
+(defn mvcc-delete-id [tx table id]
+  (let [versions (map (fn [version]
+                        (if (and (= (get (get version "row") "id") id)
+                                 (mvcc-visible? version tx))
+                          (assoc version "deleted" tx)
+                          version))
+                      (mvcc-table table))]
+    (swap! mvcc-rows assoc table versions)
+    versions))
+
+(let [writer (mvcc-begin)
+      first-row (mvcc-insert writer "users" {"id" 1 "name" "Kim"})
+      reader-before (mvcc-begin)
+      _ (mvcc-delete-id (mvcc-begin) "users" 1)
+      reader-after (mvcc-begin)]
+  (if (and (= (count (mvcc-select reader-before "users")) 1)
+           (= (count (mvcc-select reader-after "users")) 0))
+    (println "afj-db95 MVCC PASS")
+    (throw "MVCC visibility failure")))

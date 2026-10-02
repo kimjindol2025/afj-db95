@@ -1,0 +1,210 @@
+;; afj-db95 M0: FreeLang Script 관계형 코어
+;; 현재 저장소는 메모리 기반이며, 영속성은 M1에서 추가한다.
+
+(define catalog (atom {}))
+(define wal (atom []))
+(define replaying (atom false))
+(define storage-path (atom nil))
+(define afj-page-size 4096)
+
+(defn page-payload [page]
+  (let [encoded (json_str page)]
+    (if (> (count encoded) afj-page-size)
+      (throw "PAGE_TOO_LARGE")
+      (json_str {"magic" "AFJPG"
+                 "version" 1
+                 "length" (count encoded)
+                 "checksum" (sha256 encoded)
+                 "payload" page}))))
+
+(defn valid-page? [page]
+  (and (= (get page "magic") "AFJPG")
+       (= (get page "version") 1)
+       (= (get page "length") (count (json_str (get page "payload"))))
+       (= (get page "checksum") (sha256 (json_str (get page "payload"))))))
+
+(defn write-page [path page]
+  (file_write path (page-payload page)))
+
+(defn read-page [path]
+    (let [page (json-parse (file_read path))]
+    (if (valid-page? page)
+      (get page "payload")
+      (throw (str "invalid AFJ page: " path)))))
+
+(defn persist-wal-event [event]
+  (let [path (deref storage-path)]
+    (if (nil? path)
+      true
+      (file_append path (str (json_str event) "\n")))))
+
+(defn append-wal [event]
+  (if (not (deref replaying))
+    (do
+      (swap! wal conj event)
+      (persist-wal-event event))
+    nil))
+
+(defn require-table [name]
+  (let [table (get (deref catalog) name)]
+    (if (nil? table)
+      (throw (str "table not found: " name))
+      table)))
+
+(defn create-table [name columns]
+  (if (has-key? (deref catalog) name)
+    (throw (str "table already exists: " name))
+    (do
+      (swap! catalog assoc name {"name" name "columns" columns "rows" []})
+      (append-wal {"op" "create-table" "name" name "columns" columns})
+      name)))
+
+(defn insert-row [name row]
+  (let [table (require-table name)
+        rows (get table "rows")
+        updated (assoc table "rows" (conj rows row))]
+    (swap! catalog assoc name updated)
+    (append-wal {"op" "insert" "name" name "row" row})
+    row))
+
+(defn select-all [name]
+  (get (require-table name) "rows"))
+
+(defn select-where [name column expected]
+  (filter (fn [row] (= (get row column) expected)) (select-all name)))
+
+(defn update-where [name column expected changes]
+  (let [table (require-table name)
+        rows (map (fn [row]
+                    (if (= (get row column) expected)
+                      (obj-merge row changes)
+                      row))
+                  (get table "rows"))
+        updated (assoc table "rows" rows)]
+    (swap! catalog assoc name updated)
+    (append-wal {"op" "update" "name" name "column" column
+                 "expected" expected "changes" changes})
+    rows))
+
+(defn delete-where [name column expected]
+  (let [table (require-table name)
+        rows (filter (fn [row] (not (= (get row column) expected)))
+                     (get table "rows"))
+        updated (assoc table "rows" rows)]
+    (swap! catalog assoc name updated)
+    (append-wal {"op" "delete" "name" name "column" column "expected" expected})
+    rows))
+
+(defn apply-wal-event [event]
+  (let [op (get event "op")]
+    (if (= op "create-table")
+      (create-table (get event "name") (get event "columns"))
+      (if (= op "insert")
+        (insert-row (get event "name") (get event "row"))
+        (if (= op "update")
+          (update-where (get event "name") (get event "column")
+                        (get event "expected") (get event "changes"))
+          (if (= op "delete")
+            (delete-where (get event "name") (get event "column")
+                          (get event "expected"))
+            (throw (str "unknown WAL operation: " op))))))))
+
+(defn replay-wal [events]
+  (reset! catalog {})
+  (reset! replaying true)
+  (doseq [event events]
+    (apply-wal-event event))
+  (reset! replaying false)
+  (reset! wal events)
+  (count events))
+
+(defn load-wal-events [path]
+  (if (not (file_exists path))
+    []
+    (let [lines (str_lines (file_read path))]
+      (map (fn [line]
+             (try
+               (json-parse line)
+               (catch [error]
+                 (throw (str "WAL_CORRUPT: " (error_message error))))))
+           (filter (fn [line] (not (= (str_trim line) ""))) lines)))))
+
+(defn open-store [path]
+  (if (not (file_exists path))
+    (file_write path "")
+    true)
+  (reset! storage-path path)
+  (replay-wal (load-wal-events path))
+  path)
+
+(defn close-store []
+  (reset! storage-path nil)
+  true)
+
+(defn checkpoint [path]
+  (file_write path
+              (str_join_lines
+                (map (fn [event] (json_str event)) (deref wal))))
+  true)
+
+(defn page-smoke-test []
+  (let [path "/tmp/afj-db95-page-test"
+        expected {"table" "users" "rows" [{"id" 1 "name" "Kim"}]}]
+    (write-page path expected)
+    (assert-equal "page roundtrip" expected (read-page path))
+    (file_delete path)
+    (println "afj-db95 page PASS")))
+
+(defn durable-wal-smoke-test []
+  (let [path "/tmp/afj-db95-wal-test"]
+    (if (file_exists path) (file_delete path) true)
+    (open-store path)
+    (create-table "durable_users" {"id" "INTEGER" "name" "TEXT"})
+    (insert-row "durable_users" {"id" 1 "name" "Kim"})
+    (close-store)
+    (open-store path)
+    (assert-equal "durable WAL replay" 1
+                  (count (select-all "durable_users")))
+    (close-store)
+    (file_delete path)
+    (println "afj-db95 durable WAL PASS")))
+
+(defn corrupt-wal-smoke-test []
+  (let [path "/tmp/afj-db95-corrupt-wal"]
+    (file_write path "{not-json}\n")
+    (try
+      (do
+        (load-wal-events path)
+        (throw "corrupt WAL was accepted"))
+      (catch [error]
+        (if (regex_match_i (error_message error) "WAL_CORRUPT")
+          (println "afj-db95 corrupt WAL PASS")
+          (throw error))))
+    (file_delete path)))
+
+(defn assert-equal [label expected actual]
+  (if (= expected actual)
+    (println (str "PASS " label))
+    (throw (str "FAIL " label " expected=" expected " actual=" actual))))
+
+(defn smoke-test []
+  (create-table "users" {"id" "INTEGER PRIMARY KEY" "name" "TEXT" "age" "INTEGER"})
+  (insert-row "users" {"id" 1 "name" "Kim" "age" 30})
+  (insert-row "users" {"id" 2 "name" "Lee" "age" 25})
+  (assert-equal "insert count" 2 (count (select-all "users")))
+  (assert-equal "where" 1 (count (select-where "users" "name" "Kim")))
+  (update-where "users" "id" 1 {"age" 31})
+  (assert-equal "update" 31 (get (first (select-where "users" "id" 1)) "age"))
+  (delete-where "users" "id" 2)
+  (assert-equal "delete" 1 (count (select-all "users")))
+  (let [events (deref wal)]
+    (replay-wal events)
+    (assert-equal "wal replay" 1 (count (select-all "users")))
+    (assert-equal "wal replay value" 31
+                  (get (first (select-where "users" "id" 1)) "age")))
+  (println "afj-db95 M0 PASS"))
+
+(smoke-test)
+(page-smoke-test)
+(durable-wal-smoke-test)
+(corrupt-wal-smoke-test)

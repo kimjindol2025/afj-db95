@@ -1,0 +1,38 @@
+;; MariaDB compatibility regression baseline.
+
+(load "/root/kilo-freelang/projects/afj-db95/src/sql-core.fls")
+
+(defn regression-case [sql expected-type]
+  (let [ast (parse-sql sql)]
+    (= (get ast "type") expected-type)))
+
+(defn run-regression []
+  (let [cases [["SELECT * FROM users" "select"]
+               ["SELECT * FROM users WHERE name Kim" "select"]
+               ["SELECT * FROM users WHERE id=1" "select"]
+               ["SELECT * FROM users WHERE email IS NULL" "select"]
+               ["SELECT * FROM users WHERE email IS NOT NULL" "select"]
+               ["SELECT * FROM users LIMIT 1" "select"]
+               ["SELECT * FROM users ORDER BY id" "select"]
+               ["SELECT * FROM users GROUP BY team" "select"]
+               ["SELECT * FROM users JOIN teams ON users.team_id = teams.team_id" "select"]
+               ["CREATE TABLE users" "create-table"]
+               ["ALTER TABLE users ADD COLUMN email" "alter-table"]
+               ["DROP TABLE users" "drop-table"]
+               ["INSERT INTO users" "insert"]
+               ["INSERT INTO users (id,name) VALUES (1,'Kim')" "insert"]
+               ["INSERT INTO users (id,name) VALUES (1,'Kim'),(2,'Lee')" "insert"]
+               ["UPDATE users" "update"]
+               ["UPDATE users SET name='Lee' WHERE id=1" "update"]
+               ["DELETE FROM users" "delete"]
+               ["DELETE FROM users WHERE id=1" "delete"]]
+        passed (count (filter (fn [item]
+                                (regression-case (get item 0) (get item 1)))
+                              cases))]
+    {"passed" passed "total" (count cases)}))
+
+(let [result (run-regression)]
+  (if (= (get result "passed") (get result "total"))
+    (println (str "afj-db95 MariaDB regression PASS "
+                  (get result "passed") "/" (get result "total")))
+    (throw "MariaDB regression failure")))

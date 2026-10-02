@@ -1,0 +1,74 @@
+;; AFJ-DB atomic transaction + engine index integration.
+
+(load "/root/kilo-freelang/projects/afj-db95/src/engine.fls")
+(load "/root/kilo-freelang/projects/afj-db95/src/btree.fls")
+
+(define indexed-tx-state
+  (atom {"status" "idle" "catalog" nil "index" []}))
+(define indexed-tx-index (atom []))
+
+(defn indexed-tx-copy [value]
+  (json-parse (json_str value)))
+
+(defn indexed-tx-begin []
+  (if (= (get (deref indexed-tx-state) "status") "active")
+    (throw "TX_ALREADY_ACTIVE")
+    (do
+      (reset! indexed-tx-state
+              {"status" "active"
+               "catalog" (indexed-tx-copy (deref engine-catalog))
+               "index" (indexed-tx-copy (deref indexed-tx-index))})
+      true)))
+
+(defn indexed-tx-active []
+  (if (= (get (deref indexed-tx-state) "status") "active")
+    true
+    (throw "TX_NOT_ACTIVE")))
+
+(defn indexed-tx-create [table]
+  (indexed-tx-active)
+  (execute-ast {"type" "create-table" "table" table}))
+
+(defn indexed-tx-insert [table row column]
+  (indexed-tx-active)
+  (let [table-data (engine-table table)
+        row-id (count (get table-data "rows"))]
+    (execute-ast {"type" "insert" "table" table "row" row})
+    (reset! indexed-tx-index
+            (btree-add (deref indexed-tx-index) (get row column) row-id))
+    row))
+
+(defn indexed-tx-rollback []
+  (indexed-tx-active)
+  (reset! engine-catalog
+          (indexed-tx-copy (get (deref indexed-tx-state) "catalog")))
+  (reset! indexed-tx-index
+          (indexed-tx-copy (get (deref indexed-tx-state) "index")))
+  (reset! indexed-tx-state {"status" "idle" "catalog" nil "index" []})
+  true)
+
+(defn indexed-tx-commit []
+  (indexed-tx-active)
+  (reset! indexed-tx-state {"status" "idle" "catalog" nil "index" []})
+  true)
+
+(indexed-tx-begin)
+(indexed-tx-create "rollback_indexed_users")
+(indexed-tx-insert "rollback_indexed_users" {"id" 1 "name" "Transient"} "name")
+(indexed-tx-rollback)
+(if (and (not (has-key? (deref engine-catalog) "rollback_indexed_users"))
+         (= (count (deref indexed-tx-index)) 0))
+  (println "afj-db95 indexed transaction rollback PASS")
+  (throw "indexed rollback leaked catalog or index"))
+
+(indexed-tx-begin)
+(indexed-tx-create "committed_indexed_users")
+(indexed-tx-insert "committed_indexed_users" {"id" 1 "name" "Kim"} "name")
+(indexed-tx-insert "committed_indexed_users" {"id" 2 "name" "Lee"} "name")
+(indexed-tx-insert "committed_indexed_users" {"id" 3 "name" "Kim"} "name")
+(indexed-tx-commit)
+(let [rows (get (get (deref engine-catalog) "committed_indexed_users") "rows")
+      ids (btree-get (deref indexed-tx-index) "Kim")]
+  (if (and (= (count rows) 3) (= ids [0 2]))
+    (println "afj-db95 indexed transaction commit PASS")
+    (throw "indexed commit lost rows or index")))

@@ -1,0 +1,21 @@
+;; Client used after a server restart; it must observe the committed WAL row.
+(load "/root/kilo-freelang/projects/afj-db95/src/tcp-server.fls")
+
+(let [login (json-parse
+              (tcp-send "127.0.0.1" afj-tcp-port
+                        (json_str {"type" "login" "user" "root"
+                                   "password" "development-only"})
+                        3000))
+      token (get login "token")
+      selected (json-parse
+                 (tcp-send "127.0.0.1" afj-tcp-port
+                           (json_str {"type" "query" "token" token
+                                      "statement" "SELECT * FROM tcp_users"})
+                           3000))
+      rows (get (get selected "result") "rows")]
+  (println (json_str {"login" login "selected" selected}))
+  (if (and (get login "ok")
+           (= (count rows) 1)
+           (= (get (first rows) "name") "Kim"))
+    (println "afj-db95 TCP WAL restart recovery PASS")
+    (throw "TCP WAL restart recovery failure")))

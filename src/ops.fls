@@ -1,0 +1,35 @@
+;; AFJ-DB operations baseline: health, metrics, migration state.
+
+(define metrics (atom {"queries" 0 "commits" 0 "rollbacks" 0 "errors" 0}))
+(define migration-state (atom {"version" 0 "applied" []}))
+
+(defn metric-inc [name]
+  (let [current (get (deref metrics) name 0)]
+    (swap! metrics assoc name (+ current 1))
+    (get (deref metrics) name)))
+
+(defn health-check [wal-path]
+  {"status" (if (file_exists wal-path) "ok" "degraded")
+   "wal" (file_exists wal-path)
+   "metrics" (deref metrics)
+   "migration-version" (get (deref migration-state) "version")})
+
+(defn apply-migration [version name]
+  (let [current (get (deref migration-state) "version")]
+    (if (<= version current)
+      (throw "MIGRATION_NOT_FORWARD")
+      (do
+        (swap! migration-state assoc "version" version)
+        (swap! migration-state assoc "applied"
+               (conj (get (deref migration-state) "applied") name))
+        {"version" version "name" name}))))
+
+(metric-inc "queries")
+(metric-inc "commits")
+(apply-migration 1 "initial-catalog")
+(let [health (health-check "/tmp/afj-db95-no-health-file")]
+  (if (and (= (get health "status") "degraded")
+           (= (get (deref migration-state) "version") 1)
+           (= (get (deref metrics) "queries") 1))
+    (println "afj-db95 ops PASS")
+    (throw "operations baseline failure")))

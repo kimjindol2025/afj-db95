@@ -1,0 +1,34 @@
+;; AFJ-DB P6 backup baseline.
+
+(defn backup-file [source destination]
+  (if (not (file_exists source))
+    (throw (str "backup source missing: " source))
+    (file_copy source destination)))
+
+(defn restore-file [backup destination]
+  (if (not (file_exists backup))
+    (throw (str "backup missing: " backup))
+    (file_copy backup destination)))
+
+(defn backup-manifest [source]
+  {"source" source
+   "size" (file_size source)
+   "modified" (file_mtime source)
+   "checksum" (sha256 (file_read source))})
+
+(defn backup-smoke-test []
+  (let [source "/tmp/afj-db95-backup-source"
+        copy "/tmp/afj-db95-backup-copy"
+        restored "/tmp/afj-db95-backup-restored"]
+    (file_write source "afj-db95 backup payload")
+    (backup-file source copy)
+    (restore-file copy restored)
+    (if (= (get (backup-manifest source) "checksum")
+           (get (backup-manifest restored) "checksum"))
+      (println "afj-db95 backup PASS")
+      (throw "backup checksum failure"))
+    (file_delete source)
+    (file_delete copy)
+    (file_delete restored)))
+
+(backup-smoke-test)

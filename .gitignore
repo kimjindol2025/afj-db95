@@ -1,0 +1,4 @@
+*.fls.out.js
+*.wal
+*.page
+data/

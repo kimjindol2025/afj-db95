@@ -1,0 +1,14 @@
+;; Short-lived daemon harness used by the independent TCP integration test.
+(load "/root/kilo-freelang/projects/afj-db95/src/tcp-server.fls")
+
+(let [started (start-afj-tcp)]
+  (if (get started "ok")
+    (do
+      (println "afj-db95 TCP server STARTED")
+      (set-timeout
+        (fn []
+          (do
+            (stop-afj-tcp)
+            (println "afj-db95 TCP server STOPPED")))
+        60000))
+    (throw "TCP daemon start failure")))

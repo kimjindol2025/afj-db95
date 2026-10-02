@@ -1,0 +1,120 @@
+;; AFJ-DB durable row/index bundle contract.
+
+(load "/root/kilo-freelang/projects/afj-db95/src/btree.fls")
+
+(define bundle-wal "/tmp/afj-db95-bundle.wal")
+(define bundle-catalog (atom {}))
+(define bundle-index (atom []))
+(define bundle-next-tx (atom 0))
+
+(defn bundle-append [event]
+  (let [fd (fd_open bundle-wal "a")]
+    (fd_write fd (str (json_str event) "\n"))
+    (fd_fsync fd)
+    (fd_close fd))
+  event)
+
+(defn bundle-apply-write [write]
+  (if (= (get write "op") "create")
+    (swap! bundle-catalog assoc (get write "table")
+           {"name" (get write "table") "rows" []})
+    (if (= (get write "op") "insert")
+      (let [table (get (deref bundle-catalog) (get write "table"))]
+        (swap! bundle-catalog assoc (get write "table")
+               (assoc table "rows"
+                      (conj (get table "rows") (get write "row"))))))))
+
+(defn bundle-apply [body]
+  (do
+    (doseq [write (get body "writes")]
+      (bundle-apply-write write))
+    (doseq [event (get body "indexes")]
+      (if (= (get event "op") "add")
+        (swap! bundle-index btree-add (get event "key") (get event "row-id"))
+        (if (= (get event "op") "remove")
+          (reset! bundle-index
+                  (btree-remove (deref bundle-index)
+                                (get event "key") (get event "row-id")))
+          (throw "INDEX_WAL_UNKNOWN_OP"))))
+    true))
+
+(defn bundle-commit [writes indexes]
+  (let [tx (swap! bundle-next-tx + 1)
+        body {"writes" writes "indexes" indexes}
+        checksum (sha256 (json_str body))]
+    (bundle-append {"type" "prepare" "tx" tx "body" body
+                    "checksum" checksum})
+    (bundle-append {"type" "commit" "tx" tx "checksum" checksum})
+    (bundle-apply body)
+    tx))
+
+(defn bundle-recover-lines [lines index prepared]
+  (if (>= index (count lines))
+    true
+    (let [line (get lines index)
+          last-line (= index (- (count lines) 1))
+          event (if last-line
+                  (try (json-parse line) (catch [error] nil))
+                  (json-parse line))]
+      (if (nil? event)
+        (if last-line true (throw "WAL_CORRUPT"))
+        (let [tx (get event "tx")]
+          (if (= (get event "type") "prepare")
+            (swap! prepared assoc tx event)
+            (if (= (get event "type") "commit")
+              (let [pending (get (deref prepared) tx)
+                    body (if (nil? pending) nil (get pending "body"))]
+                (if (and (not (nil? body))
+                         (= (get pending "checksum") (get event "checksum")))
+                  (do
+                    (doseq [write (get body "writes")]
+                      (bundle-apply-write write))
+                    (doseq [index-event (get body "indexes")]
+                      (if (= (get index-event "op") "add")
+                        (swap! bundle-index btree-add
+                               (get index-event "key")
+                               (get index-event "row-id"))
+                        (if (= (get index-event "op") "remove")
+                          (reset! bundle-index
+                                  (btree-remove (deref bundle-index)
+                                                (get index-event "key")
+                                                (get index-event "row-id")))
+                          (throw "INDEX_WAL_UNKNOWN_OP"))))
+                    true)
+                  nil))
+              nil))
+          (bundle-recover-lines lines (+ index 1) prepared))))))
+
+(defn bundle-recover []
+  (do
+    (reset! bundle-catalog {})
+    (reset! bundle-index [])
+    (let [prepared (atom {})]
+      (if (file_exists bundle-wal)
+        (try
+          (bundle-recover-lines
+            (filter (fn [line] (not (= (str_trim line) "")))
+                    (str_lines (file_read bundle-wal)))
+            0 prepared)
+          (catch [error] (throw "WAL_CORRUPT")))
+        nil))
+    true))
+
+(if (file_exists bundle-wal) (file_delete bundle-wal) true)
+(bundle-commit
+  [{"op" "create" "table" "users"}
+   {"op" "insert" "table" "users" "row" {"id" 1 "name" "Kim"}}]
+  [{"op" "add" "key" "Kim" "row-id" 0}])
+(bundle-append {"type" "prepare" "tx" 99
+                "body" {"writes" [{"op" "insert" "table" "users"
+                                     "row" {"id" 2 "name" "Lost"}}]
+                        "indexes" [{"op" "add" "key" "Lost" "row-id" 1}]}
+                "checksum" "torn"})
+(bundle-recover)
+(let [rows (get (get (deref bundle-catalog) "users") "rows")]
+  (if (and (= (count rows) 1)
+           (= (btree-get (deref bundle-index) "Kim") [0])
+           (= (btree-get (deref bundle-index) "Lost") []))
+    (println "afj-db95 durable row-index bundle PASS")
+    (throw "durable row-index bundle recovery mismatch")))
+(file_delete bundle-wal)

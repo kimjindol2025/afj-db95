@@ -1,0 +1,68 @@
+;; AFJ-DB schema and row constraint baseline.
+
+(defn type-valid? [value type]
+  (if (nil? value)
+    true
+    (if (= type "INTEGER")
+      (integer? value)
+      (if (= type "TEXT")
+        (string? value)
+        (if (= type "BOOLEAN")
+          (boolean? value)
+          true)))))
+
+(defn validate-column [row column]
+  (let [name (get column "name")
+        value (get row name)
+        nullable (get column "nullable" true)
+        type (get column "type" "TEXT")]
+    (if (and (not nullable) (nil? value))
+      (throw (str "NOT_NULL_VIOLATION: " name))
+      (if (not (type-valid? value type))
+        (throw (str "TYPE_VIOLATION: " name))
+        true))))
+
+(defn validate-row [schema row existing]
+  (doseq [column (get schema "columns")]
+    (validate-column row column))
+  (let [primary (get schema "primary-key")
+        key (if (nil? primary) nil (get row primary))]
+    (if (and (not (nil? primary))
+             (not (nil? (get row primary)))
+             (any? (fn [old] (= (get old primary) key)) existing))
+      (throw "PRIMARY_KEY_VIOLATION")
+      true)))
+
+(defn validate-unique [column row existing]
+  (let [name (get column "name")
+        value (get row name)]
+    (if (any? (fn [old] (= (get old name) value)) existing)
+      (throw (str "UNIQUE_VIOLATION: " name))
+      true)))
+
+(defn validate-foreign-key [row constraint referenced-rows]
+  (let [local (get row (get constraint "column"))
+        remote-column (get constraint "references-column")]
+    (if (any? (fn [remote]
+                (= local (get remote remote-column))) referenced-rows)
+      true
+      (throw "FOREIGN_KEY_VIOLATION"))))
+
+(defn validate-check [row check-fn]
+  (if (check-fn row)
+    true
+    (throw "CHECK_VIOLATION")))
+
+(let [schema {"columns" [{"name" "id" "type" "INTEGER" "nullable" false}
+                          {"name" "name" "type" "TEXT" "nullable" false}]
+              "primary-key" "id"}
+      valid {"id" 1 "name" "Kim"}]
+  (if (validate-row schema valid [])
+    (println "afj-db95 constraints PASS")
+    (throw "constraint baseline failure"))
+  (validate-unique {"name" "id"} valid [])
+  (validate-foreign-key {"team_id" 10}
+                        {"column" "team_id" "references-column" "id"}
+                        [{"id" 10}])
+  (validate-check {"age" 30} (fn [row] (> (get row "age") 0)))
+  (println "afj-db95 advanced constraints PASS"))

@@ -1,0 +1,69 @@
+;; AFJ-DB lock manager and isolation policy baseline.
+
+(define lock-table (atom {}))
+(define wait-for (atom {}))
+
+(defn acquire-lock [tx resource mode]
+  (let [held (get (deref lock-table) resource)]
+    (if (nil? held)
+      (do
+        (swap! lock-table assoc resource {"tx" tx "mode" mode})
+        {"ok" true "tx" tx "resource" resource "mode" mode})
+      (if (= (get held "tx") tx)
+        {"ok" true "tx" tx "resource" resource "mode" (get held "mode")}
+        (let [owner (get held "tx")]
+          (swap! wait-for assoc tx owner)
+          (if (= (get (deref wait-for) owner) tx)
+            {"ok" false "error" "DEADLOCK_DETECTED" "owner" owner}
+            {"ok" false "error" "LOCK_CONFLICT" "owner" owner}))))))
+
+(defn release-lock [tx resource]
+  (let [held (get (deref lock-table) resource)]
+    (if (and (not (nil? held)) (= (get held "tx") tx))
+      (do
+        (swap! lock-table dissoc resource)
+        true)
+      false)))
+
+(defn release-all [tx]
+  (doseq [resource (keys (deref lock-table))]
+    (release-lock tx resource))
+  (swap! wait-for dissoc tx)
+  true)
+
+(defn valid-isolation? [level]
+  (or (= level "READ COMMITTED")
+      (= level "REPEATABLE READ")
+      (= level "SERIALIZABLE")))
+
+(defn isolation-policy [level]
+  (if (not (valid-isolation? level))
+    (throw "INVALID_ISOLATION_LEVEL")
+    (if (= level "READ COMMITTED")
+      {"dirty-read" false "repeatable-read" false "phantom" true}
+      (if (= level "REPEATABLE READ")
+        {"dirty-read" false "repeatable-read" true "phantom" true}
+        {"dirty-read" false "repeatable-read" true "phantom" false}))))
+
+(let [first (acquire-lock 1 "users:1" "X")
+      conflict (acquire-lock 2 "users:1" "X")
+      same-owner (acquire-lock 1 "users:1" "X")]
+  (if (and (get first "ok")
+           (not (get conflict "ok"))
+           (get same-owner "ok")
+           (not (get (isolation-policy "READ COMMITTED") "dirty-read"))
+           (not (get (isolation-policy "SERIALIZABLE") "phantom")))
+    (println "afj-db95 locking/isolation PASS")
+    (throw "locking or isolation failure"))
+  (release-all 1))
+
+(release-all 2)
+(let [_ (acquire-lock 1 "users:1" "X")
+      _ (acquire-lock 2 "users:2" "X")
+      _ (acquire-lock 1 "users:2" "X")
+      cycle (acquire-lock 2 "users:1" "X")]
+  (if (= (get cycle "error") "DEADLOCK_DETECTED")
+    (println "afj-db95 deadlock detection PASS")
+    (throw "deadlock detection failure")))
+(release-all 1)
+(release-all 2)

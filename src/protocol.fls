@@ -1,0 +1,54 @@
+;; AFJ-DB P5 wire-protocol state baseline.
+;; Transport adapters can map one JSON request to handle-request.
+
+(define server-state (atom {"status" "stopped" "sessions" {} "prepared" {}}))
+
+(defn server-start [name]
+  (reset! server-state {"status" "running" "name" name "sessions" {} "prepared" {}})
+  {"ok" true "status" "running" "name" name})
+
+(defn server-stop []
+  (reset! server-state {"status" "stopped" "sessions" {} "prepared" {}})
+  {"ok" true "status" "stopped"})
+
+(defn server-login [user]
+  (let [token (uuid_short)]
+    (swap! server-state assoc "sessions"
+           (assoc (get (deref server-state) "sessions") token user))
+    {"ok" true "token" token "user" user}))
+
+(defn valid-session? [token]
+  (has-key? (get (deref server-state) "sessions") token))
+
+(defn prepare [token statement]
+  (if (not (valid-session? token))
+    {"ok" false "error" "AUTH_REQUIRED"}
+    (let [id (uuid_short)]
+      (swap! server-state assoc "prepared"
+             (assoc (get (deref server-state) "prepared") id statement))
+      {"ok" true "statement-id" id})))
+
+(defn handle-request [request]
+  (let [kind (get request "type")
+        token (get request "token")]
+    (if (= kind "ping")
+      {"ok" true "type" "pong"}
+      (if (= kind "health")
+        {"ok" true "status" (get (deref server-state) "status")}
+        (if (= kind "prepare")
+          (prepare token (get request "statement"))
+          (if (= kind "query")
+            (if (valid-session? token)
+              {"ok" true "type" "query-accepted" "statement-id" (get request "statement-id")}
+              {"ok" false "error" "AUTH_REQUIRED"})
+            {"ok" false "error" "UNKNOWN_REQUEST"}))))))
+
+(server-start "afj-db95")
+(let [login (server-login "root")
+      token (get login "token")
+      prepared (prepare token "SELECT * FROM users")]
+  (if (and (get (handle-request {"type" "ping"}) "ok")
+           (get prepared "ok")
+           (not (get (handle-request {"type" "query" "token" "bad"}) "ok")))
+    (println "afj-db95 protocol PASS")
+    (throw "protocol contract failure")))

@@ -1,0 +1,36 @@
+;; AFJ-DB page-backed index snapshot contract.
+
+(load "/root/kilo-freelang/projects/afj-db95/src/afj-db95.fls")
+(load "/root/kilo-freelang/projects/afj-db95/src/btree.fls")
+
+(defn persistent-index-build [rows column index row-id]
+  (if (>= row-id (count rows))
+    index
+    (persistent-index-build rows column
+                            (btree-add index (get (get rows row-id) column) row-id)
+                            (+ row-id 1))))
+
+(let [path "/tmp/afj-db95-index.page"
+      rows [{"id" 1 "name" "Kim"}
+            {"id" 2 "name" "Lee"}
+            {"id" 3 "name" "Kim"}]
+      index (persistent-index-build rows "name" (btree-empty) 0)]
+  (if (file_exists path) (file_delete path) true)
+  (write-page path {"kind" "btree-index" "column" "name" "tree" index})
+  (let [restored (read-page path)
+        restored-tree (get restored "tree")
+        ids (btree-get restored-tree "Kim")]
+    (if (and (= (get restored "kind") "btree-index")
+             (= ids [0 2]))
+      (println "afj-db95 persistent index reopen PASS")
+      (throw "persistent index changed after page reopen")))
+  (file_write path (str-replace (file_read path) "AFJPG" "BROKEN"))
+  (try
+    (do
+      (read-page path)
+      (throw "corrupt index page accepted"))
+    (catch [error]
+      (if (regex_match_i (error_message error) "invalid AFJ page")
+        (println "afj-db95 persistent index checksum PASS")
+        (throw error))))
+  (file_delete path))

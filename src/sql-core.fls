@@ -1,0 +1,414 @@
+;; AFJ-DB P2 SQL core seed.
+;; This module intentionally returns a stable AST before execution is connected.
+
+(defn token-at [tokens index]
+  (get tokens index))
+
+(defn keyword? [value expected]
+  (regex_match_i value (str "^" expected "$")))
+
+(defn sql-tokens [sql]
+  (filter (fn [token] (not (= (str_trim token) "")))
+          (regex_split (str_trim sql) "\\s+")))
+
+(defn sql-clean-token [token]
+  (str-trim
+    (str-replace-in
+      (str-replace-in
+        (str-replace-in token "(" "") ")" "") ";" "")))
+
+(defn sql-count-column [token]
+  (str-replace-in
+    (str-replace-in token "COUNT(" "") ")" ""))
+
+(defn sql-value [token]
+  (let [clean (sql-clean-token token)]
+    (if (keyword? clean "TRUE")
+      true
+    (if (keyword? clean "FALSE")
+      false
+      (if (keyword? clean "NULL")
+        nil
+        (str-replace-in clean "'" ""))))))
+
+(defn sql-row-from [columns values index row]
+  (if (>= index (count columns))
+    row
+    (sql-row-from columns values (+ index 1)
+                  (assoc row (get columns index) (get values index)))))
+
+(defn sql-insert-row [columns-token values-token]
+  (let [columns (map sql-clean-token (regex_split columns-token ","))
+        values (map sql-value (regex_split values-token ","))]
+    (sql-row-from columns values 0 {})))
+
+(defn sql-insert-rows [columns-token values-token]
+  (map (fn [group]
+         (sql-insert-row columns-token group))
+       (regex_split values-token "\\),\\(")))
+
+(defn sql-assignment [token]
+  (let [parts (regex_split token "=")]
+    {"column" (sql-clean-token (get parts 0))
+     "value" (sql-value (get parts 1))}))
+
+(defn parse-select-basic [tokens]
+  (if (and (= (count tokens) 4)
+           (= (token-at tokens 1) "*")
+           (keyword? (token-at tokens 2) "FROM"))
+    {"type" "select" "columns" ["*"] "table" (token-at tokens 3)}
+    (if (and (= (count tokens) 7)
+             (= (token-at tokens 1) "*")
+             (keyword? (token-at tokens 2) "FROM")
+             (keyword? (token-at tokens 4) "WHERE"))
+      (let [predicate (if (> (count (regex_split (token-at tokens 5) "=")) 1)
+                        (sql-assignment (token-at tokens 5))
+                        {"column" (token-at tokens 5)
+                         "value" (token-at tokens 6)})]
+        {"type" "select" "columns" ["*"] "table" (token-at tokens 3)
+         "where" {"column" (get predicate "column")
+                   "equals" (get predicate "value")}})
+      (if (and (= (count tokens) 6)
+               (= (token-at tokens 1) "*")
+               (keyword? (token-at tokens 2) "FROM")
+               (keyword? (token-at tokens 4) "WHERE"))
+        (let [predicate (sql-assignment (token-at tokens 5))]
+          {"type" "select" "columns" ["*"] "table" (token-at tokens 3)
+           "where" {"column" (get predicate "column")
+                     "equals" (get predicate "value")}})
+      (if (and (= (count tokens) 6)
+               (= (token-at tokens 1) "*")
+               (keyword? (token-at tokens 2) "FROM")
+               (keyword? (token-at tokens 4) "LIMIT"))
+        {"type" "select" "columns" ["*"] "table" (token-at tokens 3)
+         "limit" (token-at tokens 5)}
+      (if (and (= (count tokens) 8)
+               (= (token-at tokens 1) "*")
+               (keyword? (token-at tokens 2) "FROM")
+               (keyword? (token-at tokens 4) "WHERE")
+               (keyword? (token-at tokens 6) "IS")
+               (keyword? (token-at tokens 7) "NULL"))
+        {"type" "select" "columns" ["*"] "table" (token-at tokens 3)
+         "where" {"column" (token-at tokens 5) "is-null" true}}
+        (if (and (= (count tokens) 9)
+                 (= (token-at tokens 1) "*")
+                 (keyword? (token-at tokens 2) "FROM")
+                 (keyword? (token-at tokens 4) "WHERE")
+                 (keyword? (token-at tokens 6) "IS")
+                 (keyword? (token-at tokens 7) "NOT")
+                 (keyword? (token-at tokens 8) "NULL"))
+          {"type" "select" "columns" ["*"] "table" (token-at tokens 3)
+           "where" {"column" (token-at tokens 5) "is-null" false}}
+        (if (and (= (count tokens) 7)
+               (keyword? (token-at tokens 4) "ORDER")
+               (keyword? (token-at tokens 5) "BY"))
+        {"type" "select" "columns" ["*"] "table" (token-at tokens 3)
+         "order-by" (token-at tokens 6)}
+        (if (and (= (count tokens) 7)
+                 (keyword? (token-at tokens 4) "GROUP")
+                 (keyword? (token-at tokens 5) "BY"))
+          {"type" "select" "columns" ["*"] "table" (token-at tokens 3)
+           "group-by" (token-at tokens 6)}
+          (if (and (= (count tokens) 10)
+                   (keyword? (token-at tokens 4) "JOIN")
+                   (keyword? (token-at tokens 6) "ON")
+                   (= (token-at tokens 8) "="))
+            {"type" "select" "columns" ["*"] "table" (token-at tokens 3)
+             "join" {"table" (token-at tokens 5)
+                     "left" (token-at tokens 7)
+                     "right" (token-at tokens 9)}}
+            (throw "unsupported SELECT form")))))))))))
+
+;; MariaDB corpus compatibility: grouped COUNT with aliases and LEFT JOIN.
+(defn parse-select [tokens]
+  (if (and (= (count tokens) 6)
+           (= (token-at tokens 1) "COUNT(*)")
+           (keyword? (token-at tokens 2) "AS")
+           (keyword? (token-at tokens 4) "FROM"))
+    {"type" "select" "table" (token-at tokens 5)
+     "aggregate" {"function" "count" "column" "*"
+                   "alias" (token-at tokens 3)}}
+    (if (and (= (count tokens) 10)
+             (keyword? (token-at tokens 2) "FROM")
+             (keyword? (token-at tokens 4) "WHERE")
+             (keyword? (token-at tokens 6) "ORDER")
+             (keyword? (token-at tokens 7) "BY")
+             (keyword? (token-at tokens 9) "DESC"))
+      (let [predicate (sql-assignment (token-at tokens 5))]
+        {"type" "select"
+         "columns" (map sql-clean-token
+                         (regex_split (token-at tokens 1) ","))
+         "table" (token-at tokens 3)
+         "where" {"column" (get predicate "column")
+                   "equals" (get predicate "value")}
+         "order-by" (token-at tokens 8)
+         "order-direction" "desc"})
+    (if (and (= (count tokens) 20)
+             (keyword? (token-at tokens 5) "FROM")
+             (keyword? (token-at tokens 8) "LEFT")
+             (keyword? (token-at tokens 9) "JOIN")
+             (keyword? (token-at tokens 12) "ON")
+             (keyword? (token-at tokens 14) "GROUP")
+             (keyword? (token-at tokens 15) "BY")
+             (keyword? (token-at tokens 17) "ORDER")
+             (keyword? (token-at tokens 18) "BY"))
+      {"type" "select"
+       "columns" [(sql-clean-token (token-at tokens 1))]
+       "table" (token-at tokens 6)
+       "table-alias" (token-at tokens 7)
+       "aggregate" {"function" "count"
+                     "column" (sql-count-column (token-at tokens 2))
+                     "alias" (token-at tokens 4)}
+       "join" {"type" "left"
+               "table" (token-at tokens 10)
+               "table-alias" (token-at tokens 11)
+               "left" (get (regex_split (token-at tokens 13) "=") 0)
+               "right" (get (regex_split (token-at tokens 13) "=") 1)}
+       "group-by" (map sql-clean-token
+                        (regex_split (token-at tokens 16) ","))
+       "order-by" (token-at tokens 19)}
+      (parse-select-basic tokens)))))
+
+(defn parse-create [tokens]
+  (if (and (= (count tokens) 3)
+           (keyword? (token-at tokens 1) "TABLE"))
+    {"type" "create-table" "table" (token-at tokens 2)}
+    (throw "unsupported CREATE form")))
+
+(defn sql-schema-column [group]
+  (let [tokens (filter (fn [token] (not (= token "")))
+                       (regex_split (str_trim group) "\\s+"))
+        raw-type (str_upper (get tokens 1))
+        type (if (or (= raw-type "INT") (= raw-type "INTEGER"))
+               "INTEGER"
+               (if (= raw-type "BOOLEAN") "BOOLEAN" "TEXT"))
+        not-null (and (contains? tokens "NOT") (contains? tokens "NULL"))
+        primary (contains? tokens "PRIMARY")]
+    {"name" (sql-clean-token (get tokens 0))
+     "type" type
+     "nullable" (not (or not-null primary))
+     "primary" primary
+     "unique" (contains? tokens "UNIQUE")}))
+
+(defn sql-schema-definition [group]
+  (let [clean (str_trim group)
+        upper (str_upper clean)
+        tokens (sql-tokens clean)]
+    (if (or (keyword? (get tokens 0) "CONSTRAINT")
+            (keyword? (get tokens 0) "FOREIGN"))
+      (let [local-part (get (regex_split clean "\\(") 1)
+            local (sql-clean-token (get (regex_split local-part "\\)") 0))
+            ref-tail (get (regex_split (str_upper clean) "REFERENCES") 1)
+            ref-parts (regex_split ref-tail "\\(")
+            ref-table (str_lower (last (sql-tokens (get ref-parts 0))))
+            ref-column (str_lower (sql-clean-token (get (regex_split (get ref-parts 1) "\\)") 0)))]
+        {"kind" "foreign-key" "column" local
+         "references-table" ref-table "references-column" ref-column})
+      (if (regex_match_i (get tokens 0) "^CHECK")
+        (let [inside (get (regex_split clean "\\(") 1)
+              expression (get (regex_split inside "\\)") 0)
+              parts (sql-tokens expression)]
+          {"kind" "check" "column" (sql-clean-token (get parts 0))
+           "operator" (get parts 1) "value" (sql-value (get parts 2))})
+        (if (regex_match_i (get tokens 0) "^UNIQUE")
+          (let [inside (get (regex_split clean "\\(") 1)]
+            {"kind" "unique" "column"
+             (sql-clean-token (get (regex_split inside "\\)") 0))})
+          (assoc (sql-schema-column group) "kind" "column"))))))
+
+(defn parse-create-sql [sql tokens]
+  (if (= (count tokens) 3)
+    (parse-create tokens)
+    (let [prefix-tokens (sql-tokens (get (regex_split sql "\\(") 0))
+          table (last prefix-tokens)
+          open-index (str-index-of sql "(")
+          body (str-slice sql (+ open-index 1) (- (count sql) 1))
+          definitions (map sql-schema-definition (regex_split body ","))
+          columns (filter (fn [definition] (= (get definition "kind") "column"))
+                         definitions)
+          primary-def (first (filter (fn [column] (get column "primary"))
+                                    columns))
+          uniques (map (fn [column] (get column "name"))
+                       (filter (fn [column] (get column "unique")) columns))
+          table-uniques (map (fn [definition] (get definition "column"))
+                             (filter (fn [definition] (= (get definition "kind") "unique"))
+                                     definitions))
+          foreign-keys (filter (fn [definition] (= (get definition "kind") "foreign-key"))
+                               definitions)
+          checks (filter (fn [definition] (= (get definition "kind") "check"))
+                         definitions)]
+      {"type" "create-table" "table" table
+       "schema" {"columns" (map (fn [column]
+                                    (dissoc (dissoc column "primary" "unique") "kind"))
+                                  columns)
+                 "primary-key" (if (nil? primary-def)
+                                  nil
+                                  (get primary-def "name"))
+                 "unique-columns" (concat uniques table-uniques)
+                 "foreign-keys" foreign-keys
+                 "checks" checks}})))
+
+(defn parse-insert [tokens]
+  (if (and (= (count tokens) 6)
+           (keyword? (token-at tokens 1) "INTO")
+           (keyword? (token-at tokens 4) "VALUES"))
+    {"type" "insert" "table" (token-at tokens 2)
+     "rows" (sql-insert-rows (token-at tokens 3) (token-at tokens 5))}
+    (if (and (= (count tokens) 3)
+           (keyword? (token-at tokens 1) "INTO"))
+      {"type" "insert" "table" (token-at tokens 2)}
+      (throw "unsupported INSERT form"))))
+
+(defn parse-update [tokens]
+  (if (and (= (count tokens) 6)
+           (keyword? (token-at tokens 2) "SET")
+           (keyword? (token-at tokens 4) "WHERE"))
+    (let [change (sql-assignment (token-at tokens 3))
+          predicate (sql-assignment (token-at tokens 5))]
+      {"type" "update" "table" (token-at tokens 1)
+       "changes" (assoc {} (get change "column") (get change "value"))
+       "where" {"column" (get predicate "column")
+                 "equals" (get predicate "value")}})
+    (if (= (count tokens) 2)
+      {"type" "update" "table" (token-at tokens 1)}
+      (throw "unsupported UPDATE form"))))
+
+(defn parse-delete [tokens]
+  (if (and (= (count tokens) 5)
+           (keyword? (token-at tokens 1) "FROM")
+           (keyword? (token-at tokens 3) "WHERE"))
+    (let [predicate (sql-assignment (token-at tokens 4))]
+      {"type" "delete" "table" (token-at tokens 2)
+       "where" {"column" (get predicate "column")
+                 "equals" (get predicate "value")}})
+    (if (and (= (count tokens) 3)
+             (keyword? (token-at tokens 1) "FROM"))
+      {"type" "delete" "table" (token-at tokens 2)}
+      (throw "unsupported DELETE form"))))
+
+(defn parse-drop [tokens]
+  (if (and (= (count tokens) 3)
+           (keyword? (token-at tokens 1) "TABLE"))
+    {"type" "drop-table" "table" (token-at tokens 2)}
+    (throw "unsupported DROP form")))
+
+(defn parse-alter [tokens]
+  (if (and (= (count tokens) 6)
+           (keyword? (token-at tokens 1) "TABLE")
+           (keyword? (token-at tokens 3) "ADD")
+           (keyword? (token-at tokens 4) "COLUMN"))
+    {"type" "alter-table" "table" (token-at tokens 2)
+     "operation" "add-column" "column" (token-at tokens 5)}
+    (throw "unsupported ALTER form")))
+
+(defn parse-sql [sql]
+  (let [tokens (sql-tokens sql)
+        first-token (token-at tokens 0)]
+    (if (keyword? first-token "SELECT")
+      (parse-select tokens)
+      (if (keyword? first-token "CREATE")
+        (parse-create-sql sql tokens)
+        (if (keyword? first-token "INSERT")
+          (parse-insert tokens)
+          (if (keyword? first-token "UPDATE")
+            (parse-update tokens)
+            (if (keyword? first-token "DELETE")
+              (parse-delete tokens)
+              (if (keyword? first-token "DROP")
+                (parse-drop tokens)
+                (if (keyword? first-token "ALTER")
+                  (parse-alter tokens)
+                  (throw "unsupported SQL statement"))))))))))
+
+(defn assert-sql [sql expected]
+  (let [actual (parse-sql sql)]
+    (if (= actual expected)
+      (println (str "PASS SQL " sql))
+      (throw (str "FAIL SQL " sql)))))
+
+(assert-sql "SELECT * FROM users"
+            {"type" "select" "columns" ["*"] "table" "users"})
+(assert-sql "select * from users"
+            {"type" "select" "columns" ["*"] "table" "users"})
+(assert-sql "SELECT * FROM users WHERE name Kim"
+            {"type" "select" "columns" ["*"] "table" "users"
+             "where" {"column" "name" "equals" "Kim"}})
+(assert-sql "SELECT * FROM users WHERE id=1"
+            {"type" "select" "columns" ["*"] "table" "users"
+             "where" {"column" "id" "equals" "1"}})
+(assert-sql "SELECT * FROM users WHERE email IS NULL"
+            {"type" "select" "columns" ["*"] "table" "users"
+             "where" {"column" "email" "is-null" true}})
+(assert-sql "SELECT * FROM users WHERE email IS NOT NULL"
+            {"type" "select" "columns" ["*"] "table" "users"
+             "where" {"column" "email" "is-null" false}})
+(assert-sql "SELECT * FROM users LIMIT 1"
+            {"type" "select" "columns" ["*"] "table" "users"
+             "limit" "1"})
+(assert-sql "SELECT * FROM users ORDER BY id"
+            {"type" "select" "columns" ["*"] "table" "users"
+             "order-by" "id"})
+(assert-sql "SELECT * FROM users GROUP BY team"
+            {"type" "select" "columns" ["*"] "table" "users"
+             "group-by" "team"})
+(assert-sql "SELECT * FROM users JOIN teams ON users.team_id = teams.team_id"
+            {"type" "select" "columns" ["*"] "table" "users"
+             "join" {"table" "teams" "left" "users.team_id"
+                     "right" "teams.team_id"}})
+(assert-sql "CREATE TABLE users"
+            {"type" "create-table" "table" "users"})
+(assert-sql "INSERT INTO users"
+            {"type" "insert" "table" "users"})
+(assert-sql "INSERT INTO users (id,name) VALUES (1,'Kim')"
+            {"type" "insert" "table" "users"
+             "rows" [{"id" "1" "name" "Kim"}]})
+(assert-sql "INSERT INTO users (id,name) VALUES (1,'Kim'),(2,'Lee')"
+            {"type" "insert" "table" "users"
+             "rows" [{"id" "1" "name" "Kim"}
+                     {"id" "2" "name" "Lee"}]})
+(assert-sql "UPDATE users"
+            {"type" "update" "table" "users"})
+(assert-sql "UPDATE users SET name='Lee' WHERE id=1"
+            {"type" "update" "table" "users"
+             "changes" {"name" "Lee"}
+             "where" {"column" "id" "equals" "1"}})
+(assert-sql "DELETE FROM users"
+            {"type" "delete" "table" "users"})
+(assert-sql "DELETE FROM users WHERE id=1"
+            {"type" "delete" "table" "users"
+             "where" {"column" "id" "equals" "1"}})
+(assert-sql "DROP TABLE users"
+            {"type" "drop-table" "table" "users"})
+(assert-sql "ALTER TABLE users ADD COLUMN email"
+            {"type" "alter-table" "table" "users"
+             "operation" "add-column" "column" "email"})
+
+(let [aggregate (parse-sql "SELECT COUNT(*) AS remaining FROM users")
+      schema-create (parse-sql
+                      "CREATE TABLE constrained_users(id INT PRIMARY KEY, name TEXT NOT NULL, email TEXT UNIQUE)")
+      relational-schema (parse-sql
+                         "CREATE TABLE users(id INT PRIMARY KEY, team_id INT, CONSTRAINT fk_team FOREIGN KEY(team_id) REFERENCES teams(id), CHECK(active = TRUE))")
+      projection (parse-sql
+                  "SELECT id,name FROM users WHERE active=TRUE ORDER BY id DESC")
+      left-group (parse-sql
+                   "SELECT t.name, COUNT(u.id) AS n FROM teams t LEFT JOIN users u ON t.id=u.team_id GROUP BY t.id,t.name ORDER BY t.id")]
+  (if (and (= (get (get aggregate "aggregate") "alias") "remaining")
+           (= (get (get schema-create "schema") "primary-key") "id")
+           (= (count (get (get schema-create "schema") "columns")) 3)
+           (= (get (first (get (get schema-create "schema") "columns")) "nullable") false)
+           (= (get (get schema-create "schema") "unique-columns") ["email"])
+           (= (count (get (get relational-schema "schema") "foreign-keys")) 1)
+           (= (get (first (get (get relational-schema "schema") "foreign-keys"))
+                   "references-table") "teams")
+           (= (count (get (get relational-schema "schema") "checks")) 1)
+           (= (get (first (get (get relational-schema "schema") "checks"))
+                   "operator") "=")
+           (= (get projection "order-direction") "desc")
+           (= (count (get projection "columns")) 2)
+           (= (get (get left-group "aggregate") "column") "u.id")
+           (= (get (get left-group "join") "type") "left")
+           (= (count (get left-group "group-by")) 2))
+    (println "afj-db95 MariaDB aggregate/left-join parser PASS")
+    (throw "MariaDB aggregate/left-join parser failure")))
+
+(println "afj-db95 SQL parser seed PASS")

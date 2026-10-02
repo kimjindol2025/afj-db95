@@ -1,0 +1,36 @@
+;; AFJ-DB indexed executor integration.
+;; Builds the ordered index from engine rows and uses row ids for lookup.
+
+(load "/root/kilo-freelang/projects/afj-db95/src/engine.fls")
+(load "/root/kilo-freelang/projects/afj-db95/src/btree.fls")
+
+(defn indexed-build [rows column index row-id]
+  (if (>= row-id (count rows))
+    index
+    (indexed-build rows column
+                   (btree-add index (get (get rows row-id) column) row-id)
+                   (+ row-id 1))))
+
+(defn indexed-rows [rows index key]
+  (map (fn [row-id] (get rows row-id))
+       (btree-get index key)))
+
+(execute-ast {"type" "create-table" "table" "indexed_users"})
+(execute-ast {"type" "insert" "table" "indexed_users"
+              "row" {"id" 1 "name" "Kim"}})
+(execute-ast {"type" "insert" "table" "indexed_users"
+              "row" {"id" 2 "name" "Lee"}})
+(execute-ast {"type" "insert" "table" "indexed_users"
+              "row" {"id" 3 "name" "Kim"}})
+
+(let [table (engine-table "indexed_users")
+      rows (get table "rows")
+      index (indexed-build rows "name" (btree-empty) 0)
+      indexed (indexed-rows rows index "Kim")
+      scanned (filter (fn [row] (= (get row "name") "Kim")) rows)]
+  (if (and (= (count indexed) 2)
+           (= (count scanned) 2)
+           (= (get (first indexed) "id") 1)
+           (= (get (last indexed) "id") 3))
+    (println "afj-db95 indexed engine lookup PASS")
+    (throw "indexed lookup differs from full scan")))

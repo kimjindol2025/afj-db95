@@ -1,0 +1,66 @@
+;; AFJ-DB ACID commit-log baseline.
+;; A transaction becomes durable only after its commit marker is appended.
+
+(define acid-next-id (atom 0))
+(define acid-txs (atom {}))
+(define acid-wal-path (atom nil))
+
+(defn acid-open [path]
+  (if (not (file_exists path)) (file_write path "") true)
+  (reset! acid-wal-path path)
+  path)
+
+(defn acid-begin []
+  (let [id (swap! acid-next-id + 1)]
+    (swap! acid-txs assoc id {"id" id "status" "active" "writes" []})
+    id))
+
+(defn acid-stage [id write]
+  (let [tx (get (deref acid-txs) id)]
+    (if (or (nil? tx) (not (= (get tx "status") "active")))
+      (throw "TX_NOT_ACTIVE")
+      (swap! acid-txs assoc id
+             (assoc tx "writes" (conj (get tx "writes") write)))))
+  id)
+
+(defn acid-commit [id]
+  (let [tx (get (deref acid-txs) id)
+        marker {"type" "commit" "tx" id "writes" (get tx "writes")}]
+    (if (or (nil? tx) (not (= (get tx "status") "active")))
+      (throw "TX_NOT_ACTIVE")
+      (do
+        (file_append (deref acid-wal-path) (str (json_str marker) "\n"))
+        (swap! acid-txs assoc id (assoc tx "status" "committed"))
+        marker))))
+
+(defn acid-rollback [id]
+  (let [tx (get (deref acid-txs) id)]
+    (if (or (nil? tx) (not (= (get tx "status") "active")))
+      (throw "TX_NOT_ACTIVE")
+      (do
+        (swap! acid-txs assoc id (assoc tx "status" "rolled-back"))
+        {"type" "rollback" "tx" id}))))
+
+(defn acid-replay-commits [path]
+  (if (not (file_exists path))
+    []
+    (filter (fn [event] (= (get event "type") "commit"))
+            (map (fn [line] (json-parse line))
+                 (filter (fn [line] (not (= (str_trim line) "")))
+                         (str_lines (file_read path)))))))
+
+(let [path "/tmp/afj-db95-acid-wal"
+      _ (if (file_exists path) (file_delete path) true)]
+  (acid-open path)
+  (let [committed (acid-begin)
+        rolled-back (acid-begin)]
+    (acid-stage committed {"op" "insert" "id" 1})
+    (acid-stage rolled-back {"op" "insert" "id" 2})
+    (acid-commit committed)
+    (acid-rollback rolled-back)
+    (if (and (= (count (acid-replay-commits path)) 1)
+             (= (get (first (acid-replay-commits path)) "tx") committed))
+      (println "afj-db95 ACID commit boundary PASS")
+      (throw "ACID commit boundary failure")))
+  (reset! acid-wal-path nil)
+  (file_delete path))

@@ -1,0 +1,67 @@
+;; AFJ-DB P4 transaction state machine seed.
+
+(define next-tx-id (atom 0))
+(define tx-table (atom {}))
+
+(defn begin-tx []
+  (let [id (swap! next-tx-id + 1)
+        tx {"id" id "status" "active" "writes" [] "savepoints" {}}]
+    (swap! tx-table assoc id tx)
+    tx))
+
+(defn tx-get [id]
+  (let [tx (get (deref tx-table) id)]
+    (if (nil? tx)
+      (throw (str "transaction not found: " id))
+      tx)))
+
+(defn require-active [id]
+  (let [tx (tx-get id)]
+    (if (= (get tx "status") "active")
+      tx
+      (throw (str "transaction is not active: " id)))))
+
+(defn tx-write [id mutation]
+  (let [tx (require-active id)
+        updated (assoc tx "writes" (conj (get tx "writes") mutation))]
+    (swap! tx-table assoc id updated)
+    updated))
+
+(defn tx-savepoint [id name]
+  (let [tx (require-active id)
+        points (assoc (get tx "savepoints") name (count (get tx "writes")))
+        updated (assoc tx "savepoints" points)]
+    (swap! tx-table assoc id updated)
+    updated))
+
+(defn tx-rollback-to [id name]
+  (let [tx (require-active id)
+        offset (get (get tx "savepoints") name)
+        writes (get tx "writes")
+        kept (take offset writes)
+        updated (assoc tx "writes" kept)]
+    (swap! tx-table assoc id updated)
+    updated))
+
+(defn tx-commit [id]
+  (let [tx (require-active id)
+        updated (assoc tx "status" "committed")]
+    (swap! tx-table assoc id updated)
+    updated))
+
+(defn tx-rollback [id]
+  (let [tx (require-active id)
+        updated (assoc tx "status" "rolled-back" "writes" [])]
+    (swap! tx-table assoc id updated)
+    updated))
+
+(let [tx (begin-tx)
+      id (get tx "id")]
+  (tx-write id {"op" "insert" "table" "users"})
+  (tx-savepoint id "before-second-write")
+  (tx-write id {"op" "update" "table" "users"})
+  (tx-rollback-to id "before-second-write")
+  (if (= (count (get (tx-get id) "writes")) 1)
+    (println "afj-db95 transaction PASS")
+    (throw "transaction savepoint failure"))
+  (tx-commit id))

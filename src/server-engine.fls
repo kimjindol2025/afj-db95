@@ -1,0 +1,72 @@
+;; AFJ-DB authenticated protocol + authorization + SQL engine integration.
+
+(load "/root/kilo-freelang/projects/afj-db95/src/engine.fls")
+(load "/root/kilo-freelang/projects/afj-db95/src/sql-core.fls")
+(load "/root/kilo-freelang/projects/afj-db95/src/protocol.fls")
+(load "/root/kilo-freelang/projects/afj-db95/src/auth.fls")
+
+(defn server-engine-permission [statement]
+  (let [kind (get (parse-sql statement) "type")]
+    (if (= kind "select")
+      "db.read"
+      "db.write")))
+
+(defn server-engine-login [user password]
+  (let [auth (authenticate user password)]
+    (if (get auth "ok")
+      (server-login user)
+      {"ok" false "error" "AUTH_FAILED"})))
+
+(defn server-engine-query [token statement]
+  (if (not (valid-session? token))
+    {"ok" false "error" "AUTH_REQUIRED"}
+    (let [user (get (get (deref server-state) "sessions") token)
+          permission (server-engine-permission statement)]
+      (if (not (authorize user permission))
+        {"ok" false "error" "PERMISSION_DENIED" "permission" permission}
+        {"ok" true "result" (execute-ast (parse-sql statement))}))))
+
+(defn server-engine-execute-prepared [token statement-id]
+  (let [statement (get (get (deref server-state) "prepared") statement-id)]
+    (if (nil? statement)
+      {"ok" false "error" "PREPARED_NOT_FOUND"}
+      (server-engine-query token statement))))
+
+(server-start "afj-db95-engine")
+(let [root-login (server-engine-login "root" "development-only")
+      root-token (get root-login "token")
+      unauthorized (server-engine-query "bad-token" "SELECT * FROM server_users")]
+  (if (and (get root-login "ok")
+           (= (get unauthorized "error") "AUTH_REQUIRED"))
+    nil
+    (throw "server authentication integration failure"))
+  (server-engine-query root-token "CREATE TABLE server_users")
+  (server-engine-query root-token "INSERT INTO server_users (id,name) VALUES (1,'Kim')")
+  (let [selected (server-engine-query root-token "SELECT * FROM server_users")]
+    (if (and (get selected "ok")
+             (= (count (get (get selected "result") "rows")) 1))
+      (println "afj-db95 authenticated engine query PASS")
+      (throw "authenticated engine query failure"))))
+
+;; Prepared statements execute through the same auth and permission path.
+(let [login (server-engine-login "root" "development-only")
+      token (get login "token")
+      prepared (prepare token "SELECT * FROM server_users")
+      executed (server-engine-execute-prepared token (get prepared "statement-id"))]
+  (if (and (get prepared "ok") (get executed "ok"))
+    (println "afj-db95 authenticated prepared query PASS")
+    (throw "prepared query integration failure")))
+
+;; A read-only role can query but cannot mutate.
+(create-role "reader")
+(grant "reader" "db.read")
+(create-user "reader" "reader-password" "reader")
+(let [reader-login (server-engine-login "reader" "reader-password")
+      reader-token (get reader-login "token")
+      read-result (server-engine-query reader-token "SELECT * FROM server_users")
+      write-result (server-engine-query reader-token
+                                        "INSERT INTO server_users (id,name) VALUES (2,'Nope')")]
+  (if (and (get read-result "ok")
+           (= (get write-result "error") "PERMISSION_DENIED"))
+    (println "afj-db95 authenticated permission PASS")
+    (throw "permission integration failure")))

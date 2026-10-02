@@ -1,0 +1,194 @@
+;; AFJ-DB HTTP server adapter baseline.
+;; Route registration is separate from startup so tests do not leave a daemon.
+
+(load "/root/kilo-freelang/projects/afj-db95/src/sql-core.fls")
+(define http-catalog-path "/tmp/afj-db95-http-catalog.wal")
+
+(defn http-events []
+  (if (not (file_exists "/tmp/afj-db95-http-catalog.wal"))
+    []
+    (map (fn [line] (json-parse line))
+         (filter (fn [line] (not (= (str_trim line) "")))
+                 (str_lines (file_read "/tmp/afj-db95-http-catalog.wal"))))))
+
+(defn http-append [event]
+  (file_append "/tmp/afj-db95-http-catalog.wal" (str (json_str event) "\n"))
+  event)
+
+(defn http-table-exists? [name]
+  (let [exists (atom false)]
+    (doseq [event (http-events)]
+      (if (= (get event "table") name)
+        (if (= (get event "op") "create")
+          (reset! exists true)
+          (if (= (get event "op") "drop")
+            (reset! exists false)
+            nil))
+        nil))
+    (deref exists)))
+
+(defn http-rows [name]
+  (let [rows (atom [])]
+    (doseq [event (http-events)]
+      (if (not (= (get event "table") name))
+        nil
+        (if (= (get event "op") "insert")
+          (swap! rows conj (get event "row"))
+          (if (= (get event "op") "replace")
+            (reset! rows (get event "rows"))
+            (if (= (get event "op") "drop")
+              (reset! rows [])
+              (if (= (get event "op") "alter")
+                (reset! rows
+                        (map (fn [row] (assoc row (get event "column") nil))
+                             (deref rows)))
+                nil))))))
+    (deref rows)))
+
+(defn http-match? [row where]
+  (if (nil? where)
+    true
+    (if (has-key? where "is-null")
+      (if (get where "is-null")
+        (nil? (get row (get where "column")))
+        (not (nil? (get row (get where "column")))))
+      (= (get row (get where "column")) (get where "equals")))))
+
+(defn http-execute-ast [ast]
+  (let [kind (get ast "type")
+        name (get ast "table")
+        _ (if (not (file_exists "/tmp/afj-db95-http-catalog.wal"))
+            (file_write "/tmp/afj-db95-http-catalog.wal" "") true)]
+    (if (= kind "create-table")
+      (do
+        (http-append {"op" "create" "table" name})
+        {"ok" true "type" kind "table" name})
+      (if (= kind "insert")
+        (if (http-table-exists? name)
+          (do
+            (let [rows (if (has-key? ast "rows")
+                         (get ast "rows")
+                         [(get ast "row")])]
+              (doseq [row rows]
+                (http-append {"op" "insert" "table" name "row" row}))
+              {"ok" true "type" kind "count" (count rows)}))
+          (throw (str "table not found: " name)))
+        (if (= kind "alter-table")
+          (if (http-table-exists? name)
+            (do
+              (http-append {"op" "alter" "table" name
+                            "column" (get ast "column")})
+              {"ok" true "type" kind "table" name
+               "column" (get ast "column")})
+            (throw (str "table not found: " name)))
+          (if (= kind "drop-table")
+            (if (http-table-exists? name)
+              (do
+                (http-append {"op" "drop" "table" name})
+                {"ok" true "type" kind "table" name})
+              (throw (str "table not found: " name)))
+            (if (= kind "select")
+          {"ok" true "type" kind
+           "rows" (if (nil? (get ast "limit"))
+                    (filter (fn [row] (http-match? row (get ast "where")))
+                            (http-rows name))
+                    (take (get ast "limit")
+                          (filter (fn [row] (http-match? row (get ast "where")))
+                                  (http-rows name))))}
+          (if (= kind "update")
+            (let [rows (http-rows name)
+                  changed (map (fn [row]
+                                 (if (http-match? row (get ast "where"))
+                                   (obj-merge row (get ast "changes"))
+                                   row)) rows)]
+              (http-append {"op" "replace" "table" name "rows" changed})
+              {"ok" true "type" kind "rows" changed})
+            (if (= kind "delete")
+              (let [rows (filter (fn [row]
+                                   (not (http-match? row (get ast "where"))))
+                                 (http-rows name))]
+                (http-append {"op" "replace" "table" name "rows" rows})
+                {"ok" true "type" kind "rows" rows})
+              {"ok" false "error" "HTTP_SQL_UNSUPPORTED"})))))))))
+
+(defn db-health-handler [req]
+  (server-json {"status" "ok" "service" "afj-db95" "request" req}))
+
+(defn db-ping-handler [req]
+  (server-json {"ok" true "type" "pong"}))
+
+(defn db-token [user password]
+  (sha256 (str user ":" password)))
+
+(defn db-login-handler [req]
+  (let [body (get req "body" {})
+        user (get body "user")
+        password (get body "password")]
+    (if (and (= user "root") (= (sha256 password) (sha256 "development-only")))
+      (server-json {"ok" true "token" (db-token user password) "user" user})
+      (server-json {"ok" false "error" "AUTH_FAILED"}))))
+
+(defn db-authorized? [req]
+  (let [headers (get req "headers" {})
+        authorization (get headers "authorization" "")
+        expected (str "Bearer " (db-token "root" "development-only"))]
+    (= authorization expected)))
+
+(defn db-query-handler [req]
+  (if (not (db-authorized? req))
+    (server-json {"ok" false "error" "AUTH_REQUIRED"})
+    (let [body (get req "body" {})
+        statement (get body "statement")
+        parsed (parse-sql statement)
+        ast (if (and (= (get parsed "type") "insert")
+                     (has-key? body "row"))
+              (assoc parsed "row" (get body "row"))
+              (if (and (= (get parsed "type") "update")
+                       (has-key? body "changes"))
+                (assoc (assoc parsed "changes" (get body "changes"))
+                       "where" (get body "where" (get parsed "where")))
+                (if (and (= (get parsed "type") "delete")
+                         (has-key? body "where"))
+                  (assoc parsed "where" (get body "where"))
+                  parsed)))
+        result (if (= (get ast "type") "select")
+                 (http-execute-ast ast)
+                 (http-execute-ast ast))]
+      (server-json {"ok" true "statement" statement "ast" ast "result" result}))))
+
+(define db-routes {
+  :get {
+    "/health" db-health-handler
+    "/ping" db-ping-handler
+  }
+  :post {
+    "/login" db-login-handler
+    "/query" db-query-handler
+  }
+})
+
+(defn register-db-routes []
+  (route "GET" "/health" db-health-handler)
+  (route "GET" "/ping" db-ping-handler)
+  (route "POST" "/login" db-login-handler)
+  (route "POST" "/query" db-query-handler)
+  db-routes)
+
+(defn start-db-server [port]
+  (register-db-routes)
+  (server-start port)
+  {"ok" true "port" port "service" "afj-db95"})
+
+(if (file_exists http-catalog-path) (file_delete http-catalog-path) true)
+(http-execute-ast {"type" "create-table" "table" "http_users"})
+(http-execute-ast {"type" "insert" "table" "http_users"
+                   "row" {"id" 1 "name" "Kim"}})
+
+(let [health (db-health-handler {})
+      ping (db-ping-handler {})
+      query (db-query-handler {"headers" {"authorization"
+                                         (str "Bearer " (db-token "root" "development-only"))}
+                              "body" {"statement" "SELECT * FROM http_users"}})]
+  (if (and (not (nil? health)) (not (nil? ping)) (not (nil? query)))
+    (println "afj-db95 HTTP adapter PASS")
+    (throw "HTTP adapter failure")))

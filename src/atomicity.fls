@@ -1,0 +1,56 @@
+;; AFJ-DB atomic commit protocol baseline.
+;; Recovery applies only prepare records with a matching commit marker.
+
+(defn durable-append [path line]
+  (let [fd (fd_open path "a")]
+    (fd_write fd line)
+    (fd_fsync fd)
+    (fd_close fd))
+  true)
+
+(defn atomic-append [path event]
+  (durable-append path (str (json_str event) "\n"))
+  event)
+
+(defn atomic-prepare [path tx writes]
+  (atomic-append path {"tx" tx
+                       "state" "prepare"
+                       "writes" writes
+                       "checksum" (sha256 (json_str writes))}))
+
+(defn atomic-commit [path tx writes]
+  (atomic-append path {"tx" tx
+                       "state" "commit"
+                       "checksum" (sha256 (json_str writes))}))
+
+(defn atomic-recover [path]
+  (let [prepared (atom {})
+        committed (atom [])]
+    (doseq [line (filter (fn [line] (not (= (str_trim line) "")))
+                         (str_lines (file_read path)))]
+      (let [event (json-parse line)
+            tx (get event "tx")]
+        (if (= (get event "state") "prepare")
+          (swap! prepared assoc tx event)
+          (if (= (get event "state") "commit")
+            (let [pending (get (deref prepared) tx)]
+              (if (and (not (nil? pending))
+                       (= (get event "checksum") (get pending "checksum")))
+                (swap! committed conj (get pending "writes"))
+                nil))
+            nil))))
+    (deref committed)))
+
+(let [path "/tmp/afj-db95-atomic-wal"
+      _ (if (file_exists path) (file_delete path) true)
+      first-writes [{"op" "insert" "id" 1}]
+      torn-writes [{"op" "insert" "id" 2}]]
+  (atomic-prepare path 1 first-writes)
+  (atomic-commit path 1 first-writes)
+  (atomic-prepare path 2 torn-writes)
+  (let [recovered (atomic-recover path)]
+    (if (and (= (count recovered) 1)
+             (= (get (get (first recovered) 0) "id") 1))
+      (println "afj-db95 atomic commit/recovery PASS")
+      (throw "atomic recovery failure")))
+  (file_delete path))

@@ -1,0 +1,36 @@
+;; AFJ-DB relational query operators baseline.
+
+(defn join-one [left-row right-rows left-key right-key]
+  (map (fn [right-row] (obj-merge left-row right-row))
+       (filter (fn [right-row]
+                 (= (get left-row left-key) (get right-row right-key)))
+               right-rows)))
+
+(defn inner-join [left right left-key right-key]
+  (arr_flatten
+    (map (fn [left-row] (join-one left-row right left-key right-key)) left)))
+
+(defn order-by [rows column]
+  (arr_sort_by rows column))
+
+(defn group-count [rows column]
+  (let [counts (atom {})]
+    (doseq [row rows]
+      (let [key (get row column)
+            old (get (deref counts) key 0)]
+        (swap! counts assoc key (+ old 1))))
+    (deref counts)))
+
+(let [users [{"id" 1 "name" "Kim" "team_id" 10}
+             {"id" 2 "name" "Lee" "team_id" 20}]
+      teams [{"team_id" 10 "team" "core"}
+             {"team_id" 20 "team" "ops"}]
+      joined (inner-join users teams "team_id" "team_id")
+      ordered (order-by [{"id" 2} {"id" 1}] "id")
+      grouped (group-count [{"team" "core"} {"team" "core"}
+                            {"team" "ops"}] "team")]
+  (if (and (= (count joined) 2)
+           (= (get (first ordered) "id") 1)
+           (= (get grouped "core") 2))
+    (println "afj-db95 JOIN/GROUP/ORDER PASS")
+    (throw "query operators failure")))
