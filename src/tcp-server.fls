@@ -8,6 +8,7 @@
 
 (define afj-tcp-port 43995)
 (define afj-tcp-sessions (atom {}))
+(define afj-tcp-databases (atom {}))
 (define afj-tcp-transactions (atom {}))
 (define afj-tcp-locks (atom {}))
 (define afj-tcp-wal "/tmp/afj-db95-tcp-catalog.wal")
@@ -49,6 +50,7 @@
 (defn afj-tcp-recover []
   (do
     (reset! engine-catalog {})
+    (reset! engine-databases {})
     (if (file_exists afj-tcp-wal)
       (try
         (afj-tcp-recover-lines
@@ -70,7 +72,20 @@
     true))
 
 (defn afj-tcp-commit-asts [asts]
-  (let [result (atom nil)]
+  ;; Rejected SQL must never acquire a committed WAL record. Validate against
+  ;; a disposable catalog snapshot before publishing the unchanged WAL format.
+  (let [result (atom nil)
+        catalog (json-parse (json_str (deref engine-catalog)))
+        databases (json-parse (json_str (deref engine-databases)))]
+    (try
+      (doseq [ast asts] (execute-ast ast))
+      (catch [error]
+        (do
+          (reset! engine-catalog catalog)
+          (reset! engine-databases databases)
+          (throw error))))
+    (reset! engine-catalog catalog)
+    (reset! engine-databases databases)
     (afj-tcp-record-asts asts)
     (doseq [ast asts]
       (reset! result (execute-ast ast)))
@@ -180,11 +195,10 @@
     "db.read"
     "db.write"))
 
-(defn afj-tcp-query [request]
+(defn afj-tcp-execute-query [request ast]
   (let [token (get request "token")
         statement (get request "statement")
         user (get (deref afj-tcp-sessions) token)
-        ast (parse-sql statement)
         table (get ast "table")
         resource (afj-tcp-resource ast)
         owner (afj-tcp-conflicting-owner token resource table)
@@ -214,6 +228,49 @@
                                  (afj-tcp-release-token token)
                                  committed)))]
                 {"ok" true "result" result}))))))))
+
+(defn afj-tcp-query [request]
+  (let [token (get request "token")
+        user (get (deref afj-tcp-sessions) token)]
+    (if (nil? user)
+      {"ok" false "error" "AUTH_REQUIRED"}
+      (let [ast (parse-sql (get request "statement"))
+            kind (get ast "type")
+            permission (if (or (= kind "select") (= kind "use-database"))
+                         "db.read" "db.write")]
+        (if (not (authorize user permission))
+          {"ok" false "error" "PERMISSION_DENIED" "permission" permission}
+          (if (= kind "transaction")
+            (let [active (= (get (get (deref afj-tcp-transactions) token) "status") "active")
+                  op (get ast "op")]
+              (if (= op "BEGIN")
+                (do
+                  (if active (afj-tcp-commit token) nil)
+                  (afj-tcp-begin token))
+                (if active
+                  (afj-tcp-tx-request {"token" token "op" op})
+                  {"ok" true "status" (if (= op "ROLLBACK") "rolled-back" "committed")})))
+            (if (= kind "use-database")
+              (let [database (get ast "database")]
+                (if (has-key? (deref engine-databases) database)
+                  (do
+                    (swap! afj-tcp-databases assoc token database)
+                    {"ok" true "database" database})
+                  {"ok" false "error" "DATABASE_NOT_FOUND"}))
+              (do
+                ;; Database DDL ends this session's active transaction.
+                (if (or (= kind "create-database") (= kind "drop-database"))
+                  (if (= (get (get (deref afj-tcp-transactions) token) "status") "active")
+                    (afj-tcp-commit token) nil)
+                  nil)
+                (let [result (afj-tcp-execute-query request
+                               (engine-scope-ast ast (get (deref afj-tcp-databases) token)))]
+                  (if (and (get result "ok") (= kind "drop-database"))
+                    (doseq [session (keys (deref afj-tcp-databases))]
+                      (if (= (get (deref afj-tcp-databases) session) (get ast "database"))
+                        (swap! afj-tcp-databases dissoc session) nil))
+                    nil)
+                  result)))))))))
 
 (defn afj-tcp-line [conn line]
   (let [request (try
@@ -254,6 +311,7 @@
   (do
     (afj-tcp-recover)
     (reset! afj-tcp-transactions {})
+    (reset! afj-tcp-databases {})
     (reset! afj-tcp-locks {})
     (server-start "afj-db95-tcp")
     (let [started (tcp-server-raw afj-tcp-port "afj-db-tcp-handler")]

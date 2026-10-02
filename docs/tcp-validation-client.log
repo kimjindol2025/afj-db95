@@ -1,0 +1,36 @@
+afj-db95 executor PASS
+afj-db95 WHERE executor PASS
+afj-db95 WHERE update PASS
+afj-db95 JOIN/GROUP engine PASS
+afj-db95 DDL engine PASS
+PASS SQL SELECT * FROM users
+PASS SQL select * from users
+PASS SQL SELECT * FROM users WHERE name Kim
+PASS SQL SELECT * FROM users WHERE id=1
+PASS SQL SELECT * FROM users WHERE email IS NULL
+PASS SQL SELECT * FROM users WHERE email IS NOT NULL
+PASS SQL SELECT * FROM users LIMIT 1
+PASS SQL SELECT * FROM users ORDER BY id
+PASS SQL SELECT * FROM users GROUP BY team
+PASS SQL SELECT * FROM users JOIN teams ON users.team_id = teams.team_id
+PASS SQL CREATE TABLE users
+PASS SQL INSERT INTO users
+PASS SQL INSERT INTO users (id,name) VALUES (1,'Kim')
+PASS SQL INSERT INTO users (id,name) VALUES (1,'Kim'),(2,'Lee')
+PASS SQL UPDATE users
+PASS SQL UPDATE users SET name='Lee' WHERE id=1
+PASS SQL DELETE FROM users
+PASS SQL DELETE FROM users WHERE id=1
+PASS SQL DROP TABLE users
+PASS SQL ALTER TABLE users ADD COLUMN email
+afj-db95 MariaDB aggregate/left-join parser PASS
+afj-db95 SQL parser seed PASS
+afj-db95 parser-to-engine INSERT/UPDATE/DELETE PASS
+afj-db95 multi-row INSERT engine PASS
+afj-db95 MariaDB aggregate/left-join engine PASS
+afj-db95 schema constraints engine PASS
+afj-db95 foreign-key/check engine PASS
+afj-db95 protocol PASS
+afj-db95 auth PASS
+{"login":{"ok":true,"token":"a264d6e9","user":"root"},"create":{"ok":true,"result":{"ok":true,"type":"create-table","table":"tcp_users"}},"insert":{"ok":true,"result":{"ok":true,"type":"insert","count":1}},"selected":{"ok":true,"result":{"ok":true,"type":"select","rows":[{"id":"1","name":"Kim"}]}},"denied":{"ok":false,"error":"AUTH_REQUIRED"}}
+afj-db95 TCP auth/query independent-process PASS

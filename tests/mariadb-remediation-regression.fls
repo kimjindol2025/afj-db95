@@ -1,0 +1,134 @@
+;; Semantic regressions with a new retained WAL; never starts a server.
+(load "/root/kilo-freelang/projects/afj-db95/src/tcp-server.fls")
+(define afj-tcp-wal
+  (str "/root/kilo-freelang/projects/afj-db95/docs/remediation-" (uuid_short) ".wal"))
+(reset! engine-catalog {})
+(reset! engine-databases {})
+(swap! afj-tcp-sessions assoc "regression-a" "root")
+(swap! afj-tcp-sessions assoc "regression-b" "root")
+(define remediation-count (atom 0))
+
+(defn remediation-query [token sql]
+  (afj-tcp-query {"token" token "statement" sql}))
+(defn remediation-ok [name condition]
+  (if condition
+    (do (swap! remediation-count + 1) (println (str "PASS " name)))
+    (throw (str "FAIL " name))))
+(defn remediation-error [sql]
+  (try
+    (let [response (remediation-query "regression-a" sql)]
+      (if (get response "ok") "NO_ERROR" (get response "error")))
+    (catch [error] (error_message error))))
+(defn remediation-rejected [name sql pattern]
+  (let [before (file_read afj-tcp-wal)
+        catalog (afj-tcp-copy (deref engine-catalog))
+        error (remediation-error sql)]
+    (remediation-ok name
+      (and (regex_match error pattern)
+           (= before (file_read afj-tcp-wal))
+           (= catalog (deref engine-catalog))))))
+
+;; Unqualified legacy ASTs and new database-qualified ASTs coexist in one WAL.
+(remediation-query "regression-a" "CREATE TABLE legacy(id INT PRIMARY KEY)")
+(remediation-query "regression-a" "INSERT INTO legacy (id) VALUES (7)")
+(remediation-query "regression-a" "CREATE TABLE shadow.items")
+(remediation-query "regression-a" "INSERT INTO shadow.items (id) VALUES (8)")
+(remediation-query "regression-a" "DROP DATABASE IF EXISTS shadow")
+(remediation-ok "missing database DROP preserves legacy dotted table"
+  (has-key? (deref engine-catalog) "shadow.items"))
+(remediation-rejected "database namespace collision preserves legacy table"
+  "CREATE DATABASE shadow" "DATABASE_NAMESPACE_CONFLICT")
+(remediation-query "regression-a" "DROP DATABASE IF EXISTS regression_a")
+(remediation-query "regression-a" "CREATE DATABASE regression_a")
+(remediation-query "regression-b" "CREATE DATABASE regression_b")
+(remediation-query "regression-a" "USE regression_a")
+(remediation-query "regression-b" "USE regression_b")
+(remediation-query "regression-a" "CREATE TABLE items(id INT PRIMARY KEY, active BOOLEAN NOT NULL, CHECK(active = TRUE OR active = FALSE))")
+(remediation-query "regression-b" "CREATE TABLE items(id INT PRIMARY KEY, active BOOLEAN NOT NULL)")
+(remediation-query "regression-a" "INSERT INTO items VALUES (1,TRUE), (2,FALSE)")
+(remediation-query "regression-b" "INSERT INTO items VALUES (9,TRUE)")
+(remediation-ok "database session isolation"
+  (and (= (count (get (engine-table "regression_a.items") "rows")) 2)
+       (= (get (first (get (engine-table "regression_b.items") "rows")) "id") "9")))
+(remediation-ok "legacy catalog preserved"
+  (= (get (engine-table "legacy") "rows") [{"id" "7"}]))
+(remediation-rejected "duplicate database leaves WAL unchanged"
+  "CREATE DATABASE regression_a" "DATABASE_EXISTS")
+(remediation-rejected "missing database leaves selection unchanged"
+  "USE missing_database" "DATABASE_NOT_FOUND")
+(remediation-ok "failed USE keeps selected database"
+  (= (get (deref afj-tcp-databases) "regression-a") "regression_a"))
+(remediation-rejected "too few values rejected atomically"
+  "INSERT INTO items VALUES (3)" "COLUMN_COUNT_MISMATCH")
+(remediation-rejected "too many values rejected atomically"
+  "INSERT INTO items VALUES (3,TRUE,99)" "COLUMN_COUNT_MISMATCH")
+(remediation-rejected "duplicate in multi-row insert rejected atomically"
+  "INSERT INTO items VALUES (3,TRUE),(1,FALSE)" "PRIMARY_KEY_VIOLATION")
+(remediation-rejected "BOOLEAN type violation leaves WAL unchanged"
+  "INSERT INTO items VALUES (3,'invalid')" "TYPE_VIOLATION")
+(remediation-query "regression-a" "ALTER TABLE items ADD COLUMN phone VARCHAR(32)")
+(remediation-ok "typed ADD preserves rows and adds nullable schema"
+  (and (= (count (get (engine-table "regression_a.items") "rows")) 2)
+       (= (last (get (get (engine-table "regression_a.items") "schema") "columns"))
+          {"name" "phone" "type" "TEXT" "nullable" true})))
+(remediation-rejected "duplicate existing schema column rejected"
+  "ALTER TABLE items ADD COLUMN active BOOLEAN" "column already exists")
+(remediation-rejected "duplicate added column rejected"
+  "ALTER TABLE items ADD COLUMN phone VARCHAR(32)" "column already exists")
+(remediation-rejected "unknown ADD type is not silently accepted"
+  "ALTER TABLE items ADD COLUMN unsupported MYSTERY" "unsupported ALTER")
+(remediation-query "regression-a" "INSERT INTO items VALUES (3,TRUE,'123')")
+(remediation-ok "positional insert uses schema after ALTER"
+  (= (last (get (engine-table "regression_a.items") "rows"))
+     {"id" "3" "active" true "phone" "123"}))
+(remediation-ok "explicit SELECT projects only requested columns"
+  (= (get (get (remediation-query "regression-a" "SELECT id,active FROM items WHERE id=2") "result") "rows")
+     [{"id" "2" "active" false}]))
+(let [wal (file_read afj-tcp-wal)]
+  (remediation-query "regression-a" "START TRANSACTION")
+  (remediation-query "regression-a" "UPDATE items SET active=FALSE WHERE id=1")
+  (remediation-query "regression-a" "ROLLBACK")
+  (remediation-ok "SQL rollback restores row and writes no WAL"
+    (and (= wal (file_read afj-tcp-wal))
+         (= (get (first (get (engine-table "regression_a.items") "rows")) "active") true)
+         (= (count (keys (deref afj-tcp-locks))) 0))))
+(remediation-query "regression-a" "START TRANSACTION")
+(remediation-query "regression-a" "UPDATE items SET active=FALSE WHERE id=1")
+(remediation-query "regression-a" "COMMIT")
+(remediation-ok "SQL commit preserves row and releases locks"
+  (and (= (get (first (get (engine-table "regression_a.items") "rows")) "active") false)
+       (= (count (keys (deref afj-tcp-locks))) 0)))
+(remediation-ok "idle SQL COMMIT and ROLLBACK succeed"
+  (and (get (remediation-query "regression-a" "COMMIT") "ok")
+       (get (remediation-query "regression-a" "ROLLBACK") "ok")))
+(remediation-ok "legacy tx endpoint keeps idle error contract"
+  (= (get (afj-tcp-tx-request {"token" "regression-a" "op" "ROLLBACK"}) "error") "TX_NOT_ACTIVE"))
+(remediation-ok "authentication still required"
+  (= (get (remediation-query "invalid" "START TRANSACTION") "error") "AUTH_REQUIRED"))
+(create-role "remediation-reader")
+(grant "remediation-reader" "db.read")
+(create-user "remediation-reader" "test-only" "remediation-reader")
+(swap! afj-tcp-sessions assoc "reader" "remediation-reader")
+(remediation-query "reader" "USE regression_a")
+(remediation-ok "read-only role selects but cannot insert"
+  (and (get (remediation-query "reader" "SELECT id,active FROM items WHERE id=1") "ok")
+       (= (get (remediation-query "reader" "INSERT INTO items VALUES (4,TRUE,NULL)") "error")
+          "PERMISSION_DENIED")))
+(remediation-query "regression-b" "DROP DATABASE IF EXISTS regression_b")
+(remediation-ok "DROP DATABASE only removes selected database tables"
+  (and (not (has-key? (deref engine-catalog) "regression_b.items"))
+       (has-key? (deref engine-catalog) "regression_a.items")
+       (has-key? (deref engine-catalog) "legacy")
+       (nil? (get (deref afj-tcp-databases) "regression-b"))))
+
+;; Preserve the snapshot for an independent-process reader.
+(file_write (str afj-tcp-wal ".expected.json")
+  (json_str {"catalog" (deref engine-catalog) "databases" (deref engine-databases)}))
+(file_write "/root/kilo-freelang/projects/afj-db95/docs/remediation-recovery-path.txt" afj-tcp-wal)
+(let [before (afj-tcp-copy (deref engine-catalog))
+      databases (afj-tcp-copy (deref engine-databases))]
+  (afj-tcp-recover)
+  (remediation-ok "WAL replays legacy, database, typed schema and committed SQL"
+    (and (= before (deref engine-catalog)) (= databases (deref engine-databases)))))
+(println (str "REMEDIATION_REGRESSION PASS " (deref remediation-count) "/25"))
+(println (str "EVIDENCE_WAL " afj-tcp-wal))

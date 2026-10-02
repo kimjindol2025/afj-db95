@@ -1,0 +1,64 @@
+afj-db95 executor PASS
+afj-db95 WHERE executor PASS
+afj-db95 WHERE update PASS
+afj-db95 JOIN/GROUP engine PASS
+afj-db95 DDL engine PASS
+PASS SQL SELECT * FROM users
+PASS SQL select * from users
+PASS SQL SELECT * FROM users WHERE name Kim
+PASS SQL SELECT * FROM users WHERE id=1
+PASS SQL SELECT * FROM users WHERE email IS NULL
+PASS SQL SELECT * FROM users WHERE email IS NOT NULL
+PASS SQL SELECT * FROM users LIMIT 1
+PASS SQL SELECT * FROM users ORDER BY id
+PASS SQL SELECT * FROM users GROUP BY team
+PASS SQL SELECT * FROM users JOIN teams ON users.team_id = teams.team_id
+PASS SQL CREATE TABLE users
+PASS SQL INSERT INTO users
+PASS SQL INSERT INTO users (id,name) VALUES (1,'Kim')
+PASS SQL INSERT INTO users (id,name) VALUES (1,'Kim'),(2,'Lee')
+PASS SQL UPDATE users
+PASS SQL UPDATE users SET name='Lee' WHERE id=1
+PASS SQL DELETE FROM users
+PASS SQL DELETE FROM users WHERE id=1
+PASS SQL DROP TABLE users
+PASS SQL ALTER TABLE users ADD COLUMN email
+afj-db95 MariaDB aggregate/left-join parser PASS
+afj-db95 SQL parser seed PASS
+afj-db95 parser-to-engine INSERT/UPDATE/DELETE PASS
+afj-db95 multi-row INSERT engine PASS
+afj-db95 MariaDB aggregate/left-join engine PASS
+afj-db95 schema constraints engine PASS
+afj-db95 foreign-key/check engine PASS
+afj-db95 protocol PASS
+afj-db95 auth PASS
+⚠️  [FreeLang] 'afj-tcp-wal'은(는) 이미 정의됐습니다 (line 5). 가변 값은 atom을 사용하세요: (define afj-tcp-wal (atom "/root/kilo-freelang/projects/afj-db95/docs/corpus-0aba77ae.wal")) → (swap! afj-tcp-wal (fn [v] 새값))
+{"case":1,"sql":"DROP DATABASE IF EXISTS afj_expanded","status":"PASS","response":{"ok":true,"result":{"ok":true,"type":"drop-database","database":"afj_expanded"}}}
+{"case":2,"sql":"CREATE DATABASE afj_expanded","status":"PASS","response":{"ok":true,"result":{"ok":true,"type":"create-database","database":"afj_expanded"}}}
+{"case":3,"sql":"USE afj_expanded","status":"FAIL","response":{"ok":false,"error":"[afj-tcp-commit-ast] [afj-tcp-commit-asts] [execute-ast] unsupported AST type: use-database"}}
+{"case":4,"sql":"CREATE TABLE teams(id INT PRIMARY KEY, name VARCHAR(32) NOT NULL)","status":"FAIL","response":{"ok":true,"result":{"ok":true,"type":"create-table","table":"teams"}}}
+{"case":5,"sql":"CREATE TABLE users(   id INT PRIMARY KEY,   name VARCHAR(32) NOT NULL,   team_id INT,   active BOOLEAN NOT NULL,   email VARCHAR(128) UNIQUE,   CONSTRAINT fk_team FOREIGN KEY(team_id) REFERENCES teams(id),   CHECK(active = TRUE OR active = FALSE) )","status":"FAIL","response":{"ok":true,"result":{"ok":true,"type":"create-table","table":"users"}}}
+{"case":6,"sql":"INSERT INTO teams VALUES (1,'core'),(2,'ops')","status":"PASS","response":{"ok":true,"result":{"ok":true,"type":"insert","count":2}}}
+{"case":7,"sql":"INSERT INTO users VALUES   (1,'Kim',1,TRUE,NULL),   (2,'Lee',2,TRUE,'lee@example.test'),   (3,'Park',1,FALSE,NULL)","status":"FAIL","response":{"ok":false,"error":"[afj-tcp-commit-ast] [afj-tcp-commit-asts] [execute-ast] [engine-validate-row] CHECK_VIOLATION: active"}}
+{"case":8,"sql":"SELECT id,name FROM users WHERE active=TRUE ORDER BY id DESC","status":"FAIL","response":{"ok":true,"result":{"ok":true,"type":"select","rows":[]}}}
+{"case":9,"sql":"SELECT * FROM users WHERE email IS NULL","status":"FAIL","response":{"ok":true,"result":{"ok":true,"type":"select","rows":[]}}}
+{"case":10,"sql":"SELECT * FROM users WHERE email IS NOT NULL","status":"FAIL","response":{"ok":true,"result":{"ok":true,"type":"select","rows":[]}}}
+{"case":11,"sql":"SELECT t.name, COUNT(u.id) AS n   FROM teams t LEFT JOIN users u ON t.id=u.team_id   GROUP BY t.id,t.name ORDER BY t.id","status":"FAIL","response":{"ok":true,"result":{"ok":true,"type":"select","rows":[]}}}
+{"case":12,"sql":"SELECT COUNT(*) AS remaining FROM users","status":"FAIL","response":{"ok":true,"result":{"ok":true,"type":"select","rows":[]}}}
+{"case":13,"sql":"ALTER TABLE users ADD COLUMN phone VARCHAR(32)","status":"FAIL","response":{"ok":true,"result":{"ok":true,"type":"alter-table","table":"users","column":"phone"}}}
+{"case":14,"sql":"START TRANSACTION","status":"FAIL","response":{"ok":false,"error":"[afj-tcp-commit-ast] [afj-tcp-commit-asts] [execute-ast] unsupported AST type: transaction"}}
+{"case":15,"sql":"UPDATE users SET active=FALSE WHERE id=2","status":"FAIL","response":{"ok":true,"result":{"ok":true,"type":"update","rows":[]}}}
+{"case":16,"sql":"ROLLBACK","status":"FAIL","response":{"ok":false,"error":"[afj-tcp-commit-ast] [afj-tcp-commit-asts] [execute-ast] unsupported AST type: transaction"}}
+{"case":17,"sql":"SELECT id,active FROM users WHERE id=2","status":"FAIL","response":{"ok":true,"result":{"ok":true,"type":"select","rows":[]}}}
+{"case":18,"sql":"UPDATE users SET active=FALSE WHERE id=1","status":"FAIL","response":{"ok":true,"result":{"ok":true,"type":"update","rows":[]}}}
+{"case":19,"sql":"DELETE FROM users WHERE id=3","status":"FAIL","response":{"ok":true,"result":{"ok":true,"type":"delete","rows":[]}}}
+{"case":20,"sql":"SELECT COUNT(*) AS remaining FROM users","status":"FAIL","response":{"ok":true,"result":{"ok":true,"type":"select","rows":[]}}}
+{"case":21,"sql":"DROP TABLE users","status":"PASS","response":{"ok":true,"result":{"ok":true,"type":"drop-table","table":"users"}}}
+{"suite":"local-corpus","passed":4,"total":21,"wal":"/root/kilo-freelang/projects/afj-db95/docs/corpus-0aba77ae.wal","live-mariadb":"UNVERIFIED","tcp-transport":"UNVERIFIED"}
+
+[31m실행 오류[0m  mariadb-corpus-local.fls:62
+      61 │ [2m                    "live-mariadb" "UNVERIFIED" "tcp-transport" "UNVERIFIED"}))[0m
+  [31m→[0m   62 │ [31m(if (= (deref corpus-passed) 21) (println "LOCAL_CORPUS PASS 21/21")[0m
+      63 │ [2m  (throw "LOCAL_CORPUS FAIL"))[0m
+
+  [31m✖[0m LOCAL_CORPUS FAIL

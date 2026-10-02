@@ -1,0 +1,118 @@
+[32m✓[0m  sql-core.fls  문법 이상 없음
+
+[33m[meta-check][0m  sql-core.fls — 24개 함수에 메타 없음
+  [33m⚠[0m  line 4: [1mtoken-at[0m — :context/:returns 없음
+  [33m⚠[0m  line 7: [1mkeyword?[0m — :context/:returns 없음
+  [33m⚠[0m  line 10: [1msql-tokens[0m — :context/:returns 없음
+  [33m⚠[0m  line 14: [1msql-clean-token[0m — :context/:returns 없음
+  [33m⚠[0m  line 20: [1msql-count-column[0m — :context/:returns 없음
+  [33m⚠[0m  line 24: [1msql-value[0m — :context/:returns 없음
+  [33m⚠[0m  line 34: [1msql-row-from[0m — :context/:returns 없음
+  [33m⚠[0m  line 40: [1msql-insert-row[0m — :context/:returns 없음
+  [33m⚠[0m  line 45: [1msql-insert-rows[0m — :context/:returns 없음
+  [33m⚠[0m  line 50: [1msql-assignment[0m — :context/:returns 없음
+  [33m⚠[0m  line 55: [1mparse-select-basic[0m — :context/:returns 없음
+  [33m⚠[0m  line 123: [1mparse-select[0m — :context/:returns 없음
+  [33m⚠[0m  line 182: [1mparse-create[0m — :context/:returns 없음
+  [33m⚠[0m  line 192: [1msql-schema-column[0m — :context/:returns 없음
+  [33m⚠[0m  line 207: [1msql-schema-definition[0m — :context/:returns 없음
+  [33m⚠[0m  line 241: [1mparse-create-sql[0m — :context/:returns 없음
+  [33m⚠[0m  line 273: [1mparse-insert[0m — :context/:returns 없음
+  [33m⚠[0m  line 291: [1mparse-update[0m — :context/:returns 없음
+  [33m⚠[0m  line 305: [1mparse-delete[0m — :context/:returns 없음
+  [33m⚠[0m  line 318: [1mparse-drop[0m — :context/:returns 없음
+  [33m⚠[0m  line 330: [1mparse-alter[0m — :context/:returns 없음
+  [33m⚠[0m  line 348: [1mparse-session[0m — :context/:returns 없음
+  [33m⚠[0m  line 363: [1mparse-sql[0m — :context/:returns 없음
+  [33m⚠[0m  line 382: [1massert-sql[0m — :context/:returns 없음
+[2m  팁: (defn token-at [...] {:context "..." :returns "..."} ...)[0m
+
+[36m[type-check][0m  sql-core.fls  타입 이상 없음 (함수 24개 분석)
+[32m✓[0m  engine.fls  문법 이상 없음
+
+[33m[meta-check][0m  engine.fls — 25개 함수에 메타 없음
+  [33m⚠[0m  line 7: [1mexecute-database[0m — :context/:returns 없음
+  [33m⚠[0m  line 31: [1mengine-scope-ast[0m — :context/:returns 없음
+  [33m⚠[0m  line 51: [1mengine-table[0m — :context/:returns 없음
+  [33m⚠[0m  line 57: [1mengine-resolve-table-name[0m — :context/:returns 없음
+  [33m⚠[0m  line 67: [1mengine-key[0m — :context/:returns 없음
+  [33m⚠[0m  line 70: [1mengine-qualify-row[0m — :context/:returns 없음
+  [33m⚠[0m  line 78: [1mengine-match?[0m — :context/:returns 없음
+  [33m⚠[0m  line 87: [1mengine-join[0m — :context/:returns 없음
+  [33m⚠[0m  line 96: [1mengine-left-join[0m — :context/:returns 없음
+  [33m⚠[0m  line 109: [1mengine-aggregate-count[0m — :context/:returns 없음
+  [33m⚠[0m  line 134: [1mengine-project-row[0m — :context/:returns 없음
+  [33m⚠[0m  line 140: [1mengine-group-count[0m — :context/:returns 없음
+  [33m⚠[0m  line 147: [1mengine-type-valid?[0m — :context/:returns 없음
+  [33m⚠[0m  line 156: [1mengine-check-valid?[0m — :context/:returns 없음
+  [33m⚠[0m  line 176: [1mengine-validate-foreign-key[0m — :context/:returns 없음
+  [33m⚠[0m  line 189: [1mengine-validate-row[0m — :context/:returns 없음
+  [33m⚠[0m  line 218: [1mexecute-create[0m — :context/:returns 없음
+  [33m⚠[0m  line 227: [1mexecute-alter[0m — :context/:returns 없음
+  [33m⚠[0m  line 247: [1mexecute-drop[0m — :context/:returns 없음
+  [33m⚠[0m  line 253: [1mengine-positional-row[0m — :context/:returns 없음
+  [33m⚠[0m  line 263: [1mexecute-insert[0m — :context/:returns 없음
+  [33m⚠[0m  line 281: [1mexecute-select[0m — :context/:returns 없음
+  [33m⚠[0m  line 329: [1mexecute-update[0m — :context/:returns 없음
+  [33m⚠[0m  line 341: [1mexecute-delete[0m — :context/:returns 없음
+  [33m⚠[0m  line 353: [1mexecute-ast[0m — :context/:returns 없음
+[2m  팁: (defn execute-database [...] {:context "..." :returns "..."} ...)[0m
+
+[36m[type-check][0m  engine.fls  타입 이상 없음 (함수 25개 분석)
+[32m✓[0m  tcp-server.fls  문법 이상 없음
+
+[33m[meta-check][0m  tcp-server.fls — 23개 함수에 메타 없음
+  [33m⚠[0m  line 16: [1mafj-tcp-wal-append[0m — :context/:returns 없음
+  [33m⚠[0m  line 23: [1mafj-tcp-recover-lines[0m — :context/:returns 없음
+  [33m⚠[0m  line 50: [1mafj-tcp-recover[0m — :context/:returns 없음
+  [33m⚠[0m  line 64: [1mafj-tcp-record-asts[0m — :context/:returns 없음
+  [33m⚠[0m  line 74: [1mafj-tcp-commit-asts[0m — :context/:returns 없음
+  [33m⚠[0m  line 94: [1mafj-tcp-commit-ast[0m — :context/:returns 없음
+  [33m⚠[0m  line 97: [1mafj-tcp-copy[0m — :context/:returns 없음
+  [33m⚠[0m  line 100: [1mafj-tcp-lock-table[0m — :context/:returns 없음
+  [33m⚠[0m  line 108: [1mafj-tcp-release-token[0m — :context/:returns 없음
+  [33m⚠[0m  line 116: [1mafj-tcp-resource[0m — :context/:returns 없음
+  [33m⚠[0m  line 131: [1mafj-tcp-conflicting-owner[0m — :context/:returns 없음
+  [33m⚠[0m  line 145: [1mafj-tcp-begin[0m — :context/:returns 없음
+  [33m⚠[0m  line 157: [1mafj-tcp-rollback[0m — :context/:returns 없음
+  [33m⚠[0m  line 167: [1mafj-tcp-commit[0m — :context/:returns 없음
+  [33m⚠[0m  line 177: [1mafj-tcp-tx-request[0m — :context/:returns 없음
+  [33m⚠[0m  line 190: [1mafj-tcp-send[0m — :context/:returns 없음
+  [33m⚠[0m  line 193: [1mafj-tcp-permission[0m — :context/:returns 없음
+  [33m⚠[0m  line 198: [1mafj-tcp-execute-query[0m — :context/:returns 없음
+  [33m⚠[0m  line 232: [1mafj-tcp-query[0m — :context/:returns 없음
+  [33m⚠[0m  line 275: [1mafj-tcp-line[0m — :context/:returns 없음
+  [33m⚠[0m  line 302: [1mafj-db-tcp-handler[0m — :context/:returns 없음
+  [33m⚠[0m  line 310: [1mstart-afj-tcp[0m — :context/:returns 없음
+  [33m⚠[0m  line 322: [1mstop-afj-tcp[0m — :context/:returns 없음
+[2m  팁: (defn afj-tcp-wal-append [...] {:context "..." :returns "..."} ...)[0m
+
+[36m[type-check][0m  tcp-server.fls  타입 이상 없음 (함수 23개 분석)
+[32m✓[0m  mariadb-regression.fls  문법 이상 없음
+
+[33m[meta-check][0m  mariadb-regression.fls — 2개 함수에 메타 없음
+  [33m⚠[0m  line 5: [1mregression-case[0m — :context/:returns 없음
+  [33m⚠[0m  line 9: [1mrun-regression[0m — :context/:returns 없음
+[2m  팁: (defn regression-case [...] {:context "..." :returns "..."} ...)[0m
+
+[36m[type-check][0m  mariadb-regression.fls  타입 이상 없음 (함수 2개 분석)
+[32m✓[0m  nine-differences-reproduce.fls  문법 이상 없음
+[32m✓[0m  mariadb-corpus-local.fls  문법 이상 없음
+
+[33m[meta-check][0m  mariadb-corpus-local.fls — 1개 함수에 메타 없음
+  [33m⚠[0m  line 20: [1mcorpus-expected?[0m — :context/:returns 없음
+[2m  팁: (defn corpus-expected? [...] {:context "..." :returns "..."} ...)[0m
+
+[36m[type-check][0m  mariadb-corpus-local.fls  타입 이상 없음 (함수 1개 분석)
+[32m✓[0m  mariadb-remediation-regression.fls  문법 이상 없음
+
+[33m[meta-check][0m  mariadb-remediation-regression.fls — 4개 함수에 메타 없음
+  [33m⚠[0m  line 11: [1mremediation-query[0m — :context/:returns 없음
+  [33m⚠[0m  line 13: [1mremediation-ok[0m — :context/:returns 없음
+  [33m⚠[0m  line 17: [1mremediation-error[0m — :context/:returns 없음
+  [33m⚠[0m  line 22: [1mremediation-rejected[0m — :context/:returns 없음
+[2m  팁: (defn remediation-query [...] {:context "..." :returns "..."} ...)[0m
+
+[36m[type-check][0m  mariadb-remediation-regression.fls  타입 이상 없음 (함수 4개 분석)
+[32m✓[0m  mariadb-recovery-reader.fls  문법 이상 없음
+[32m✓[0m  existing-server-probe.fls  문법 이상 없음

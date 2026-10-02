@@ -1,0 +1,29 @@
+=== FreeLang Coding Verification ===
+File: ../projects/afj-db95/src/mariadb-regression.fls
+---
+→ Syntax Check...
+사용 가능: run, serve, repl, compile, inspect, verify
+⚠️ Check skipped (using original v11 runner)
+→ Run Test...
+PASS SQL SELECT * FROM users
+PASS SQL select * from users
+PASS SQL SELECT * FROM users WHERE name Kim
+PASS SQL SELECT * FROM users WHERE id=1
+PASS SQL SELECT * FROM users WHERE email IS NULL
+PASS SQL SELECT * FROM users WHERE email IS NOT NULL
+PASS SQL SELECT * FROM users LIMIT 1
+PASS SQL SELECT * FROM users ORDER BY id
+PASS SQL SELECT * FROM users GROUP BY team
+PASS SQL SELECT * FROM users JOIN teams ON users.team_id = teams.team_id
+PASS SQL CREATE TABLE users
+PASS SQL INSERT INTO users
+PASS SQL INSERT INTO users (id,name) VALUES (1,'Kim')
+PASS SQL INSERT INTO users (id,name) VALUES (1,'Kim'),(2,'Lee')
+PASS SQL UPDATE users
+PASS SQL UPDATE users SET name='Lee' WHERE id=1
+PASS SQL DELETE FROM users
+PASS SQL DELETE FROM users WHERE id=1
+PASS SQL DROP TABLE users
+PASS SQL ALTER TABLE users ADD COLUMN email
+---
+✅ Verification complete

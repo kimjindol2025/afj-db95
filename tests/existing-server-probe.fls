@@ -1,0 +1,11 @@
+;; Read-only ping to an existing endpoint. Never starts a server.
+(try
+  (let [response (json-parse (tcp-send "127.0.0.1" 43995
+                                      (json_str {"type" "ping"}) 3000))]
+    (println (json_str {"probe" "existing-tcp"
+                        "status" (if (and (get response "ok") (= (get response "type") "pong"))
+                                   "PASS" "UNVERIFIED")
+                        "response" response})))
+  (catch [error]
+    (println (json_str {"probe" "existing-tcp" "status" "UNVERIFIED"
+                        "error" (error_message error)}))))

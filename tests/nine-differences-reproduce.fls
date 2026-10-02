@@ -1,0 +1,18 @@
+;; Non-destructive reproduction: parser only, no server or stored data access.
+(load "/root/kilo-freelang/projects/afj-db95/src/sql-core.fls")
+(define reproduction-cases
+  [[1 "DROP DATABASE IF EXISTS afj_expanded"]
+   [2 "CREATE DATABASE afj_expanded"]
+   [3 "USE afj_expanded"]
+   [6 "INSERT INTO teams VALUES (1,'core'),(2,'ops')"]
+   [7 "INSERT INTO users VALUES   (1,'Kim',1,TRUE,NULL),   (2,'Lee',2,TRUE,'lee@example.test'),   (3,'Park',1,FALSE,NULL)"]
+   [13 "ALTER TABLE users ADD COLUMN phone VARCHAR(32)"]
+   [14 "START TRANSACTION"]
+   [16 "ROLLBACK"]
+   [17 "SELECT id,active FROM users WHERE id=2"]])
+(doseq [item reproduction-cases]
+  (let [result (try
+                 (do {"parsed" true "ast" (parse-sql (get item 1))})
+                 (catch [error] {"parsed" false "error" (error_message error)}))]
+    (println (json_str {"case" (get item 0) "sql" (get item 1)
+                        "result" result}))))

@@ -122,6 +122,16 @@
 ;; MariaDB corpus compatibility: grouped COUNT with aliases and LEFT JOIN.
 (defn parse-select [tokens]
   (if (and (= (count tokens) 6)
+           (keyword? (token-at tokens 2) "FROM")
+           (keyword? (token-at tokens 4) "WHERE")
+           (regex_match (token-at tokens 1) "^[A-Za-z_][A-Za-z0-9_]*(,[A-Za-z_][A-Za-z0-9_]*)*$")
+           (= (count (regex_split (token-at tokens 5) "=")) 2))
+    (let [predicate (sql-assignment (token-at tokens 5))]
+      {"type" "select" "columns" (regex_split (token-at tokens 1) ",")
+       "table" (token-at tokens 3)
+       "where" {"column" (get predicate "column")
+                 "equals" (get predicate "value")}})
+  (if (and (= (count tokens) 6)
            (= (token-at tokens 1) "COUNT(*)")
            (keyword? (token-at tokens 2) "AS")
            (keyword? (token-at tokens 4) "FROM"))
@@ -167,13 +177,17 @@
        "group-by" (map sql-clean-token
                         (regex_split (token-at tokens 16) ","))
        "order-by" (token-at tokens 19)}
-      (parse-select-basic tokens)))))
+      (parse-select-basic tokens))))))
 
 (defn parse-create [tokens]
   (if (and (= (count tokens) 3)
+           (keyword? (token-at tokens 1) "DATABASE")
+           (regex_match (token-at tokens 2) "^[A-Za-z_][A-Za-z0-9_]*$"))
+    {"type" "create-database" "database" (token-at tokens 2)}
+  (if (and (= (count tokens) 3)
            (keyword? (token-at tokens 1) "TABLE"))
     {"type" "create-table" "table" (token-at tokens 2)}
-    (throw "unsupported CREATE form")))
+    (throw "unsupported CREATE form"))))
 
 (defn sql-schema-column [group]
   (let [tokens (filter (fn [token] (not (= token "")))
@@ -208,8 +222,16 @@
         (let [inside (get (regex_split clean "\\(") 1)
               expression (get (regex_split inside "\\)") 0)
               parts (sql-tokens expression)]
-          {"kind" "check" "column" (sql-clean-token (get parts 0))
-           "operator" (get parts 1) "value" (sql-value (get parts 2))})
+          (if (= (count parts) 3)
+            {"kind" "check" "column" (sql-clean-token (get parts 0))
+             "operator" (get parts 1) "value" (sql-value (get parts 2))}
+            (if (and (= (count parts) 7) (keyword? (get parts 3) "OR"))
+              {"kind" "check" "any"
+               [{"column" (sql-clean-token (get parts 0))
+                 "operator" (get parts 1) "value" (sql-value (get parts 2))}
+                {"column" (sql-clean-token (get parts 4))
+                 "operator" (get parts 5) "value" (sql-value (get parts 6))}]}
+              (throw "unsupported CHECK expression"))))
         (if (regex_match_i (get tokens 0) "^UNIQUE")
           (let [inside (get (regex_split clean "\\(") 1)]
             {"kind" "unique" "column"
@@ -249,6 +271,13 @@
                  "checks" checks}})))
 
 (defn parse-insert [tokens]
+  (if (and (>= (count tokens) 5)
+           (keyword? (token-at tokens 1) "INTO")
+           (keyword? (token-at tokens 3) "VALUES"))
+    (let [values (str_join (drop 4 tokens) " ")]
+      {"type" "insert" "table" (token-at tokens 2)
+       "values" (map (fn [group] (map sql-value (regex_split group ",")))
+                      (regex_split values "\\),\\s*\\("))})
   (if (and (= (count tokens) 6)
            (keyword? (token-at tokens 1) "INTO")
            (keyword? (token-at tokens 4) "VALUES"))
@@ -257,7 +286,7 @@
     (if (and (= (count tokens) 3)
            (keyword? (token-at tokens 1) "INTO"))
       {"type" "insert" "table" (token-at tokens 2)}
-      (throw "unsupported INSERT form"))))
+      (throw "unsupported INSERT form")))))
 
 (defn parse-update [tokens]
   (if (and (= (count tokens) 6)
@@ -287,19 +316,49 @@
       (throw "unsupported DELETE form"))))
 
 (defn parse-drop [tokens]
+  (if (and (= (count tokens) 5)
+           (keyword? (token-at tokens 1) "DATABASE")
+           (keyword? (token-at tokens 2) "IF")
+           (keyword? (token-at tokens 3) "EXISTS")
+           (regex_match (token-at tokens 4) "^[A-Za-z_][A-Za-z0-9_]*$"))
+    {"type" "drop-database" "database" (token-at tokens 4) "if-exists" true}
   (if (and (= (count tokens) 3)
            (keyword? (token-at tokens 1) "TABLE"))
     {"type" "drop-table" "table" (token-at tokens 2)}
-    (throw "unsupported DROP form")))
+    (throw "unsupported DROP form"))))
 
 (defn parse-alter [tokens]
+  (if (and (= (count tokens) 7)
+           (keyword? (token-at tokens 1) "TABLE")
+           (keyword? (token-at tokens 3) "ADD")
+           (keyword? (token-at tokens 4) "COLUMN")
+           (regex_match_i (token-at tokens 6) "^(VARCHAR\\([1-9][0-9]*\\)|TEXT|INT|INTEGER|BOOLEAN)$"))
+    {"type" "alter-table" "table" (token-at tokens 2)
+     "operation" "add-column" "column" (token-at tokens 5)
+     "definition" (dissoc (sql-schema-column (str_join (drop 5 tokens) " "))
+                          "primary" "unique")}
   (if (and (= (count tokens) 6)
            (keyword? (token-at tokens 1) "TABLE")
            (keyword? (token-at tokens 3) "ADD")
            (keyword? (token-at tokens 4) "COLUMN"))
     {"type" "alter-table" "table" (token-at tokens 2)
      "operation" "add-column" "column" (token-at tokens 5)}
-    (throw "unsupported ALTER form")))
+    (throw "unsupported ALTER form"))))
+
+(defn parse-session [tokens]
+    (if (and (= (count tokens) 2)
+             (keyword? (get tokens 0) "USE")
+             (regex_match (get tokens 1) "^[A-Za-z_][A-Za-z0-9_]*$"))
+      {"type" "use-database" "database" (get tokens 1)}
+      (if (and (= (count tokens) 2)
+               (keyword? (get tokens 0) "START")
+               (keyword? (get tokens 1) "TRANSACTION"))
+        {"type" "transaction" "op" "BEGIN"}
+        (if (and (= (count tokens) 1)
+                 (or (keyword? (get tokens 0) "COMMIT")
+                     (keyword? (get tokens 0) "ROLLBACK")))
+          {"type" "transaction" "op" (str_upper (get tokens 0))}
+          (throw "unsupported SQL statement")))))
 
 (defn parse-sql [sql]
   (let [tokens (sql-tokens sql)
@@ -318,7 +377,7 @@
                 (parse-drop tokens)
                 (if (keyword? first-token "ALTER")
                   (parse-alter tokens)
-                  (throw "unsupported SQL statement"))))))))))
+                  (parse-session tokens))))))))))
 
 (defn assert-sql [sql expected]
   (let [actual (parse-sql sql)]

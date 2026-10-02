@@ -1,0 +1,63 @@
+;; Same 21 statements, real request handler, isolated process-local catalog.
+;; No listening server, no existing WAL touched. The unique evidence WAL stays.
+;; Expectations are the historical MariaDB checkpoints, NOT a live comparison.
+(load "/root/kilo-freelang/projects/afj-db95/src/tcp-server.fls")
+(define afj-tcp-wal
+  (str "/root/kilo-freelang/projects/afj-db95/docs/corpus-" (uuid_short) ".wal"))
+(reset! engine-catalog {})
+(reset! engine-databases {})
+(swap! afj-tcp-sessions assoc "corpus-local" "root")
+(define corpus-passed (atom 0))
+(define corpus-index (atom 0))
+(define corpus-statements
+  (filter (fn [sql] (not (= (str_trim sql) "")))
+    (str_split
+      (str_join
+        (drop 1 (str_lines
+          (file_read "/root/kilo-freelang/projects/afj-db95/tests/mariadb-compatibility-expanded.sql")))
+        " ") ";")))
+
+(defn corpus-expected? [number response]
+  (let [result (get response "result") rows (get result "rows")]
+    (and (get response "ok")
+      (if (= number 1) (not (has-key? (deref engine-databases) "afj_expanded"))
+      (if (= number 2) (has-key? (deref engine-databases) "afj_expanded")
+      (if (= number 3) (= (get response "database") "afj_expanded")
+      (if (= number 4) (= (count (get (get (engine-table "afj_expanded.teams") "schema") "columns")) 2)
+      (if (= number 5) (= (count (get (get (engine-table "afj_expanded.users") "schema") "columns")) 5)
+      (if (= number 6) (= (get result "count") 2)
+      (if (= number 7) (= (get result "count") 3)
+      (if (= number 8) (= rows [{"id" "2" "name" "Lee"} {"id" "1" "name" "Kim"}])
+      (if (= number 9) (= rows [{"id" "1" "name" "Kim" "team_id" "1" "active" true "email" nil}
+                               {"id" "3" "name" "Park" "team_id" "1" "active" false "email" nil}])
+      (if (= number 10) (= rows [{"id" "2" "name" "Lee" "team_id" "2" "active" true "email" "lee@example.test"}])
+      (if (= number 11) (= rows [{"name" "core" "n" 2} {"name" "ops" "n" 1}])
+      (if (= number 12) (= rows [{"remaining" 3}])
+      (if (= number 13) (and (= (last (get (get (engine-table "afj_expanded.users") "schema") "columns"))
+                                  {"name" "phone" "type" "TEXT" "nullable" true})
+                               (every? (fn [row] (and (has-key? row "phone") (nil? (get row "phone"))))
+                                       (get (engine-table "afj_expanded.users") "rows")))
+      (if (= number 14) (= (get response "status") "active")
+      (if (= number 15) (= (get (get rows 1) "active") false)
+      (if (= number 16) (= (get response "status") "rolled-back")
+      (if (= number 17) (= rows [{"id" "2" "active" true}])
+      (if (= number 18) (= (get (first rows) "active") false)
+      (if (= number 19) (= (map (fn [row] (get row "id")) rows) ["1" "2"])
+      (if (= number 20) (= rows [{"remaining" 2}])
+      (if (= number 21) (not (has-key? (deref engine-catalog) "afj_expanded.users"))
+        false))))))))))))))))))))))))
+
+(doseq [sql corpus-statements]
+  (let [number (swap! corpus-index + 1)
+        response (try
+                   (afj-tcp-query {"token" "corpus-local" "statement" (str_trim sql)})
+                   (catch [error] {"ok" false "error" (error_message error)}))
+        passed (try (corpus-expected? number response) (catch [error] false))]
+    (if passed (swap! corpus-passed + 1) nil)
+    (println (json_str {"case" number "sql" (str_trim sql)
+                        "status" (if passed "PASS" "FAIL") "response" response}))))
+(println (json_str {"suite" "local-corpus" "passed" (deref corpus-passed)
+                    "total" (count corpus-statements) "wal" afj-tcp-wal
+                    "live-mariadb" "UNVERIFIED" "tcp-transport" "UNVERIFIED"}))
+(if (= (deref corpus-passed) 21) (println "LOCAL_CORPUS PASS 21/21")
+  (throw "LOCAL_CORPUS FAIL"))

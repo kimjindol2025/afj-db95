@@ -1,0 +1,31 @@
+PASS SQL SELECT * FROM users
+PASS SQL select * from users
+PASS SQL SELECT * FROM users WHERE name Kim
+PASS SQL SELECT * FROM users WHERE id=1
+PASS SQL SELECT * FROM users WHERE email IS NULL
+PASS SQL SELECT * FROM users WHERE email IS NOT NULL
+PASS SQL SELECT * FROM users LIMIT 1
+PASS SQL SELECT * FROM users ORDER BY id
+PASS SQL SELECT * FROM users GROUP BY team
+PASS SQL SELECT * FROM users JOIN teams ON users.team_id = teams.team_id
+PASS SQL CREATE TABLE users
+PASS SQL INSERT INTO users
+PASS SQL INSERT INTO users (id,name) VALUES (1,'Kim')
+PASS SQL INSERT INTO users (id,name) VALUES (1,'Kim'),(2,'Lee')
+PASS SQL UPDATE users
+PASS SQL UPDATE users SET name='Lee' WHERE id=1
+PASS SQL DELETE FROM users
+PASS SQL DELETE FROM users WHERE id=1
+PASS SQL DROP TABLE users
+PASS SQL ALTER TABLE users ADD COLUMN email
+afj-db95 MariaDB aggregate/left-join parser PASS
+afj-db95 SQL parser seed PASS
+{"case":1,"sql":"DROP DATABASE IF EXISTS afj_expanded","result":{"parsed":false,"error":"unsupported DROP form"}}
+{"case":2,"sql":"CREATE DATABASE afj_expanded","result":{"parsed":false,"error":"unsupported CREATE form"}}
+{"case":3,"sql":"USE afj_expanded","result":{"parsed":false,"error":"unsupported SQL statement"}}
+{"case":6,"sql":"INSERT INTO teams VALUES (1,'core'),(2,'ops')","result":{"parsed":false,"error":"unsupported INSERT form"}}
+{"case":7,"sql":"INSERT INTO users VALUES   (1,'Kim',1,TRUE,NULL),   (2,'Lee',2,TRUE,'lee@example.test'),   (3,'Park',1,FALSE,NULL)","result":{"parsed":false,"error":"unsupported INSERT form"}}
+{"case":13,"sql":"ALTER TABLE users ADD COLUMN phone VARCHAR(32)","result":{"parsed":false,"error":"unsupported ALTER form"}}
+{"case":14,"sql":"START TRANSACTION","result":{"parsed":false,"error":"unsupported SQL statement"}}
+{"case":16,"sql":"ROLLBACK","result":{"parsed":false,"error":"unsupported SQL statement"}}
+{"case":17,"sql":"SELECT id,active FROM users WHERE id=2","result":{"parsed":false,"error":"unsupported SELECT form"}}

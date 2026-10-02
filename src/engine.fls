@@ -2,6 +2,51 @@
 ;; SQL parser AST is deliberately kept separate from storage internals.
 
 (define engine-catalog (atom {}))
+(define engine-databases (atom {}))
+
+(defn execute-database [ast]
+  (let [name (get ast "database")
+        exists (has-key? (deref engine-databases) name)]
+    (if (= (get ast "type") "create-database")
+      (if exists
+        (throw "DATABASE_EXISTS")
+        (if (any? (fn [table] (str_starts_with table (str name ".")))
+                  (keys (deref engine-catalog)))
+          (throw "DATABASE_NAMESPACE_CONFLICT")
+          (swap! engine-databases assoc name true)))
+      (if (or exists (get ast "if-exists" false))
+        (do
+          (if exists
+            (doseq [table (keys (deref engine-catalog))]
+              (if (str_starts_with table (str name "."))
+                (swap! engine-catalog dissoc table)
+                nil))
+            nil)
+          (swap! engine-databases dissoc name))
+        (throw "DATABASE_NOT_FOUND")))
+    {"ok" true "type" (get ast "type") "database" name}))
+
+;; Selected databases qualify new ASTs; legacy unqualified WAL entries retain
+;; their existing catalog keys. Session selection itself is never persisted.
+(defn engine-scope-ast [ast database]
+  (if (or (nil? database) (nil? (get ast "table")))
+    ast
+    (if (not (has-key? (deref engine-databases) database))
+      (throw "DATABASE_NOT_FOUND")
+      (let [scoped (assoc ast "table" (str database "." (get ast "table")))
+            join (get ast "join")
+            schema (get ast "schema")
+            joined (if (nil? join) scoped
+                     (assoc scoped "join"
+                            (assoc join "table" (str database "." (get join "table")))))]
+        (if (nil? schema)
+          joined
+          (assoc joined "schema"
+                 (assoc schema "foreign-keys"
+                        (map (fn [fk]
+                               (assoc fk "references-table"
+                                      (str database "." (get fk "references-table"))))
+                             (get schema "foreign-keys" [])))))))))
 
 (defn engine-table [name]
   (let [table (get (deref engine-catalog) name)]
@@ -109,6 +154,8 @@
         (string? value)))))
 
 (defn engine-check-valid? [row check]
+  (if (has-key? check "any")
+    (any? (fn [clause] (engine-check-valid? row clause)) (get check "any"))
   (let [left (get row (get check "column"))
         right (get check "value")
         operator (get check "operator")]
@@ -124,7 +171,7 @@
               (>= left right)
               (if (= operator "<=")
                 (<= left right)
-                false))))))))
+                false)))))))))
 
 (defn engine-validate-foreign-key [row constraint]
   (let [local (get row (get constraint "column"))]
@@ -181,12 +228,20 @@
   (let [name (get ast "table")
         table (engine-table name)
         column (get ast "column")
-        columns (get table "columns" [])]
+        columns (concat (get table "columns" [])
+                        (map (fn [item] (get item "name"))
+                             (get (get table "schema" {}) "columns" [])))]
     (if (contains? columns column)
       (throw (str "column already exists: " column))
       (let [rows (map (fn [row] (assoc row column nil)) (get table "rows"))]
         (swap! engine-catalog assoc name
-               (assoc table "columns" (conj columns column) "rows" rows))
+               (assoc table "columns" (conj (get table "columns" []) column)
+                      "rows" rows
+                      "schema" (if (has-key? ast "definition")
+                                 (assoc (get table "schema" {}) "columns"
+                                        (conj (get (get table "schema" {}) "columns" [])
+                                              (get ast "definition")))
+                                 (get table "schema" {}))))
         {"ok" true "type" "alter-table" "table" name "column" column}))))
 
 (defn execute-drop [ast]
@@ -195,12 +250,25 @@
     (swap! engine-catalog dissoc name)
     {"ok" true "type" "drop-table" "table" name}))
 
+(defn engine-positional-row [table values]
+  (let [columns (map (fn [column] (get column "name"))
+                     (get (get table "schema" {}) "columns" []))]
+    (if (or (= (count columns) 0) (not (= (count columns) (count values))))
+      (throw "COLUMN_COUNT_MISMATCH")
+      (let [row (atom {})]
+        (doseq [index (range 0 (count columns))]
+          (swap! row assoc (get columns index) (get values index)))
+        (deref row)))))
+
 (defn execute-insert [ast]
   (let [name (get ast "table")
         table (engine-table name)
-        new-rows (if (has-key? ast "rows")
+        new-rows (if (has-key? ast "values")
+                   (map (fn [values] (engine-positional-row table values))
+                        (get ast "values"))
+                 (if (has-key? ast "rows")
                    (get ast "rows")
-                   [(get ast "row")])
+                   [(get ast "row")]))
         existing (get table "rows")
         candidate (atom existing)]
     (doseq [row new-rows]
@@ -284,6 +352,8 @@
 
 (defn execute-ast [ast]
   (let [kind (get ast "type")]
+    (if (or (= kind "create-database") (= kind "drop-database"))
+      (execute-database ast)
     (if (= kind "create-table")
       (execute-create ast)
       (if (= kind "alter-table")
@@ -298,7 +368,7 @@
             (execute-update ast)
             (if (= kind "delete")
               (execute-delete ast)
-              (throw (str "unsupported AST type: " kind)))))))))))
+              (throw (str "unsupported AST type: " kind))))))))))))
 
 (execute-ast {"type" "create-table" "table" "users"})
 (execute-ast {"type" "insert" "table" "users" "row" {"id" 1 "name" "Kim"}})

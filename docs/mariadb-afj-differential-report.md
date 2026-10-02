@@ -1,5 +1,11 @@
 # MariaDB/AFJ-DB Differential Report
 
+> 아래는 수정 전 기록이다. 이번 작업의 재현·수정·실행 증거는
+> [MariaDB remediation evidence](mariadb-remediation-evidence.md)를 따른다.
+> 9건의 파서 오류를 재현했고 수정 후 로컬 요청 처리기의 의미 검증은 21/21이다.
+> 현재 MariaDB 연결과 TCP 전송 검증은 UNVERIFIED이며, 새 실시간 차등 PASS로
+> 해석하지 않는다. `OFFICIAL_1_0=NOT_READY`.
+
 - Date: 2026-10-02
 - MariaDB: mariadbd  Ver 11.8.3-MariaDB-1build1 from Ubuntu for debian-linux-gnu on aarch64 (-- Please help get to 10k stars at https://github.com/MariaDB/Server)
 - Corpus: mariadb-compatibility-expanded.sql
