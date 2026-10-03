@@ -1,0 +1,39 @@
+;; TCP lock wait timeout contract: repeated conflict rolls back the waiter.
+;; Run with AFJ_DB_LOCK_WAIT_TIMEOUT_MS=1000; the 1100ms sleep is intentional.
+(load "/root/kilo-freelang/projects/afj-db95/src/tcp-server.fls")
+
+(server-start "tcp-lock-timeout-test")
+(reset! engine-catalog {})
+(reset! engine-indexes {})
+(reset! afj-tcp-sessions {"timeout-a" "root" "timeout-b" "root"})
+(reset! afj-tcp-transactions {})
+(reset! afj-tcp-locks {})
+(reset! afj-tcp-wait-for {})
+(reset! afj-tcp-wait-starts {})
+(execute-ast {"type" "create-table" "table" "timeout_users"
+              "schema" {"columns" [{"name" "id" "type" "INTEGER"
+                                      "nullable" true}]
+                         "unique-columns" []}})
+(afj-tcp-begin "timeout-a")
+(afj-tcp-begin "timeout-b")
+(afj-tcp-query
+ {"token" "timeout-a"
+  "statement" "INSERT INTO timeout_users (id) VALUES (1)"})
+(let [first (afj-tcp-query
+             {"token" "timeout-b"
+              "statement" "INSERT INTO timeout_users (id) VALUES (2)"})]
+  (if (= (get first "error") "LOCK_CONFLICT")
+    nil
+    (throw "initial lock conflict was not reported")))
+(sleep_ms 1100)
+(let [expired (afj-tcp-query
+               {"token" "timeout-b"
+                "statement" "INSERT INTO timeout_users (id) VALUES (2)"})]
+  (if (and (= (get expired "error") "LOCK_TIMEOUT")
+           (= (get expired "victim") "timeout-b")
+           (= (get expired "status") "rolled-back")
+           (nil? (get (deref afj-tcp-transactions) "timeout-b"))
+           (nil? (get (deref afj-tcp-wait-for) "timeout-b")))
+    (println "afj-db95 TCP lock timeout PASS")
+    (throw "TCP lock timeout victim cleanup failed")))
+(afj-tcp-rollback "timeout-a")

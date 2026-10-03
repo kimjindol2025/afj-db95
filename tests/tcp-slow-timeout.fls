@@ -1,0 +1,17 @@
+;; Slow-client contract: an incomplete request has a generation timestamp and
+;; timeout cleanup removes the connection buffer.
+(load "/root/kilo-freelang/projects/afj-db95/src/tcp-server.fls")
+
+(reset! afj-tcp-buffers {})
+(reset! afj-tcp-buffer-starts {})
+(let [connection "slow-client"
+      buffered (afj-tcp-process-buffer connection "{\"type\":\"ping\"")
+      started (get (deref afj-tcp-buffer-starts) connection)
+      timed-out (afj-tcp-timeout-buffer connection started)]
+  (if (and (= buffered "BUFFERED")
+           (number? started)
+           (= timed-out "REQUEST_TIMEOUT")
+           (nil? (get (deref afj-tcp-buffers) connection))
+           (nil? (get (deref afj-tcp-buffer-starts) connection)))
+    (println "afj-db95 TCP slow-client timeout PASS")
+    (throw "slow-client timeout cleanup failed")))

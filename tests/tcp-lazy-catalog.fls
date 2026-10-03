@@ -1,0 +1,107 @@
+;; AFJ-012 executor lazy table page cache contract.
+(load "/root/kilo-freelang/projects/afj-db95/src/tcp-server.fls")
+
+(if (file_exists afj-tcp-wal) (file_delete afj-tcp-wal) nil)
+(if (file_exists afj-tcp-catalog-page-path)
+  (file_delete afj-tcp-catalog-page-path)
+  nil)
+(if (file_exists (afj-tcp-table-page-path "lazy_alpha"))
+  (file_delete (afj-tcp-table-page-path "lazy_alpha"))
+  nil)
+(if (file_exists (afj-tcp-table-page-path "lazy_beta"))
+  (file_delete (afj-tcp-table-page-path "lazy_beta"))
+  nil)
+
+(reset! engine-catalog {})
+(reset! engine-indexes {})
+(reset! engine-databases {})
+(afj-tcp-commit-asts
+ [{"type" "create-table" "table" "lazy_alpha"
+   "schema" {"columns" [{"name" "id" "type" "INTEGER"
+                            "nullable" false "primary" true}]
+              "primary-key" "id" "unique-columns" []}}
+  {"type" "insert" "table" "lazy_alpha" "row" {"id" 1}}
+  {"type" "create-table" "table" "lazy_beta"
+   "schema" {"columns" [{"name" "id" "type" "INTEGER"
+                            "nullable" false "primary" true}]
+              "primary-key" "id" "unique-columns" []}}
+  {"type" "insert" "table" "lazy_beta" "row" {"id" 2}}
+  {"type" "create-table" "table" "lazy_snapshot"
+   "schema" {"columns" [{"name" "id" "type" "INTEGER"
+                            "nullable" false "primary" true}]
+              "primary-key" "id" "unique-columns" []}}
+  {"type" "insert" "table" "lazy_snapshot" "row" {"id" 1}}])
+
+(reset! engine-catalog {})
+(reset! engine-indexes {})
+(reset! engine-databases {})
+(afj-tcp-recover)
+(let [alpha (get (deref engine-catalog) "lazy_alpha")
+      beta (get (deref engine-catalog) "lazy_beta")]
+  (if (and (afj-tcp-lazy-placeholder? alpha)
+           (afj-tcp-lazy-placeholder? beta)
+           (= (count (deref afj-tcp-lazy-table-cache)) 0))
+    (println "afj-db95 lazy catalog placeholders PASS")
+    (throw "lazy catalog did not recover placeholders")))
+
+(afj-tcp-ensure-table-loaded "lazy_alpha")
+(let [result (execute-ast {"type" "select" "table" "lazy_alpha"})]
+  (if (= (count (get result "rows")) 1)
+    (println "afj-db95 lazy table load PASS")
+    (throw "lazy table load returned no rows")))
+(afj-tcp-ensure-table-loaded "lazy_beta")
+(afj-tcp-lazy-evict "lazy_beta")
+(if (and (= (count (deref afj-tcp-lazy-table-cache)) 1)
+         (afj-tcp-lazy-placeholder?
+           (get (deref engine-catalog) "lazy_alpha"))
+         (not (afj-tcp-lazy-placeholder?
+                (get (deref engine-catalog) "lazy_beta"))))
+  (println "afj-db95 lazy table LRU eviction PASS")
+  (throw "lazy table cache bound or eviction failed"))
+
+(afj-tcp-ensure-table-loaded "lazy_alpha")
+(afj-tcp-lazy-evict "lazy_alpha")
+(if (and (not (afj-tcp-lazy-placeholder?
+                (get (deref engine-catalog) "lazy_alpha")))
+         (afj-tcp-lazy-placeholder?
+           (get (deref engine-catalog) "lazy_beta")))
+  (println "afj-db95 lazy table reload PASS")
+  (throw "lazy table reload failed"))
+
+;; A transaction may start while every table is still a placeholder.  Its
+;; first access must materialize only the requested table and retain the
+;; begin-revision view even after another session commits new rows.
+(reset! afj-tcp-sessions {"snap-a" "root" "snap-b" "root"})
+(reset! afj-tcp-session-expiries {})
+(reset! afj-tcp-transactions {})
+(let [begun (afj-tcp-query
+              {"token" "snap-a"
+               "statement" "START TRANSACTION ISOLATION LEVEL REPEATABLE READ"})
+      outside (afj-tcp-query
+                {"token" "snap-b"
+                 "statement" "INSERT INTO lazy_snapshot (id) VALUES (2)"})
+      first-read (afj-tcp-query
+                   {"token" "snap-a"
+                    "statement" "SELECT * FROM lazy_snapshot"})
+      outside-again (afj-tcp-query
+                      {"token" "snap-b"
+                       "statement" "INSERT INTO lazy_snapshot (id) VALUES (3)"})
+      second-read (afj-tcp-query
+                    {"token" "snap-a"
+                     "statement" "SELECT * FROM lazy_snapshot"})]
+  (if (and (get begun "ok")
+           (get outside "ok")
+           (get outside-again "ok")
+           (= (count (get (get first-read "result") "rows")) 1)
+           (= (count (get (get second-read "result") "rows")) 1))
+    (println "afj-db95 lazy transaction snapshot PASS")
+    (throw "lazy transaction snapshot changed")))
+(afj-tcp-rollback "snap-a")
+
+(if (file_exists afj-tcp-wal) (file_delete afj-tcp-wal) nil)
+(if (file_exists afj-tcp-catalog-page-path)
+  (file_delete afj-tcp-catalog-page-path)
+  nil)
+(if (file_exists (afj-tcp-table-page-path "lazy_snapshot"))
+  (file_delete (afj-tcp-table-page-path "lazy_snapshot"))
+  nil)

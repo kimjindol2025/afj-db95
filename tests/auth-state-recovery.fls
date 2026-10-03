@@ -1,0 +1,33 @@
+;; Authentication role/user state recovery contract.
+(define state-path "/tmp/afj-db95-auth-state-test.jsonl")
+(if (file_exists state-path) (file_delete state-path) true)
+(load "/root/kilo-freelang/projects/afj-db95/src/auth.fls")
+(defn assert-equal [label expected actual]
+  (if (= expected actual)
+    true
+    (throw (str "FAIL " label " expected=" expected " actual=" actual))))
+
+(create-role "recovery-role")
+(grant "recovery-role" "db.read")
+(create-user "recovery-user" "recovery-password" "recovery-role")
+(rotate-password "recovery-user" "rotated-password")
+(file_append state-path "{\"version\":1,\"length\":")
+(reset! roles {})
+(reset! users {})
+(assert-equal "auth state replay events" 8 (auth-state-recover))
+(if (and (authorize "recovery-user" "db.read")
+         (not (get (authenticate "recovery-user" "recovery-password") "ok"))
+         (get (authenticate "recovery-user" "rotated-password") "ok"))
+  (println "afj-db95 auth state recovery PASS")
+  (throw "auth state recovery contract failure"))
+
+(if (try
+      (do (rotate-password "recovery-user" "short") false)
+      (catch [error] (= (error_message error) "AUTH_PASSWORD_TOO_SHORT")))
+  (println "afj-db95 password policy PASS")
+  (throw "short password was accepted"))
+
+(if (= (str-index-of (file_read state-path) "recovery-password") -1)
+  (println "afj-db95 auth state plaintext protection PASS")
+  (throw "auth state stored plaintext password"))
+(file_delete state-path)

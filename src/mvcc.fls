@@ -3,22 +3,64 @@
 
 (define mvcc-next-tx (atom 0))
 (define mvcc-rows (atom {}))
+(define mvcc-committed (atom {}))
+(define mvcc-commit-revision (atom 0))
+(define mvcc-snapshots (atom {}))
 
 (defn mvcc-begin []
-  (swap! mvcc-next-tx + 1))
+  (let [tx (swap! mvcc-next-tx + 1)]
+    (swap! mvcc-snapshots assoc tx (deref mvcc-commit-revision))
+    tx))
 
 (defn mvcc-table [name]
   (get (deref mvcc-rows) name []))
 
 (defn mvcc-visible? [version reader-tx]
-  (and (<= (get version "created") reader-tx)
-       (or (nil? (get version "deleted"))
-           (> (get version "deleted") reader-tx))))
+  (let [created (get version "created")
+        deleted (get version "deleted")
+        snapshot (get (deref mvcc-snapshots) reader-tx 0)
+        created-revision (get (deref mvcc-committed) created nil)
+        deleted-revision (if (nil? deleted) nil
+                           (get (deref mvcc-committed) deleted nil))]
+    (and (or (= created reader-tx)
+             (and (not (nil? created-revision))
+                  (<= created-revision snapshot)))
+         (or (nil? deleted)
+             (= deleted reader-tx)
+             (nil? deleted-revision)
+             (> deleted-revision snapshot)))))
 
 (defn mvcc-insert [tx table row]
   (let [version {"row" row "created" tx "deleted" nil}]
     (swap! mvcc-rows assoc table (conj (mvcc-table table) version))
     version))
+
+(defn mvcc-commit [tx]
+  (if (has-key? (deref mvcc-committed) tx)
+    (get (deref mvcc-committed) tx)
+    (let [revision (swap! mvcc-commit-revision + 1)]
+      (swap! mvcc-committed assoc tx revision)
+      revision)))
+
+(defn mvcc-rollback-versions [versions tx index retained]
+  (if (>= index (count versions))
+    retained
+    (let [version (get versions index)
+          created (get version "created")
+          deleted (get version "deleted")
+          restored (if (= deleted tx) (assoc version "deleted" nil) version)]
+      (if (= created tx)
+        (mvcc-rollback-versions versions tx (+ index 1) retained)
+        (mvcc-rollback-versions versions tx (+ index 1)
+                                (conj retained restored))))))
+
+(defn mvcc-rollback [tx]
+  (doseq [table (keys (deref mvcc-rows))]
+    (swap! mvcc-rows assoc table
+           (mvcc-rollback-versions (get (deref mvcc-rows) table)
+                                   tx 0 [])))
+  (swap! mvcc-snapshots dissoc tx)
+  true)
 
 (defn mvcc-select [reader-tx table]
   (map (fn [version] (get version "row"))
@@ -35,10 +77,36 @@
     (swap! mvcc-rows assoc table versions)
     versions))
 
+(defn mvcc-update-id [tx table id changes]
+  (let [versions (mvcc-table table)
+        updated (atom [])
+        found (atom false)]
+    (doseq [version versions]
+      (if (and (= (get (get version "row") "id") id)
+               (mvcc-visible? version tx))
+        (do
+          (reset! found true)
+          (swap! updated conj (assoc version "deleted" tx))
+          (swap! updated conj
+                 {"row" (obj-merge (get version "row") changes)
+                  "created" tx "deleted" nil}))
+        (swap! updated conj version)))
+    (reset! mvcc-rows (assoc (deref mvcc-rows) table (deref updated)))
+    (if (deref found) (last (deref updated)) nil)))
+
+(reset! mvcc-next-tx 0)
+(reset! mvcc-rows {})
+(reset! mvcc-committed {})
+(reset! mvcc-commit-revision 0)
+(reset! mvcc-snapshots {})
+
 (let [writer (mvcc-begin)
       first-row (mvcc-insert writer "users" {"id" 1 "name" "Kim"})
+      _ (mvcc-commit writer)
       reader-before (mvcc-begin)
-      _ (mvcc-delete-id (mvcc-begin) "users" 1)
+      deleter (mvcc-begin)
+      _ (mvcc-delete-id deleter "users" 1)
+      _ (mvcc-commit deleter)
       reader-after (mvcc-begin)]
   (if (and (= (count (mvcc-select reader-before "users")) 1)
            (= (count (mvcc-select reader-after "users")) 0))

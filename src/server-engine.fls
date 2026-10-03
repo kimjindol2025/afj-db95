@@ -26,11 +26,56 @@
         {"ok" false "error" "PERMISSION_DENIED" "permission" permission}
         {"ok" true "result" (execute-ast (parse-sql statement))}))))
 
+(defn server-engine-sql-literal [value]
+  (if (nil? value)
+    "NULL"
+    (if (boolean? value)
+      (if value "TRUE" "FALSE")
+      (if (number? value)
+        (str value)
+        (str "'" (str-replace-in (str value) "'" "''") "'")))))
+
+(defn server-engine-bind-parameters-at
+  [statement index quoted parameter-index result parameters]
+  (if (>= index (count statement))
+    (if (= parameter-index (count parameters))
+      result
+      (throw "PARAMETER_COUNT_MISMATCH"))
+    (let [character (str-slice statement index (+ index 1))]
+      (if (= character "'")
+        (server-engine-bind-parameters-at
+          statement (+ index 1) (not quoted) parameter-index
+          (str result character) parameters)
+        (if (and (not quoted) (= character "?"))
+          (if (>= parameter-index (count parameters))
+            (throw "PARAMETER_COUNT_MISMATCH")
+            (server-engine-bind-parameters-at
+              statement (+ index 1) quoted (+ parameter-index 1)
+              (str result (server-engine-sql-literal
+                            (get parameters parameter-index)))
+              parameters))
+          (server-engine-bind-parameters-at
+            statement (+ index 1) quoted parameter-index
+            (str result character) parameters))))))
+
+(defn server-engine-bind-parameters [statement parameters]
+  (server-engine-bind-parameters-at statement 0 false 0 "" parameters))
+
 (defn server-engine-execute-prepared [token statement-id]
-  (let [statement (get (get (deref server-state) "prepared") statement-id)]
-    (if (nil? statement)
+  (let [prepared (get (get (deref server-state) "prepared") statement-id)]
+    (if (or (nil? prepared)
+            (not (= (get prepared "owner") token)))
       {"ok" false "error" "PREPARED_NOT_FOUND"}
-      (server-engine-query token statement))))
+      (server-engine-query token (get prepared "statement")))))
+
+(defn server-engine-execute-prepared-params [token statement-id parameters]
+  (let [prepared (get (get (deref server-state) "prepared") statement-id)]
+    (if (or (nil? prepared)
+            (not (= (get prepared "owner") token)))
+      {"ok" false "error" "PREPARED_NOT_FOUND"}
+      (server-engine-query
+        token
+        (server-engine-bind-parameters (get prepared "statement") parameters)))))
 
 (server-start "afj-db95-engine")
 (let [root-login (server-engine-login "root" "development-only")
@@ -56,6 +101,41 @@
   (if (and (get prepared "ok") (get executed "ok"))
     (println "afj-db95 authenticated prepared query PASS")
     (throw "prepared query integration failure")))
+
+(let [owner-login (server-engine-login "root" "development-only")
+      owner-token (get owner-login "token")
+      other-login (server-engine-login "root" "development-only")
+      other-token (get other-login "token")
+      owned (prepare owner-token "SELECT * FROM server_users")
+      foreign-execution (server-engine-execute-prepared
+                          other-token (get owned "statement-id"))]
+  (if (= (get foreign-execution "error") "PREPARED_NOT_FOUND")
+    (println "afj-db95 prepared statement ownership PASS")
+    (throw "prepared statement ownership failure")))
+
+(let [parameter-login (server-engine-login "root" "development-only")
+      parameter-token (get parameter-login "token")
+      parameter-prepared (prepare parameter-token
+                                   "SELECT * FROM server_users WHERE id=?")
+      parameter-result (server-engine-execute-prepared-params
+                         parameter-token
+                         (get parameter-prepared "statement-id")
+                         [1])
+      missing-parameter (try
+                         (server-engine-execute-prepared-params
+                           parameter-token
+                           (get parameter-prepared "statement-id")
+                           [])
+                         (catch [error] {"error" (error_message error)}))]
+  (if (and (get parameter-result "ok")
+           (= (count (get (get parameter-result "result") "rows")) 1)
+           (regex_match_i (get missing-parameter "error")
+                          "PARAMETER_COUNT_MISMATCH")
+           (= (server-engine-bind-parameters
+                "SELECT '?' AS literal, ? AS bound" [7])
+              "SELECT '?' AS literal, 7 AS bound"))
+    (println "afj-db95 prepared parameter binding PASS")
+    (throw "prepared parameter binding failure")))
 
 ;; A read-only role can query but cannot mutate.
 (create-role "reader")

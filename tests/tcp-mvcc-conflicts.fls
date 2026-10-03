@@ -1,0 +1,112 @@
+;; AFJ-014 phantom and write-skew/lost-update regression.
+(load "/root/kilo-freelang/projects/afj-db95/src/tcp-server.fls")
+
+(server-start "tcp-mvcc-conflicts-test")
+(reset! engine-catalog {})
+(reset! engine-indexes {})
+(reset! afj-tcp-commit-revision 0)
+(reset! afj-tcp-sessions {"mvcc-a" "root" "mvcc-b" "root"})
+(reset! afj-tcp-session-expiries {})
+(reset! afj-tcp-transactions {})
+(reset! afj-tcp-locks {})
+(reset! afj-tcp-wait-for {})
+(reset! afj-tcp-wait-starts {})
+
+(doseq [table ["phantom_users" "quota_a" "quota_b"]]
+  (execute-ast {"type" "create-table" "table" table
+                "schema" {"columns" [{"name" "id" "type" "INTEGER"
+                                         "nullable" false "primary" true}]
+                           "primary-key" "id" "unique-columns" []}}))
+
+(afj-tcp-commit-ast
+  {"type" "create-table" "table" "versioned_accounts"
+   "schema" {"columns" [{"name" "id" "type" "INTEGER"
+                            "nullable" false "primary" true}
+                           {"name" "balance" "type" "INTEGER"
+                            "nullable" false}]
+              "primary-key" "id" "unique-columns" []}})
+(afj-tcp-commit-ast
+  {"type" "insert" "table" "versioned_accounts"
+   "rows" [{"id" "1" "balance" "10"}]})
+(swap! afj-tcp-sessions assoc "mvcc-version-reader" "root")
+(swap! afj-tcp-sessions assoc "mvcc-version-writer" "root")
+(let [reader (afj-tcp-begin-level "mvcc-version-reader" "REPEATABLE READ")
+      writer (afj-tcp-begin-level "mvcc-version-writer" "REPEATABLE READ")
+      before (get (get (deref afj-tcp-transactions) "mvcc-version-reader")
+                  "snapshot")]
+  (afj-tcp-query {"token" "mvcc-version-writer"
+                  "statement" "UPDATE versioned_accounts SET balance=20 WHERE id=1"})
+  (afj-tcp-commit "mvcc-version-writer")
+  (let [after (afj-tcp-versioned-rows "versioned_accounts" []
+                                      (deref afj-tcp-commit-revision))
+        before-rows (get (get before "versioned_accounts") "rows")
+        chain (get (get (deref afj-tcp-row-versions) "versioned_accounts") "1")]
+    (if (and (= (get (first before-rows) "balance") "10")
+             (= (get (first after) "balance") "20")
+             (>= (count chain) 2))
+      nil
+      (throw "TCP row-version chain integration failed")))
+  (println "afj-db95 TCP row-version chain PASS")
+  (afj-tcp-rollback "mvcc-version-reader"))
+
+;; REPEATABLE READ keeps the original predicate view: a concurrent committed
+;; insert must not appear as a phantom in the existing transaction.
+(afj-tcp-begin-level "mvcc-a" "REPEATABLE READ")
+(let [first-read (afj-tcp-query
+                   {"token" "mvcc-a"
+                    "statement" "SELECT * FROM phantom_users WHERE id=1"})
+      outside-write (afj-tcp-query
+                      {"token" "mvcc-b"
+                       "statement" "INSERT INTO phantom_users (id) VALUES (1)"})
+      second-read (afj-tcp-query
+                    {"token" "mvcc-a"
+                    "statement" "SELECT * FROM phantom_users WHERE id=1"})]
+  (if (and (= (count (get (get first-read "result") "rows")) 0)
+           (get outside-write "ok")
+           (= (count (get (get second-read "result") "rows")) 0))
+    nil
+    (throw "repeatable-read phantom became visible")))
+(afj-tcp-rollback "mvcc-a")
+
+;; SERIALIZABLE predicate reads hold the table lock and reject a concurrent
+;; insert before it can create a phantom.
+(afj-tcp-begin-level "mvcc-a" "SERIALIZABLE")
+(let [serial-read (afj-tcp-query
+                    {"token" "mvcc-a"
+                     "statement" "SELECT * FROM phantom_users"})
+      blocked-write (afj-tcp-query
+                      {"token" "mvcc-b"
+                       "statement" "INSERT INTO phantom_users (id) VALUES (2)"})]
+  (if (and (get serial-read "ok")
+           (not (get blocked-write "ok"))
+           (= (get blocked-write "error") "TX_CONFLICT"))
+    nil
+    (throw "serializable predicate read did not block phantom writer")))
+(afj-tcp-rollback "mvcc-a")
+
+;; Two transactions can write different tables without a table-lock conflict.
+;; Commit validation must still reject the stale second snapshot, preventing
+;; write skew and a whole-catalog lost update.
+(afj-tcp-begin-level "mvcc-a" "REPEATABLE READ")
+(afj-tcp-begin-level "mvcc-b" "REPEATABLE READ")
+(afj-tcp-query
+  {"token" "mvcc-a"
+   "statement" "INSERT INTO quota_a (id) VALUES (1)"})
+(afj-tcp-query
+  {"token" "mvcc-b"
+   "statement" "INSERT INTO quota_b (id) VALUES (1)"})
+(let [first-commit (afj-tcp-commit "mvcc-a")
+      stale-commit (afj-tcp-commit "mvcc-b")
+      quota-a (afj-tcp-query
+                {"token" "mvcc-a"
+                 "statement" "SELECT * FROM quota_a"})
+      quota-b (afj-tcp-query
+                {"token" "mvcc-a"
+                 "statement" "SELECT * FROM quota_b"})]
+  (if (and (get first-commit "ok")
+           (not (get stale-commit "ok"))
+           (= (get stale-commit "error") "TX_CONFLICT")
+           (= (count (get (get quota-a "result") "rows")) 1)
+           (= (count (get (get quota-b "result") "rows")) 0))
+    (println "afj-db95 MVCC phantom/write-skew PASS")
+    (throw "MVCC conflict validation failed")))

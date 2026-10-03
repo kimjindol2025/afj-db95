@@ -1,0 +1,24 @@
+;; AFJ-006 peer-address rate-limit contract.
+;; The runtime passes remoteAddress as the fourth TCP event argument. Two
+;; connections from one peer must share a budget; different peers do not.
+(load "/root/kilo-freelang/projects/afj-db95/src/tcp-server.fls")
+
+(reset! afj-tcp-rate-state {})
+(reset! afj-tcp-peer-addresses {})
+(afj-db-tcp-handler "connect" "peer-a-1" "" "203.0.113.7")
+(afj-db-tcp-handler "connect" "peer-a-2" "" "203.0.113.7")
+(afj-db-tcp-handler "connect" "peer-b-1" "" "203.0.113.8")
+
+(if (and (= (afj-tcp-rate-key "peer-a-1") "203.0.113.7")
+         (= (afj-tcp-rate-key "peer-a-2") "203.0.113.7")
+         (= (afj-tcp-rate-key "peer-b-1") "203.0.113.8")
+         (afj-tcp-rate-allowed? "peer-a-1")
+         (afj-tcp-rate-allowed? "peer-a-2")
+         (not (afj-tcp-rate-allowed? "peer-a-1"))
+         (afj-tcp-rate-allowed? "peer-b-1"))
+  (println "afj-db95 peer IP rate limit PASS")
+  (throw "peer IP rate limit failure"))
+
+(afj-db-tcp-handler "close" "peer-a-1" "" "203.0.113.7")
+(afj-db-tcp-handler "close" "peer-a-2" "" "203.0.113.7")
+(afj-db-tcp-handler "close" "peer-b-1" "" "203.0.113.8")

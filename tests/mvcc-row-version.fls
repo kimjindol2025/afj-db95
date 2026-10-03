@@ -1,0 +1,32 @@
+;; AFJ-014 row-version core contract.
+(load "/root/kilo-freelang/projects/afj-db95/src/mvcc.fls")
+
+(reset! mvcc-next-tx 0)
+(reset! mvcc-rows {})
+(reset! mvcc-committed {})
+(reset! mvcc-commit-revision 0)
+(reset! mvcc-snapshots {})
+
+(let [writer (mvcc-begin)]
+  (mvcc-insert writer "accounts" {"id" 1 "balance" 10})
+  (mvcc-commit writer)
+  (let [reader (mvcc-begin)
+        updater (mvcc-begin)]
+    (mvcc-update-id updater "accounts" 1 {"balance" 20})
+    (mvcc-commit updater)
+    (let [old-view (mvcc-select reader "accounts")
+          current (mvcc-begin)
+          current-view (mvcc-select current "accounts")]
+      (if (and (= (get (first old-view) "balance") 10)
+               (= (get (first current-view) "balance") 20))
+        (println "afj-db95 row-version snapshot PASS")
+        (throw "row-version snapshot failure")))))
+
+(let [tx (mvcc-begin)]
+  (mvcc-update-id tx "accounts" 1 {"balance" 99})
+  (mvcc-rollback tx)
+  (let [reader (mvcc-begin)
+        rows (mvcc-select reader "accounts")]
+    (if (= (get (first rows) "balance") 20)
+      (println "afj-db95 row-version rollback PASS")
+      (throw "row-version rollback leaked update"))))

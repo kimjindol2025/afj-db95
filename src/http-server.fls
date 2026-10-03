@@ -2,17 +2,40 @@
 ;; Route registration is separate from startup so tests do not leave a daemon.
 
 (load "/root/kilo-freelang/projects/afj-db95/src/sql-core.fls")
-(define http-catalog-path "/tmp/afj-db95-http-catalog.wal")
+(define http-db-mode (env-or "AFJ_DB_MODE" "development"))
+(define http-root-password-env (env-get "AFJ_DB_ROOT_PASSWORD"))
+(define http-root-password
+  (if (and (= http-db-mode "production") (nil? http-root-password-env))
+    (throw "AFJ_DB_ROOT_PASSWORD_REQUIRED")
+    (if (nil? http-root-password-env)
+      "development-only"
+      (if (and (= http-db-mode "production")
+               (= http-root-password-env "development-only"))
+        (throw "AFJ_DB_ROOT_PASSWORD_INSECURE")
+        http-root-password-env))))
+(define http-catalog-path-env (env-get "AFJ_DB_HTTP_WAL"))
+(define http-catalog-path
+  (if (and (= http-db-mode "production") (nil? http-catalog-path-env))
+    (throw "AFJ_DB_HTTP_WAL_REQUIRED")
+    (if (nil? http-catalog-path-env)
+      "/tmp/afj-db95-http-catalog.wal"
+      (if (and (= http-db-mode "production")
+               (str_starts_with http-catalog-path-env "/tmp/"))
+        (throw "AFJ_DB_HTTP_WAL_INSECURE_PATH")
+        http-catalog-path-env))))
+(if (= http-db-mode "production")
+  (throw "HTTP_ADAPTER_NOT_PRODUCTION_READY")
+  nil)
 
 (defn http-events []
-  (if (not (file_exists "/tmp/afj-db95-http-catalog.wal"))
+  (if (not (file_exists http-catalog-path))
     []
     (map (fn [line] (json-parse line))
          (filter (fn [line] (not (= (str_trim line) "")))
-                 (str_lines (file_read "/tmp/afj-db95-http-catalog.wal"))))))
+                 (str_lines (file_read http-catalog-path))))))
 
 (defn http-append [event]
-  (file_append "/tmp/afj-db95-http-catalog.wal" (str (json_str event) "\n"))
+  (file_append http-catalog-path (str (json_str event) "\n"))
   event)
 
 (defn http-table-exists? [name]
@@ -57,8 +80,8 @@
 (defn http-execute-ast [ast]
   (let [kind (get ast "type")
         name (get ast "table")
-        _ (if (not (file_exists "/tmp/afj-db95-http-catalog.wal"))
-            (file_write "/tmp/afj-db95-http-catalog.wal" "") true)]
+        _ (if (not (file_exists http-catalog-path))
+            (file_write http-catalog-path "") true)]
     (if (= kind "create-table")
       (do
         (http-append {"op" "create" "table" name})
@@ -124,14 +147,14 @@
   (let [body (get req "body" {})
         user (get body "user")
         password (get body "password")]
-    (if (and (= user "root") (= (sha256 password) (sha256 "development-only")))
+    (if (and (= user "root") (= (sha256 password) (sha256 http-root-password)))
       (server-json {"ok" true "token" (db-token user password) "user" user})
       (server-json {"ok" false "error" "AUTH_FAILED"}))))
 
 (defn db-authorized? [req]
   (let [headers (get req "headers" {})
         authorization (get headers "authorization" "")
-        expected (str "Bearer " (db-token "root" "development-only"))]
+        expected (str "Bearer " (db-token "root" http-root-password))]
     (= authorization expected)))
 
 (defn db-query-handler [req]

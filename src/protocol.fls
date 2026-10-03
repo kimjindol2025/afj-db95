@@ -17,6 +17,18 @@
            (assoc (get (deref server-state) "sessions") token user))
     {"ok" true "token" token "user" user}))
 
+(defn server-expire-session [token]
+  (do
+    (swap! server-state assoc "sessions"
+           (dissoc (get (deref server-state) "sessions") token))
+    (doseq [statement-id (keys (get (deref server-state) "prepared"))]
+      (let [prepared (get (get (deref server-state) "prepared") statement-id)]
+        (if (= (get prepared "owner") token)
+          (swap! server-state assoc "prepared"
+                 (dissoc (get (deref server-state) "prepared") statement-id))
+          nil)))
+    true))
+
 (defn valid-session? [token]
   (has-key? (get (deref server-state) "sessions") token))
 
@@ -25,7 +37,8 @@
     {"ok" false "error" "AUTH_REQUIRED"}
     (let [id (uuid_short)]
       (swap! server-state assoc "prepared"
-             (assoc (get (deref server-state) "prepared") id statement))
+             (assoc (get (deref server-state) "prepared") id
+                    {"statement" statement "owner" token}))
       {"ok" true "statement-id" id})))
 
 (defn handle-request [request]

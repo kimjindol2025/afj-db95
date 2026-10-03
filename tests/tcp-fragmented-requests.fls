@@ -1,0 +1,12 @@
+;; Fragmented and multiple line TCP request buffering contract.
+(load "/root/kilo-freelang/projects/afj-db95/src/tcp-server.fls")
+
+(afj-tcp-process-buffer "fragment-test" "{\"type\":\"ping\"")
+(if (= (get (deref afj-tcp-buffers) "fragment-test")
+       "{\"type\":\"ping\"")
+  nil
+  (throw "fragment was not buffered"))
+(afj-tcp-process-buffer "fragment-test" "}\n{\"type\":\"ping\"}\n")
+(if (nil? (get (deref afj-tcp-buffers) "fragment-test"))
+  (println "afj-db95 TCP fragmented requests PASS")
+  (throw "fragment buffer was not drained"))

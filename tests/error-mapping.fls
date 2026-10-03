@@ -1,0 +1,13 @@
+;; Stable TCP error-code mapping contract.
+(load "/root/kilo-freelang/projects/afj-db95/src/tcp-server.fls")
+
+(let [known (afj-tcp-error-code-message
+              "[engine] UNIQUE_VIOLATION: email")
+      parameter (afj-tcp-error-code-message
+                  "[server-engine] PARAMETER_COUNT_MISMATCH")
+      unknown (afj-tcp-error-code-message "unexpected runtime failure")]
+  (if (and (= known "UNIQUE_VIOLATION")
+           (= parameter "PARAMETER_COUNT_MISMATCH")
+           (= unknown "SQL_ERROR"))
+    (println "afj-db95 error mapping PASS")
+    (throw "stable error mapping failure")))

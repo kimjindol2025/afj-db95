@@ -2,10 +2,87 @@
 
 (define users (atom {}))
 (define roles (atom {}))
-(define afj-root-password (env-or "AFJ_DB_ROOT_PASSWORD" "development-only"))
+(define auth-failures (atom {}))
+(define auth-lockouts (atom {}))
+(define afj-auth-replaying (atom false))
+(define afj-auth-state-version 1)
+(define afj-auth-state-record-limit 262144)
+(define afj-db-mode (env-or "AFJ_DB_MODE" "development"))
+(define afj-root-password-env (env-get "AFJ_DB_ROOT_PASSWORD"))
+(define afj-root-password
+  (if (and (= afj-db-mode "production") (nil? afj-root-password-env))
+    (throw "AFJ_DB_ROOT_PASSWORD_REQUIRED")
+    (if (nil? afj-root-password-env)
+      "development-only"
+      (if (and (= afj-db-mode "production")
+               (= afj-root-password-env "development-only"))
+        (throw "AFJ_DB_ROOT_PASSWORD_INSECURE")
+        afj-root-password-env))))
+(define afj-audit-log (env-get "AFJ_DB_AUDIT_LOG"))
+(if (and (= afj-db-mode "production") (nil? afj-audit-log))
+  (throw "AFJ_DB_AUDIT_LOG_REQUIRED")
+  nil)
+(define afj-auth-state (env-get "AFJ_DB_AUTH_STATE"))
+(if (and (= afj-db-mode "production") (nil? afj-auth-state))
+  (throw "AFJ_DB_AUTH_STATE_REQUIRED")
+  nil)
+(if (and (= afj-db-mode "production")
+         (not (nil? afj-auth-state))
+         (str_starts_with afj-auth-state "/tmp/"))
+  (throw "AFJ_DB_AUTH_STATE_INSECURE_PATH")
+  nil)
+(define afj-auth-failure-limit
+  (let [raw (env-get "AFJ_DB_MAX_AUTH_FAILURES")]
+    (if (nil? raw)
+      5
+      (let [parsed (str-to-num raw)]
+        (if (and (number? parsed) (> parsed 0) (<= parsed 100))
+          parsed
+          (throw "AFJ_DB_MAX_AUTH_FAILURES_INVALID"))))))
+(define afj-auth-lockout-ms
+  (let [raw (env-get "AFJ_DB_AUTH_LOCKOUT_MS")]
+    (if (nil? raw)
+      60000
+      (let [parsed (str-to-num raw)]
+        (if (and (number? parsed) (>= parsed 1000) (<= parsed 3600000))
+          parsed
+          (throw "AFJ_DB_AUTH_LOCKOUT_INVALID"))))))
+(define afj-auth-password-min-length
+  (let [raw (env-get "AFJ_DB_PASSWORD_MIN_LENGTH")]
+    (if (nil? raw)
+      8
+      (let [parsed (str-to-num raw)]
+        (if (and (number? parsed) (>= parsed 8) (<= parsed 256))
+          parsed
+          (throw "AFJ_DB_PASSWORD_POLICY_INVALID"))))))
+
+(defn audit-safe-user [value]
+  (if (string? value) value "unknown"))
+
+(defn audit-event [action user result]
+  (if (nil? afj-audit-log)
+    true
+    (file_append afj-audit-log
+                 (str (json_str {"action" action
+                                 "user" (audit-safe-user user)
+                 "result" result}) "\n"))))
+
+(defn auth-state-append [event]
+  (if (or (nil? afj-auth-state) (deref afj-auth-replaying))
+    true
+    (let [encoded (json_str event)
+          envelope {"version" afj-auth-state-version
+                    "length" (count encoded)
+                    "checksum" (sha256 encoded)
+                    "body" event}
+          line (json_str envelope)]
+      (if (> (count line) afj-auth-state-record-limit)
+        (throw "AUTH_STATE_RECORD_TOO_LARGE")
+        (file_append afj-auth-state (str line "\n"))))))
 
 (defn create-role [name]
   (swap! roles assoc name {"name" name "permissions" []})
+  (auth-state-append {"op" "role" "name" name})
   name)
 
 (defn grant [role permission]
@@ -15,6 +92,8 @@
       (swap! roles assoc role
              (assoc current "permissions"
                     (conj (get current "permissions") permission)))))
+  (auth-state-append {"op" "grant" "role" role "permission" permission})
+  (audit-event "grant" role permission)
   role)
 
 (defn create-user [name password role]
@@ -23,14 +102,58 @@
     (swap! users assoc name {"name" name
                              "password-hash" (sha256 password)
                              "role" role}))
+  (auth-state-append {"op" "user" "name" name
+                      "password-hash" (sha256 password) "role" role})
+  (audit-event "create-user" name role)
   name)
 
-(defn authenticate [name password]
+(defn rotate-password [name new-password]
   (let [user (get (deref users) name)]
-    (if (and (not (nil? user))
+    (if (nil? user)
+      (throw "AUTH_USER_NOT_FOUND")
+      (if (< (count new-password) afj-auth-password-min-length)
+        (throw "AUTH_PASSWORD_TOO_SHORT")
+        (do
+          (swap! users assoc name
+                 (assoc user "password-hash" (sha256 new-password)))
+          (auth-state-append {"op" "password-rotation" "name" name
+                              "password-hash" (sha256 new-password)})
+          (swap! auth-failures dissoc name)
+          (audit-event "password-rotation" name "success")
+          name)))))
+
+(defn authenticate [login-name password]
+  (let [user (get (deref users) login-name)
+        now-value (now_ms)
+        lockout-until (get (deref auth-lockouts) login-name 0)
+        expired (and (> lockout-until 0) (>= now-value lockout-until))
+        failures (if expired 0 (get (deref auth-failures) login-name 0))
+        audit-user (if (nil? user) login-name (get user "name"))]
+    (if expired
+      (do
+        (swap! auth-lockouts dissoc login-name)
+        (swap! auth-failures dissoc login-name))
+      nil)
+    (if (and (> lockout-until now-value) (not expired))
+      (do
+        (audit-event "authenticate" audit-user "locked")
+        {"ok" false "user" login-name "error" "AUTH_LOCKED"})
+      (if (and (not (nil? user))
              (= (get user "password-hash") (sha256 password)))
-      {"ok" true "user" name "role" (get user "role")}
-      {"ok" false "user" name})))
+        (do
+          (swap! auth-failures dissoc login-name)
+          (swap! auth-lockouts dissoc login-name)
+          (audit-event "authenticate" audit-user "success")
+          {"ok" true "user" login-name "role" (get user "role")})
+        (do
+          (let [next-failures (+ failures 1)]
+            (swap! auth-failures assoc login-name next-failures)
+            (if (>= next-failures afj-auth-failure-limit)
+              (swap! auth-lockouts assoc login-name
+                     (+ now-value afj-auth-lockout-ms))
+              nil))
+          (audit-event "authenticate" audit-user "failure")
+          {"ok" false "user" login-name})))))
 
 (defn authorize [name permission]
   (let [user (get (deref users) name)
@@ -40,10 +163,84 @@
       false
       (contains? (get role-data "permissions") permission))))
 
-(create-role "admin")
-(grant "admin" "db.read")
-(grant "admin" "db.write")
-(create-user "root" afj-root-password "admin")
+(defn auth-state-apply-event [event]
+  (let [op (if (nil? event) nil (get event "op"))]
+    (if (= op "role")
+      (swap! roles assoc (get event "name")
+             {"name" (get event "name") "permissions" []})
+      (if (= op "grant")
+        (let [role (get event "role")
+              current (get (deref roles) role)]
+          (if (nil? current)
+            (throw "AUTH_STATE_CORRUPT")
+            (swap! roles assoc role
+                   (assoc current "permissions"
+                          (conj (get current "permissions")
+                                (get event "permission"))))))
+        (if (= op "user")
+          (swap! users assoc (get event "name")
+                 {"name" (get event "name")
+                  "password-hash" (get event "password-hash")
+                  "role" (get event "role")})
+          (if (= op "password-rotation")
+            (let [name (get event "name")
+                  user (get (deref users) name)]
+              (if (nil? user)
+                (throw "AUTH_STATE_CORRUPT")
+                (swap! users assoc name
+                       (assoc user "password-hash"
+                              (get event "password-hash")))))
+            (throw "AUTH_STATE_CORRUPT")))))))
+
+(defn auth-state-envelope-valid? [envelope]
+  (let [body (get envelope "body")
+        encoded (if (nil? body) nil (json_str body))]
+    (and (= (get envelope "version") afj-auth-state-version)
+         (not (nil? body))
+         (= (get envelope "length") (count encoded))
+         (= (get envelope "checksum") (sha256 encoded)))))
+
+(defn auth-state-recover-lines [lines index final-newline]
+  (if (>= index (count lines))
+    0
+    (let [last-line (= index (- (count lines) 1))
+          envelope (try (json-parse (get lines index)) (catch [error] nil))]
+      (if (nil? envelope)
+        (if (and last-line (not final-newline))
+          0
+          (throw "AUTH_STATE_CORRUPT"))
+        (if (not (auth-state-envelope-valid? envelope))
+          (throw "AUTH_STATE_CORRUPT")
+          (do
+            (auth-state-apply-event (get envelope "body"))
+            (+ 1 (auth-state-recover-lines lines (+ index 1) final-newline))))))))
+
+(defn auth-state-recover []
+  (if (or (nil? afj-auth-state) (not (file_exists afj-auth-state)))
+    0
+    (let [raw (file_read afj-auth-state)
+          lines (filter (fn [line] (not (= (str_trim line) "")))
+                        (str_lines raw))]
+      (reset! afj-auth-replaying true)
+      (try
+        (let [event-count (auth-state-recover-lines
+                            lines 0 (str_ends_with raw "\n"))]
+          (reset! afj-auth-replaying false)
+          event-count)
+        (catch [error]
+          (reset! afj-auth-replaying false)
+          (throw (str "AUTH_STATE_CORRUPT: " (error_message error))))))))
+
+(auth-state-recover)
+(if (nil? (get (deref roles) "admin"))
+  (do
+    (create-role "admin")
+    (grant "admin" "db.read")
+    (grant "admin" "db.write"))
+  nil)
+(if (nil? (get (deref users) "root"))
+  (create-user "root" afj-root-password "admin")
+  nil)
 
 (if (and (get (authenticate "root" afj-root-password) "ok")
          (authorize "root" "db.write")

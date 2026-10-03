@@ -1,0 +1,12 @@
+;; Native FreeLang MariaDB packet listener harness.
+(load "/root/kilo-freelang/projects/afj-db95/src/engine.fls")
+(load "/root/kilo-freelang/projects/afj-db95/src/sql-core.fls")
+(load "/root/kilo-freelang/projects/afj-db95/src/mariadb-wire.fls")
+(define native-mariadb-port (str-to-num (env-get "AFJ_NATIVE_MARIADB_PORT")))
+(define native-mariadb-start
+  (tcp-server-raw native-mariadb-port "mariadb-wire-handler" "127.0.0.1"))
+(if (= native-mariadb-start "ok")
+  (do
+    (println "afj-db95 native MariaDB STARTED")
+    (set-timeout (fn [] (tcp-server-stop native-mariadb-port)) 60000))
+  (throw native-mariadb-start))

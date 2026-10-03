@@ -1,0 +1,76 @@
+;; TCP isolation-level contract: READ COMMITTED refreshes, REPEATABLE READ
+;; keeps its snapshot, and SERIALIZABLE protects a read table with a lock.
+(load "/root/kilo-freelang/projects/afj-db95/src/tcp-server.fls")
+
+(server-start "tcp-isolation-levels-test")
+(reset! engine-catalog {})
+(reset! engine-indexes {})
+(reset! afj-tcp-sessions {"iso-a" "root" "iso-b" "root"})
+(reset! afj-tcp-transactions {})
+(reset! afj-tcp-locks {})
+(reset! afj-tcp-wait-for {})
+(reset! afj-tcp-wait-starts {})
+(execute-ast {"type" "create-table" "table" "isolation_levels"
+              "schema" {"columns" [{"name" "id" "type" "INTEGER"
+                                      "nullable" false "primary" true}]
+                         "primary-key" "id" "unique-columns" []}})
+
+(let [read-committed (afj-tcp-query
+                       {"token" "iso-a"
+                        "statement" "START TRANSACTION ISOLATION LEVEL READ COMMITTED"})
+      initial-read (afj-tcp-query
+                    {"token" "iso-a" "statement" "SELECT * FROM isolation_levels"})
+      outside-write (afj-tcp-query
+                     {"token" "iso-b"
+                      "statement" "INSERT INTO isolation_levels (id) VALUES (1)"})
+      refreshed-read (afj-tcp-query
+                      {"token" "iso-a" "statement" "SELECT * FROM isolation_levels"})]
+  (if (and (get read-committed "ok")
+           (= (get read-committed "isolation-level") "READ COMMITTED")
+           (= (count (get (get initial-read "result") "rows")) 0)
+           (get outside-write "ok")
+           (= (count (get (get refreshed-read "result") "rows")) 1))
+    nil
+    (throw "READ COMMITTED did not refresh its read view")))
+(afj-tcp-commit "iso-a")
+
+(let [repeatable (afj-tcp-query
+                  {"token" "iso-a"
+                   "statement" "START TRANSACTION ISOLATION LEVEL REPEATABLE READ"})
+      first-read (afj-tcp-query
+                  {"token" "iso-a" "statement" "SELECT * FROM isolation_levels"})
+      outside-write (afj-tcp-query
+                     {"token" "iso-b"
+                      "statement" "INSERT INTO isolation_levels (id) VALUES (2)"})
+      second-read (afj-tcp-query
+                   {"token" "iso-a" "statement" "SELECT * FROM isolation_levels"})]
+  (if (and (get repeatable "ok")
+           (= (get repeatable "isolation-level") "REPEATABLE READ")
+           (get outside-write "ok")
+           (= (count (get (get first-read "result") "rows")) 1)
+           (= (count (get (get second-read "result") "rows")) 1))
+    nil
+    (throw "REPEATABLE READ snapshot changed")))
+(afj-tcp-rollback "iso-a")
+
+(let [serializable (afj-tcp-query
+                    {"token" "iso-a"
+                     "statement" "START TRANSACTION ISOLATION LEVEL SERIALIZABLE"})
+      protected-read (afj-tcp-query
+                      {"token" "iso-a" "statement" "SELECT * FROM isolation_levels"})
+      other-begin (afj-tcp-query
+                   {"token" "iso-b"
+                    "statement" "START TRANSACTION ISOLATION LEVEL SERIALIZABLE"})
+      blocked-write (afj-tcp-query
+                     {"token" "iso-b"
+                      "statement" "INSERT INTO isolation_levels (id) VALUES (3)"})]
+  (if (and (get serializable "ok")
+           (= (get serializable "isolation-level") "SERIALIZABLE")
+           (get protected-read "ok")
+           (get other-begin "ok")
+           (= (get blocked-write "error") "LOCK_CONFLICT"))
+    (do
+      (afj-tcp-rollback "iso-b")
+      (afj-tcp-rollback "iso-a")
+      (println "afj-db95 TCP isolation levels PASS"))
+    (throw "SERIALIZABLE read lock did not block writer")))

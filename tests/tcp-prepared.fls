@@ -1,0 +1,47 @@
+;; TCP prepared statement contract: ownership and parameter binding use the
+;; same authenticated SQL path as ordinary queries.
+(load "/root/kilo-freelang/projects/afj-db95/src/tcp-server.fls")
+
+(server-start "tcp-prepared-test")
+(reset! engine-catalog {})
+(reset! engine-indexes {})
+(reset! afj-tcp-sessions {"prepared-a" "root" "prepared-b" "root"})
+(swap! server-state assoc "sessions" {"prepared-a" "root" "prepared-b" "root"})
+(reset! afj-tcp-transactions {})
+(reset! afj-tcp-locks {})
+(reset! afj-tcp-wait-for {})
+(reset! afj-tcp-wait-starts {})
+(execute-ast {"type" "create-table" "table" "prepared_users"
+              "schema" {"columns" [{"name" "id" "type" "INTEGER"
+                                      "nullable" false "primary" true}
+                                     {"name" "name" "type" "TEXT"
+                                      "nullable" true}]
+                         "primary-key" "id" "unique-columns" []}})
+(execute-ast {"type" "insert" "table" "prepared_users"
+              "row" {"id" 7 "name" "prepared"}})
+
+(let [prepared (afj-tcp-prepare
+                {"token" "prepared-a"
+                 "statement" "SELECT * FROM prepared_users WHERE name=?"})
+      statement-id (get prepared "statement-id")
+      result (afj-tcp-execute-prepared
+               {"token" "prepared-a" "statement-id" statement-id
+               "parameters" ["prepared"]})
+      literal (afj-tcp-bind-parameters
+               "SELECT '?' AS literal, ? AS bound" [7])
+      mismatch (try
+                 (afj-tcp-execute-prepared
+                  {"token" "prepared-a" "statement-id" statement-id
+                   "parameters" []})
+                 (catch [error] {"error" (error_message error)}))
+      foreign (afj-tcp-execute-prepared
+               {"token" "prepared-b" "statement-id" statement-id
+                "parameters" [7]})]
+  (if (and (get prepared "ok")
+           (= (count (get (get result "result") "rows")) 1)
+           (= literal "SELECT '?' AS literal, 7 AS bound")
+           (regex_match_i (get mismatch "error")
+                          ".*PARAMETER_COUNT_MISMATCH.*")
+           (= (get foreign "error") "PREPARED_NOT_FOUND"))
+    (println "afj-db95 TCP prepared PASS")
+    (throw "TCP prepared statement contract failed")))

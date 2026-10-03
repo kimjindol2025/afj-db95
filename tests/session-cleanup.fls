@@ -1,0 +1,19 @@
+;; Session expiry cleanup contract.
+(load "/root/kilo-freelang/projects/afj-db95/src/tcp-server.fls")
+
+(server-start "session-cleanup-test")
+(let [login (server-login "root")
+      token (get login "token")
+      prepared (prepare token "SELECT 1")]
+  (swap! afj-tcp-sessions assoc token "root")
+  (swap! afj-tcp-connection-tokens assoc "session-guard-connection" token)
+  (if (afj-tcp-connection-auth-available? "session-guard-connection")
+    (throw "authenticated connection was incorrectly reusable")
+    nil)
+  (afj-tcp-expire-token token)
+  (if (and (not (valid-session? token))
+           (nil? (get (deref afj-tcp-sessions) token))
+           (nil? (get (get (deref server-state) "prepared")
+                      (get prepared "statement-id"))))
+    (println "afj-db95 session cleanup PASS")
+    (throw "session cleanup contract failure")))

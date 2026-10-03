@@ -1,0 +1,119 @@
+;; FreeLang Script SHA-1 implementation for the MariaDB mysql_native_password
+;; challenge-response.  The host runtime only supplies byte-buffer and
+;; unsigned bit primitives; digest construction remains in .fls.
+
+(define sha1-u32-mod 4294967296)
+
+(defn sha1-add [a b]
+  (rem (+ a b) sha1-u32-mod))
+
+(defn sha1-zero-bytes [length]
+  (if (<= length 0)
+    ""
+    (buf-concat [(buf-u8 0) (sha1-zero-bytes (- length 1))])))
+
+(defn sha1-u32-be [bytes offset]
+  (+ (* (buf-read-u8 bytes offset) 16777216)
+     (* (buf-read-u8 bytes (+ offset 1)) 65536)
+     (* (buf-read-u8 bytes (+ offset 2)) 256)
+     (buf-read-u8 bytes (+ offset 3))))
+
+(defn sha1-u32-be-bytes [value]
+  (buf-concat [(buf-u8 (bit-and (bit_shr value 24) 255))
+               (buf-u8 (bit-and (bit_shr value 16) 255))
+               (buf-u8 (bit-and (bit_shr value 8) 255))
+               (buf-u8 (bit-and value 255))]))
+
+(defn sha1-extend-words [bytes]
+  (loop [index 0 words []]
+    (if (>= index 16)
+      (loop [word-index 16 expanded words]
+        (if (>= word-index 80)
+          expanded
+          (let [value (bit_xor
+                        (bit_xor (get expanded (- word-index 3))
+                                 (get expanded (- word-index 8)))
+                        (bit_xor (get expanded (- word-index 14))
+                                 (get expanded (- word-index 16))))]
+            (recur (+ word-index 1)
+                   (conj expanded (bit_rotate_left value 1))))))
+      (recur (+ index 1)
+             (conj words (sha1-u32-be bytes (* index 4)))))))
+
+(defn sha1-round-function [index b c d]
+  (if (< index 20)
+    (bit_or (bit_and b c) (bit_and (bit_not b) d))
+    (if (< index 40)
+      (bit_xor (bit_xor b c) d)
+      (if (< index 60)
+        (bit_or (bit_or (bit_and b c) (bit_and b d)) (bit_and c d))
+        (bit_xor (bit_xor b c) d)))))
+
+(defn sha1-round-constant [index]
+  (if (< index 20)
+    1518500249
+    (if (< index 40)
+      1859775393
+      (if (< index 60)
+        2400959708
+        3395469782))))
+
+(defn sha1-process-block [bytes h0 h1 h2 h3 h4]
+  (let [words (sha1-extend-words bytes)]
+    (loop [index 0 a h0 b h1 c h2 d h3 e h4]
+      (if (>= index 80)
+        [(sha1-add h0 a)
+         (sha1-add h1 b)
+         (sha1-add h2 c)
+         (sha1-add h3 d)
+         (sha1-add h4 e)]
+        (let [rotated (bit_rotate_left a 5)
+              function (sha1-round-function index b c d)
+              temp (sha1-add (sha1-add (sha1-add (sha1-add rotated function) e)
+                                       (sha1-round-constant index))
+                             (get words index))]
+          (recur (+ index 1)
+                 temp a (bit_rotate_left b 30) c d))))))
+
+(defn sha1-process-blocks [bytes offset h0 h1 h2 h3 h4]
+  (if (>= offset (buf-len bytes))
+    [h0 h1 h2 h3 h4]
+    (let [block (buf-slice bytes offset 64)
+          next (sha1-process-block block h0 h1 h2 h3 h4)]
+      (sha1-process-blocks bytes (+ offset 64)
+                           (get next 0) (get next 1) (get next 2)
+                           (get next 3) (get next 4)))))
+
+(defn sha1-digest [bytes]
+  (let [length (buf-len bytes)
+        remainder (rem (+ length 1) 64)
+        zero-count (rem (- 56 remainder) 64)
+        bit-length (* length 8)
+        padded (buf-concat [bytes
+                            (buf-u8 128)
+                            (sha1-zero-bytes zero-count)
+                            (sha1-u32-be-bytes 0)
+                            (sha1-u32-be-bytes bit-length)])
+        result (sha1-process-blocks padded 0
+                                   1732584193 4023233417
+                                   2562383102 271733878 3285377520)]
+    (buf-concat (map sha1-u32-be-bytes result))))
+
+(defn sha1-xor-bytes [left right index result]
+  (if (>= index (buf-len left))
+    (buf-concat result)
+    (sha1-xor-bytes left right (+ index 1)
+                    (conj result
+                          (buf-u8 (bit_xor (buf-read-u8 left index)
+                                           (buf-read-u8 right index)))))))
+
+(defn sha1-mysql-native-token [password scramble]
+  (let [stage-one (sha1-digest (utf8-encode password))
+        stage-two (sha1-digest stage-one)
+        digest (sha1-digest (buf-concat [scramble stage-two]))]
+    (sha1-xor-bytes stage-one digest 0 [])))
+
+(let [vector (sha1-digest (utf8-encode "abc"))]
+  (if (= vector "qZk+NkcGgWq6PiVxeFDCbJzQ2J0=")
+    (println "afj-db95 SHA-1 implementation loaded")
+    (throw "SHA-1 initialization failure")))

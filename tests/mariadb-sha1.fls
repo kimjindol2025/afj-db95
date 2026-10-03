@@ -1,0 +1,17 @@
+;; AFJ-010 mysql_native_password digest vectors.
+(load "/root/kilo-freelang/projects/afj-db95/src/sha1.fls")
+(load "/root/kilo-freelang/projects/afj-db95/src/mariadb-wire.fls")
+
+(let [empty (sha1-digest (utf8-encode ""))
+      abc (sha1-digest (utf8-encode "abc"))
+      long (sha1-digest (utf8-encode (str-repeat "a" 80)))]
+  (if (and (= empty "2jmj7l5rSw0yVb/vlWAYkK/YBwk=")
+           (= abc "qZk+NkcGgWq6PiVxeFDCbJzQ2J0=")
+           (= long "hvM2Uvz/1/oUQ+JG3TT+XQDiX/0="))
+    (println "afj-db95 SHA-1 vectors PASS")
+    (throw "SHA-1 vector mismatch")))
+
+(let [token (sha1-mysql-native-token "development-only" mariadb-wire-scramble)]
+  (if (mariadb-wire-auth-valid? {"auth-response" token})
+    (println "afj-db95 MariaDB native token PASS")
+    (throw "MariaDB native token mismatch")))

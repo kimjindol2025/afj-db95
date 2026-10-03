@@ -1,0 +1,22 @@
+;; Timed authentication lockout reset contract.
+(load "/root/kilo-freelang/projects/afj-db95/src/auth.fls")
+
+(create-role "reset-role")
+(grant "reset-role" "db.read")
+(create-user "reset-user" "correct-password" "reset-role")
+
+(authenticate "reset-user" "wrong-1")
+(authenticate "reset-user" "wrong-2")
+(authenticate "reset-user" "wrong-3")
+(authenticate "reset-user" "wrong-4")
+(authenticate "reset-user" "wrong-5")
+(let [locked (authenticate "reset-user" "correct-password")]
+  (if (= (get locked "error") "AUTH_LOCKED")
+    (println "PASS auth lockout engaged")
+    (throw "auth lockout was not engaged")))
+
+(sleep_ms 1200)
+(let [unlocked (authenticate "reset-user" "correct-password")]
+  (if (get unlocked "ok")
+    (println "afj-db95 auth lockout reset PASS")
+    (throw "auth lockout did not reset")))

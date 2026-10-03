@@ -1,0 +1,126 @@
+;; AFJ-012 catalog page checkpoint contract.
+(load "/root/kilo-freelang/projects/afj-db95/src/tcp-server.fls")
+
+(if (file_exists afj-tcp-wal) (file_delete afj-tcp-wal) nil)
+(if (file_exists afj-tcp-catalog-page-path)
+  (file_delete afj-tcp-catalog-page-path)
+  nil)
+
+;; Buffer-pool pin/flush/eviction contract: a pinned page survives while the
+;; least-recently-used unpinned page is evicted at the configured bound.
+(afj-tcp-page-pool-clear)
+(afj-tcp-page-pool-stage "/tmp/afj-db95-pool.pages" 0 "page-0")
+(afj-tcp-page-pool-mark-flushed "/tmp/afj-db95-pool.pages" 0)
+(afj-tcp-page-pool-pin "/tmp/afj-db95-pool.pages" 0)
+(afj-tcp-page-pool-stage "/tmp/afj-db95-pool.pages" 1 "page-1")
+(afj-tcp-page-pool-mark-flushed "/tmp/afj-db95-pool.pages" 1)
+(afj-tcp-page-pool-stage "/tmp/afj-db95-pool.pages" 2 "page-2")
+(if (and (<= (count (deref afj-tcp-page-pool)) afj-tcp-page-pool-max)
+         (has-key? (deref afj-tcp-page-pool)
+                   (afj-tcp-page-pool-key "/tmp/afj-db95-pool.pages" 0))
+         (not (has-key? (deref afj-tcp-page-pool)
+                        (afj-tcp-page-pool-key "/tmp/afj-db95-pool.pages" 1))))
+  (println "afj-db95 catalog page pool PASS")
+  (throw "catalog page pool pin/eviction failure"))
+(afj-tcp-page-pool-clear)
+(reset! engine-catalog {})
+(reset! engine-indexes {})
+(reset! engine-databases {})
+(afj-tcp-commit-asts
+ [{"type" "create-table" "table" "checkpoint_users"
+   "schema" {"columns" [{"name" "id" "type" "INTEGER"
+                            "nullable" false "primary" true}]
+              "primary-key" "id" "unique-columns" []}}
+  {"type" "insert" "table" "checkpoint_users" "row" {"id" 1}}])
+(if (file_exists afj-tcp-catalog-page-path)
+  (println "afj-db95 catalog page write PASS")
+  (throw "catalog page checkpoint was not written"))
+(let [manifest (afj-tcp-read-page-set-value afj-tcp-catalog-page-path)
+      table-index (get manifest "table-index")
+      descriptors (afj-tcp-catalog-index-descriptors table-index)]
+  (if (and (get table-index "leaf")
+           (= (count descriptors) 1)
+           (= (get (first descriptors) "key") "checkpoint_users"))
+    (println "afj-db95 catalog page B+Tree index PASS")
+    (throw "catalog page B+Tree index missing")))
+(let [table-page (afj-tcp-read-page-set-value
+                   (afj-tcp-table-page-path "checkpoint_users"))
+      page-indexes (get table-page "page-indexes")
+      tree (get page-indexes "id")]
+  (if (and (not (nil? tree))
+           (= (engine-btree-root-get tree 1) [0]))
+    (println "afj-db95 table page B+Tree persistence PASS")
+    (throw "table page B+Tree was not persisted")))
+(reset! engine-catalog {})
+(reset! engine-indexes {})
+(reset! engine-databases {})
+(afj-tcp-recover)
+(if (= (count (get (get (deref engine-catalog) "checkpoint_users") "rows")) 1)
+  (println "afj-db95 catalog page restore PASS")
+  (throw "catalog page checkpoint was not restored"))
+(let [indexed-restore (execute-ast
+                        {"type" "select" "table" "checkpoint_users"
+                         "where" {"column" "id" "equals" 1}})]
+  (if (and (not (nil? (get (get (deref engine-indexes)
+                                "checkpoint_users.id") "btree")))
+           (= (get indexed-restore "plan") "index-scan")
+           (= (count (get indexed-restore "rows")) 1))
+    (println "afj-db95 catalog page index rebuild PASS")
+    (throw "catalog page index was not rebuilt")))
+
+;; A mutation invalidates the persisted root in memory, then the next
+;; checkpoint writes a fresh page-backed root for reopen.
+(afj-tcp-commit-ast
+  {"type" "insert" "table" "checkpoint_users" "row" {"id" 2}})
+(let [after-mutation (execute-ast
+                       {"type" "select" "table" "checkpoint_users"
+                        "where" {"column" "id" "equals" 2}})]
+  (if (= (count (get after-mutation "rows")) 1)
+    (println "afj-db95 table page B+Tree mutation refresh PASS")
+    (throw "table page B+Tree mutation index stale")))
+(afj-tcp-write-catalog-pages)
+(reset! engine-catalog {})
+(reset! engine-indexes {})
+(reset! engine-databases {})
+(afj-tcp-recover)
+(let [reopened (execute-ast
+                 {"type" "select" "table" "checkpoint_users"
+                  "where" {"column" "id" "equals" 2}})]
+  (if (and (= (count (get reopened "rows")) 1)
+           (not (nil? (get (get (deref engine-indexes)
+                                "checkpoint_users.id") "btree"))))
+    (println "afj-db95 table page B+Tree reopen refresh PASS")
+    (throw "refreshed table page B+Tree was not reopened")))
+
+;; A committed WAL tail after the checkpoint is replayed without duplicating
+;; the checkpointed catalog.
+(afj-tcp-record-asts
+ [{"type" "create-table" "table" "checkpoint_tail"
+   "schema" {"columns" [{"name" "id" "type" "INTEGER"
+                            "nullable" false "primary" true}]
+              "primary-key" "id" "unique-columns" []}}])
+(reset! engine-catalog {})
+(reset! engine-indexes {})
+(reset! engine-databases {})
+(afj-tcp-recover)
+(if (and (= (count (get (get (deref engine-catalog) "checkpoint_users") "rows")) 2)
+         (not (nil? (get (deref engine-catalog) "checkpoint_tail"))))
+  (println "afj-db95 catalog page WAL tail PASS")
+  (throw "catalog page WAL tail was not replayed"))
+
+(file_write afj-tcp-catalog-page-path "not-json\n")
+(try
+  (do
+    (afj-tcp-recover)
+    (throw "corrupt catalog page was accepted"))
+  (catch [error]
+    (if (regex_match_i (error_message error) "CATALOG_PAGE_CORRUPT")
+      (println "afj-db95 catalog page corruption PASS")
+      (throw error))))
+(if (file_exists afj-tcp-wal) (file_delete afj-tcp-wal) nil)
+(if (file_exists afj-tcp-catalog-page-path)
+  (file_delete afj-tcp-catalog-page-path)
+  nil)
+(if (file_exists (afj-tcp-table-page-path "checkpoint_users"))
+  (file_delete (afj-tcp-table-page-path "checkpoint_users"))
+  nil)

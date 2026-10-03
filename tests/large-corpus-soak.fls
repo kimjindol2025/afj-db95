@@ -1,0 +1,45 @@
+;; AFJ-012/016 large-corpus regression. This is bounded and deterministic;
+;; long-duration production soak remains a separate gate.
+(load "/root/kilo-freelang/projects/afj-db95/src/engine.fls")
+
+(defn make-rows [index total rows]
+  (if (>= index total)
+    rows
+    (make-rows (+ index 1) total
+               (conj rows {"id" index
+                           "name" (str "user-" index)
+                           "group_id" (rem index 17)}))))
+
+(reset! engine-catalog {})
+(reset! engine-indexes {})
+(execute-ast {"type" "create-table" "table" "large_users"
+              "schema" {"columns" [{"name" "id" "type" "INTEGER"
+                                         "nullable" false "primary" true}
+                                       {"name" "name" "type" "TEXT"
+                                         "nullable" false}
+                                       {"name" "group_id" "type" "INTEGER"
+                                         "nullable" false}]
+                         "primary-key" "id" "unique-columns" []}})
+(let [rows (make-rows 0 1000 [])
+      inserted (execute-ast {"type" "insert" "table" "large_users"
+                             "rows" rows})
+      selected (execute-ast {"type" "select" "table" "large_users"
+                             "where" {"column" "id" "equals" 999}})
+      updated (execute-ast {"type" "update" "table" "large_users"
+                            "where" {"column" "id" "equals" 999}
+                            "changes" {"name" "updated-999"}})
+      after-update (execute-ast {"type" "select" "table" "large_users"
+                                 "where" {"column" "id" "equals" 999}})
+      deleted (execute-ast {"type" "delete" "table" "large_users"
+                            "where" {"column" "id" "equals" 999}})
+      after-delete (execute-ast {"type" "select" "table" "large_users"
+                                "where" {"column" "id" "equals" 999}})]
+  (if (and (= (get inserted "count") 1000)
+           (= (count (get selected "rows")) 1)
+           (= (get (first (get selected "rows")) "name") "user-999")
+           (= (count (get updated "rows")) 1000)
+           (= (get (first (get after-update "rows")) "name") "updated-999")
+           (= (count (get deleted "rows")) 999)
+           (= (count (get after-delete "rows")) 0))
+    (println "afj-db95 large corpus PASS")
+    (throw "large corpus regression failure")))

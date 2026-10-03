@@ -14,30 +14,577 @@
         (if (and (number? parsed) (> parsed 0) (< parsed 65536))
           parsed
           (throw "AFJ_DB_PORT_INVALID"))))))
-(define afj-tcp-host (env-or "AFJ_DB_BIND_HOST" "0.0.0.0"))
+(define afj-tcp-session-limit
+  (let [raw (env-get "AFJ_DB_MAX_SESSIONS")]
+    (if (nil? raw)
+      64
+      (let [parsed (str-to-num raw)]
+        (if (and (number? parsed) (> parsed 0) (<= parsed 4096))
+          parsed
+          (throw "AFJ_DB_MAX_SESSIONS_INVALID"))))))
+(define afj-tcp-session-ttl-ms
+  (let [raw (env-get "AFJ_DB_SESSION_TTL_MS")]
+    (if (nil? raw)
+      3600000
+      (let [parsed (str-to-num raw)]
+        (if (and (number? parsed) (>= parsed 1000) (<= parsed 86400000))
+          parsed
+          (throw "AFJ_DB_SESSION_TTL_INVALID"))))))
+(define afj-tcp-host
+  (env-or "AFJ_DB_BIND_HOST"
+          (if (= afj-db-mode "production") "127.0.0.1" "0.0.0.0")))
+(define afj-tcp-tls-cert (env-get "AFJ_DB_TLS_CERT"))
+(define afj-tcp-tls-key (env-get "AFJ_DB_TLS_KEY"))
+(define afj-tcp-tls-ca (env-get "AFJ_DB_TLS_CA"))
+(define afj-tcp-tls-require-client
+  (let [raw (str_lower (env-or "AFJ_DB_TLS_REQUIRE_CLIENT_CERT" ""))]
+    (or (= raw "1") (= raw "true"))))
+(define afj-tcp-local-host?
+  (or (= afj-tcp-host "127.0.0.1")
+      (= afj-tcp-host "::1")
+      (= afj-tcp-host "localhost")))
+(if (and (= afj-db-mode "production")
+         (not afj-tcp-local-host?)
+         (or (nil? afj-tcp-tls-cert) (nil? afj-tcp-tls-key)
+             (not (file_exists afj-tcp-tls-cert))
+             (not (file_exists afj-tcp-tls-key))))
+  (throw "AFJ_DB_TLS_REQUIRED")
+  nil)
+(if (and (= afj-db-mode "production")
+         (not afj-tcp-local-host?)
+         afj-tcp-tls-require-client
+         (or (nil? afj-tcp-tls-ca) (not (file_exists afj-tcp-tls-ca))))
+  (throw "AFJ_DB_TLS_CA_REQUIRED")
+  nil)
 (define afj-tcp-sessions (atom {}))
+(define afj-tcp-session-expiries (atom {}))
 (define afj-tcp-databases (atom {}))
 (define afj-tcp-transactions (atom {}))
+(define afj-tcp-commit-revision (atom 0))
+(define afj-tcp-table-revisions (atom {}))
+(define afj-tcp-row-versions (atom {}))
 (define afj-tcp-locks (atom {}))
-(define afj-tcp-wal (env-or "AFJ_DB_WAL" "/tmp/afj-db95-tcp-catalog.wal"))
+(define afj-tcp-wait-for (atom {}))
+(define afj-tcp-lock-wait-timeout-ms
+  (let [raw (env-get "AFJ_DB_LOCK_WAIT_TIMEOUT_MS")]
+    (if (nil? raw)
+      5000
+      (let [parsed (str-to-num raw)]
+        (if (and (number? parsed) (> parsed 0) (<= parsed 3600000))
+          parsed
+          (throw "AFJ_DB_LOCK_WAIT_TIMEOUT_INVALID"))))))
+(define afj-tcp-wait-starts (atom {}))
+(define afj-tcp-wal-env (env-get "AFJ_DB_WAL"))
+(define afj-tcp-wal
+  (if (and (= afj-db-mode "production") (nil? afj-tcp-wal-env))
+    (throw "AFJ_DB_WAL_REQUIRED")
+    (if (nil? afj-tcp-wal-env)
+      "/tmp/afj-db95-tcp-catalog.wal"
+      (if (and (= afj-db-mode "production")
+               (str_starts_with afj-tcp-wal-env "/tmp/"))
+        (throw "AFJ_DB_WAL_INSECURE_PATH")
+        afj-tcp-wal-env))))
+(define afj-tcp-wal-record-limit 1048576)
+(define afj-tcp-catalog-page-env (env-get "AFJ_DB_CATALOG_PAGES"))
+(define afj-tcp-catalog-page-path
+  (if (nil? afj-tcp-catalog-page-env)
+    (if (= afj-db-mode "production")
+      (str afj-tcp-wal ".pages")
+      nil)
+      afj-tcp-catalog-page-env))
+(define afj-tcp-catalog-table-dir
+  (if (nil? afj-tcp-catalog-page-path)
+    nil
+    (str afj-tcp-catalog-page-path ".tables")))
+(define afj-tcp-catalog-page-size 4096)
+(define afj-tcp-page-pool-max
+  (let [raw (env-get "AFJ_DB_PAGE_POOL_PAGES")]
+    (if (nil? raw)
+      64
+      (let [parsed (str-to-num raw)]
+        (if (and (number? parsed) (> parsed 0) (<= parsed 4096))
+          parsed
+          (throw "AFJ_DB_PAGE_POOL_PAGES_INVALID"))))))
+(define afj-tcp-page-pool (atom {}))
+(define afj-tcp-page-pool-tick (atom 0))
+(define afj-tcp-lazy-tables
+  (let [raw (str_lower (env-or "AFJ_DB_LAZY_TABLES" "false"))]
+    (or (= raw "1") (= raw "true"))))
+(define afj-tcp-lazy-table-cache-max
+  (let [raw (env-get "AFJ_DB_LAZY_TABLE_CACHE")]
+    (if (nil? raw)
+      8
+      (let [parsed (str-to-num raw)]
+        (if (and (number? parsed) (> parsed 0) (<= parsed 4096))
+          parsed
+          (throw "AFJ_DB_LAZY_TABLE_CACHE_INVALID"))))))
+(define afj-tcp-lazy-table-cache (atom {}))
+(define afj-tcp-lazy-table-tick (atom 0))
+(define afj-tcp-request-limit 1048576)
+(define afj-tcp-sql-limit 262144)
+(define afj-tcp-request-timeout-ms
+  (let [raw (env-get "AFJ_DB_REQUEST_TIMEOUT_MS")]
+    (if (nil? raw)
+      10000
+      (let [parsed (str-to-num raw)]
+        (if (and (number? parsed) (>= parsed 100) (<= parsed 3600000))
+          parsed
+          (throw "AFJ_DB_REQUEST_TIMEOUT_INVALID"))))))
+(define afj-tcp-rate-max
+  (let [raw (env-get "AFJ_DB_RATE_MAX_REQUESTS")]
+    (if (nil? raw)
+      60
+      (let [parsed (str-to-num raw)]
+        (if (and (number? parsed) (> parsed 0) (<= parsed 10000))
+          parsed
+          (throw "AFJ_DB_RATE_MAX_REQUESTS_INVALID"))))))
+(define afj-tcp-rate-window-ms
+  (let [raw (env-get "AFJ_DB_RATE_WINDOW_MS")]
+    (if (nil? raw)
+      60000
+      (let [parsed (str-to-num raw)]
+        (if (and (number? parsed) (>= parsed 1000) (<= parsed 3600000))
+          parsed
+          (throw "AFJ_DB_RATE_WINDOW_INVALID"))))))
+(define afj-tcp-rate-state (atom {}))
+(define afj-tcp-peer-addresses (atom {}))
+(define afj-tcp-connection-tokens (atom {}))
+(define afj-tcp-buffers (atom {}))
+(define afj-tcp-buffer-starts (atom {}))
+(define afj-tcp-event-loop-active (atom false))
+
+;; TCP catalog pages use a bounded pin/flush pool. The catalog itself remains
+;; an execution snapshot for now, but page IO no longer bypasses ownership:
+;; pinned pages cannot be evicted, dirty pages are marked clean only after the
+;; append succeeds, and an all-pinned pool fails deterministically.
+(defn afj-tcp-page-pool-key [path index]
+  (str path "#" index))
+
+(defn afj-tcp-page-pool-oldest [pool candidates oldest-key oldest-used]
+  (if (= (count candidates) 0)
+    oldest-key
+    (let [key (first candidates)
+          entry (get pool key)
+          pin (get entry "pin" 0)
+          used (get entry "used" 0)]
+      (if (and (= pin 0)
+               (or (nil? oldest-key) (< used oldest-used)))
+        (afj-tcp-page-pool-oldest pool (rest candidates) key used)
+        (afj-tcp-page-pool-oldest pool (rest candidates)
+                                   oldest-key oldest-used)))))
+
+(defn afj-tcp-page-pool-evict []
+  (if (<= (count (deref afj-tcp-page-pool)) afj-tcp-page-pool-max)
+    true
+    (let [victim (afj-tcp-page-pool-oldest
+                   (deref afj-tcp-page-pool)
+                   (keys (deref afj-tcp-page-pool)) nil 0)]
+      (if (nil? victim)
+        (throw "PAGE_POOL_EXHAUSTED")
+        (do
+          (swap! afj-tcp-page-pool dissoc victim)
+          (afj-tcp-page-pool-evict))))))
+
+(defn afj-tcp-page-pool-stage [path index raw]
+  (let [key (afj-tcp-page-pool-key path index)
+        tick (swap! afj-tcp-page-pool-tick (fn [value] (+ value 1)))]
+    (swap! afj-tcp-page-pool assoc key
+           {"raw" raw "dirty" true "pin" 1 "used" tick})
+    (afj-tcp-page-pool-evict)
+    key))
+
+(defn afj-tcp-page-pool-pin [path index]
+  (let [key (afj-tcp-page-pool-key path index)
+        entry (get (deref afj-tcp-page-pool) key)]
+    (if (nil? entry)
+      false
+      (do
+        (swap! afj-tcp-page-pool assoc key
+               (assoc entry "pin" (+ (get entry "pin" 0) 1)))
+        true))))
+
+(defn afj-tcp-page-pool-mark-flushed [path index]
+  (let [key (afj-tcp-page-pool-key path index)
+        entry (get (deref afj-tcp-page-pool) key)]
+    (if (nil? entry)
+      false
+      (do
+        (swap! afj-tcp-page-pool assoc key
+               (assoc (assoc entry "dirty" false) "pin" 0))
+        true))))
+
+(defn afj-tcp-page-pool-unpin [path index]
+  (let [key (afj-tcp-page-pool-key path index)
+        entry (get (deref afj-tcp-page-pool) key)]
+    (if (nil? entry)
+      false
+      (do
+        (swap! afj-tcp-page-pool assoc key
+               (assoc entry "pin"
+                      (if (> (get entry "pin" 0) 0)
+                        (- (get entry "pin" 0) 1)
+                        0)))
+        true))))
+
+(defn afj-tcp-page-pool-clear []
+  (reset! afj-tcp-page-pool {})
+  (reset! afj-tcp-page-pool-tick 0)
+  true)
+
+(defn afj-tcp-lazy-placeholder? [definition]
+  (and (not (nil? definition))
+       (= (get definition "__afj-lazy-table") true)))
+
+(defn afj-tcp-lazy-touch [table path]
+  (let [tick (swap! afj-tcp-lazy-table-tick (fn [value] (+ value 1)))]
+    (swap! afj-tcp-lazy-table-cache assoc table
+           {"path" path "used" tick})
+    true))
+
+(defn afj-tcp-lazy-oldest [cache candidates oldest-key oldest-used keep]
+  (if (= (count candidates) 0)
+    oldest-key
+    (let [table (first candidates)
+          entry (get cache table)
+          used (get entry "used" 0)]
+      (if (and (not (= table keep))
+               (or (nil? oldest-key) (< used oldest-used)))
+        (afj-tcp-lazy-oldest cache (rest candidates) table used keep)
+        (afj-tcp-lazy-oldest cache (rest candidates)
+                             oldest-key oldest-used keep)))))
+
+(defn afj-tcp-lazy-evict [keep]
+  (if (or (not afj-tcp-lazy-tables)
+          (<= (count (deref afj-tcp-lazy-table-cache))
+              afj-tcp-lazy-table-cache-max))
+    true
+    (let [cache (deref afj-tcp-lazy-table-cache)
+          victim (afj-tcp-lazy-oldest
+                   cache (keys cache) nil 0 keep)]
+      (if (nil? victim)
+        true
+        (let [entry (get cache victim)
+              path (get entry "path")]
+          (swap! engine-catalog assoc victim
+                 {"__afj-lazy-table" true "name" victim "path" path})
+          (swap! engine-indexes dissoc victim)
+          (swap! afj-tcp-lazy-table-cache dissoc victim)
+          (afj-tcp-lazy-evict keep))))))
+
+(defn afj-tcp-ensure-table-loaded [table]
+  (let [definition (get (deref engine-catalog) table)]
+    (if (not (afj-tcp-lazy-placeholder? definition))
+      true
+      (let [path (get definition "path")
+            loaded (afj-tcp-read-page-set-value path)]
+        (if (nil? loaded)
+          (throw "CATALOG_PAGE_MISSING")
+          (do
+            (swap! engine-catalog assoc table loaded)
+            (engine-rebuild-table-indexes table loaded)
+            (afj-tcp-lazy-touch table path)
+            true))))))
+
+;; tcp-server-raw queues connect/data/close callbacks in the runtime event
+;; queue. A long-lived DB daemon must drain that queue independently of the
+;; caller; otherwise external clients can connect but never receive a reply.
+(defn afj-tcp-event-drain-loop []
+  (if (deref afj-tcp-event-loop-active)
+    (do
+      (fl-event-drain)
+      (set-timeout (fn [] (afj-tcp-event-drain-loop)) 10))
+    nil))
+
+(defn afj-tcp-rate-key [connection]
+  (let [peer (get (deref afj-tcp-peer-addresses) connection)]
+    (if (or (nil? peer) (= peer "")) connection peer)))
+
+(defn afj-tcp-rate-allowed? [connection]
+  (let [key (afj-tcp-rate-key connection)
+        current (get (deref afj-tcp-rate-state) key)
+        now-value (now_ms)
+        active (and (not (nil? current))
+                    (< (- now-value (get current "started"))
+                       afj-tcp-rate-window-ms))]
+    (if (not active)
+      (do
+        (swap! afj-tcp-rate-state assoc key
+               {"started" now-value "count" 1})
+        true)
+      (let [next-count (+ (get current "count") 1)]
+        (swap! afj-tcp-rate-state assoc key
+               (assoc current "count" next-count))
+        (<= next-count afj-tcp-rate-max)))))
+
+(defn afj-tcp-request-size-error [line]
+  (if (> (count line) afj-tcp-request-limit)
+    "REQUEST_TOO_LARGE"
+    nil))
+
+(defn afj-tcp-sql-size-error [statement]
+  (if (or (nil? statement) (> (count statement) afj-tcp-sql-limit))
+    "SQL_TOO_LARGE"
+    nil))
+
+(defn afj-tcp-error-code-message [message]
+  (if (regex_match_i message ".*PARAMETER_COUNT_MISMATCH.*")
+    "PARAMETER_COUNT_MISMATCH"
+    (if (regex_match_i message ".*NOT_NULL_VIOLATION.*")
+      "NOT_NULL_VIOLATION"
+      (if (regex_match_i message ".*UNIQUE_VIOLATION.*")
+        "UNIQUE_VIOLATION"
+        (if (regex_match_i message ".*FOREIGN_KEY_VIOLATION.*")
+          "FOREIGN_KEY_VIOLATION"
+          (if (regex_match_i message ".*CHECK_VIOLATION.*")
+            "CHECK_VIOLATION"
+            (if (regex_match_i message ".*TYPE_VIOLATION.*")
+              "TYPE_VIOLATION"
+              (if (regex_match_i message ".*COLUMN_COUNT_MISMATCH.*")
+                "COLUMN_COUNT_MISMATCH"
+                (if (regex_match_i message ".*DATABASE_NOT_FOUND.*")
+                  "DATABASE_NOT_FOUND"
+                  (if (regex_match_i message ".*WAL_RECORD_TOO_LARGE.*")
+                    "WAL_RECORD_TOO_LARGE"
+                    (if (regex_match_i message ".*WAL_CORRUPT.*")
+                      "WAL_CORRUPT"
+                      "SQL_ERROR")))))))))))
+
+(defn afj-tcp-error-code [error]
+  (afj-tcp-error-code-message (error_message error)))
 
 (defn afj-tcp-wal-append [event]
-  (let [fd (fd_open afj-tcp-wal "a")]
-    (fd_write fd (str (json_str event) "\n"))
-    (fd_fsync fd)
-    (fd_close fd))
-  event)
+  (let [encoded (json_str event)]
+    (if (> (count encoded) afj-tcp-wal-record-limit)
+      (throw "WAL_RECORD_TOO_LARGE")
+      nil)
+    (let [fd (fd_open afj-tcp-wal "a")]
+      (fd_write fd (str encoded "\n"))
+      (fd_fsync fd)
+      (fd_close fd))
+    event))
 
-(defn afj-tcp-recover-lines [lines index prepared]
+(defn afj-tcp-wal-legacy-field? [record field]
+  (and (= afj-db-mode "development")
+       (nil? (get record field))))
+
+(defn afj-tcp-wal-record-valid? [record body]
+  (and (or (= (get record "version") 1)
+           (afj-tcp-wal-legacy-field? record "version"))
+       (or (= (get record "length") (count (json_str body)))
+           (afj-tcp-wal-legacy-field? record "length"))
+       (= (get record "checksum") (sha256 (json_str body)))))
+
+(defn afj-tcp-page-envelope [page]
+  (let [encoded (json_str page)
+        envelope {"magic" "AFJPG"
+                  "version" 1
+                  "length" (count encoded)
+                  "checksum" (sha256 encoded)
+                  "payload" page}
+        serialized (json_str envelope)]
+    (if (> (count serialized) afj-tcp-catalog-page-size)
+      (throw "CATALOG_PAGE_TOO_LARGE")
+      serialized)))
+
+(defn afj-tcp-page-chunks [encoded index chunks]
+  (if (>= index (count encoded))
+    chunks
+    (let [next-index (+ index 2048)
+          end (if (> next-index (count encoded)) (count encoded) next-index)]
+      (afj-tcp-page-chunks encoded end
+                           (conj chunks (str-slice encoded index end))))))
+
+(defn afj-tcp-valid-page? [page]
+  (let [payload (get page "payload")
+        encoded (if (nil? payload) nil (json_str payload))]
+    (and (= (get page "magic") "AFJPG")
+         (= (get page "version") 1)
+         (number? (get page "length"))
+         (<= (count (json_str page)) afj-tcp-catalog-page-size)
+         (not (nil? payload))
+         (= (get page "length") (count encoded))
+         (= (get page "checksum") (sha256 encoded)))))
+
+(defn afj-tcp-write-page-set [path value]
+  (let [encoded (json_str value)
+        chunks (afj-tcp-page-chunks encoded 0 [])
+        total (count chunks)]
+    (if (= total 0)
+      (throw "CATALOG_PAGE_EMPTY")
+      (do
+        (afj-tcp-page-pool-clear)
+        (file_write path "")
+        (doseq [index (range 0 total)]
+          (let [raw (str (afj-tcp-page-envelope
+                           {"set-version" 1
+                            "id" index
+                            "total" total
+                            "data" (get chunks index)}) "\n")]
+            (afj-tcp-page-pool-stage path index raw)
+            (file_append path raw)
+            (if (not (afj-tcp-page-pool-mark-flushed path index))
+              (throw "PAGE_POOL_FLUSH_FAILED")
+              nil)))
+        total))))
+
+(defn afj-tcp-read-page-set-value [path]
+  (if (not (file_exists path))
+    (throw "CATALOG_PAGE_MISSING")
+    (let [lines (filter (fn [line] (not (= (str_trim line) "")))
+                        (str_lines (file_read path)))
+          first-page (if (= (count lines) 0) nil
+                       (try (json-parse (first lines)) (catch [error] nil)))
+          first-payload (if (nil? first-page) nil (get first-page "payload"))
+          total (if (nil? first-payload) 0 (get first-payload "total"))
+          encoded (atom "")]
+      (if (or (= total 0) (not (= total (count lines))))
+        (throw "CATALOG_PAGE_CORRUPT")
+        (do
+          (doseq [index (range 0 total)]
+            (let [page (try (json-parse (get lines index))
+                            (catch [error] nil))
+                  payload (if (nil? page) nil (get page "payload"))]
+              (afj-tcp-page-pool-stage path index (get lines index))
+              (if (or (nil? page)
+                      (not (afj-tcp-valid-page? page))
+                      (nil? payload)
+                      (not (= (get payload "set-version") 1))
+                      (not (= (get payload "id") index))
+                      (not (= (get payload "total") total)))
+                (throw "CATALOG_PAGE_CORRUPT")
+                (do
+                  (swap! encoded (fn [value]
+                                   (str value (get payload "data"))))
+                  (afj-tcp-page-pool-mark-flushed path index)))))
+          (json-parse (deref encoded)))))))
+
+(defn afj-tcp-table-page-path [table]
+  (str afj-tcp-catalog-table-dir "/" (sha256 table) ".pages"))
+
+;; The v2 manifest has a small page-backed catalog index.  It keeps table name
+;; to page-set resolution ordered and separate from table payload pages; the
+;; executor can resolve a table descriptor without scanning a monolithic
+;; catalog payload.  The table payloads remain independently checksummed.
+(defn afj-tcp-catalog-index-build [descriptors]
+  (let [entries (atom [])]
+    (doseq [descriptor descriptors]
+      (let [key (get descriptor "name")
+            path (get descriptor "path")]
+        (if (or (nil? key) (nil? path))
+          (throw "CATALOG_INDEX_DESCRIPTOR_INVALID")
+          (swap! entries conj {"key" key "path" path}))))
+    (let [sorted (arr_sort_by (deref entries) "key")]
+      {"leaf" true "entries" sorted})))
+
+(defn afj-tcp-catalog-index-descriptors [index]
+  (if (and (not (nil? index)) (get index "leaf"))
+    (get index "entries" [])
+    []))
+
+(defn afj-tcp-page-indexes-for-table [table]
+  (let [indexes (atom {})]
+    (doseq [column (engine-index-columns table)]
+      (let [index (get (deref engine-indexes)
+                       (str (get table "name") "." column))]
+        (if (nil? index)
+          nil
+          (let [tree (if (nil? (get index "btree"))
+                       (engine-build-btree-leaf
+                         (get table "rows") column 0 [])
+                       (get index "btree"))]
+            (reset! indexes
+                    (assoc (deref indexes) column tree))))))
+    (deref indexes)))
+
+(defn afj-tcp-write-catalog-pages []
+  (if (nil? afj-tcp-catalog-page-path)
+    true
+    (do
+      ;; The manifest no longer embeds the complete catalog. Each table is a
+      ;; separately checksummed page set, so recovery and future lazy reads can
+      ;; address table storage without loading one monolithic catalog page.
+      (file-mkdir afj-tcp-catalog-table-dir)
+      (let [raw (if (file_exists afj-tcp-wal) (file_read afj-tcp-wal) "")
+            tables (atom {})]
+        (doseq [table (keys (deref engine-catalog))]
+          (let [definition (get (deref engine-catalog) table)
+                path (if (afj-tcp-lazy-placeholder? definition)
+                       (get definition "path")
+                       (afj-tcp-table-page-path table))]
+            (if (afj-tcp-lazy-placeholder? definition)
+              nil
+              (afj-tcp-write-page-set
+                path
+                (assoc definition "page-indexes"
+                       (afj-tcp-page-indexes-for-table definition))))
+            (reset! tables
+                    (assoc (deref tables) table
+                           {"name" table "path" path}))))
+        (let [table-index (afj-tcp-catalog-index-build (vals (deref tables)))]
+          (afj-tcp-write-page-set
+            afj-tcp-catalog-page-path
+            {"version" 2
+             "wal-size" (count raw)
+             "wal-prefix" (sha256 raw)
+             "tables" (vals (deref tables))
+             "table-index" table-index
+             "databases" (deref engine-databases)}))))))
+
+(defn afj-tcp-read-catalog-pages []
+  (if (or (nil? afj-tcp-catalog-page-path)
+          (not (file_exists afj-tcp-catalog-page-path)))
+    nil
+    (let [checkpoint (afj-tcp-read-page-set-value afj-tcp-catalog-page-path)]
+      (if (and (= (get checkpoint "version") 2)
+               (number? (get checkpoint "wal-size"))
+               (not (nil? (get checkpoint "tables")))
+               (not (nil? (get checkpoint "databases"))))
+        (let [catalog (atom {})
+              descriptors (if (nil? (get checkpoint "table-index"))
+                            (get checkpoint "tables")
+                            (afj-tcp-catalog-index-descriptors
+                              (get checkpoint "table-index")))]
+          (doseq [descriptor descriptors]
+            (let [table (if (nil? (get descriptor "name"))
+                          (get descriptor "key")
+                          (get descriptor "name"))
+                  path (get descriptor "path")]
+              (if (or (nil? table) (nil? path))
+                (throw "CATALOG_PAGE_CORRUPT")
+                (reset! catalog
+                        (assoc (deref catalog) table
+                               (if afj-tcp-lazy-tables
+                                 {"__afj-lazy-table" true
+                                  "name" table "path" path}
+                                 (afj-tcp-read-page-set-value path)))))))
+          (if afj-tcp-lazy-tables
+            (do
+              (reset! afj-tcp-lazy-table-cache {})
+              (reset! afj-tcp-lazy-table-tick 0))
+            nil)
+          (assoc checkpoint "catalog" (deref catalog)))
+        (if (and (= (get checkpoint "version") 1)
+                 (number? (get checkpoint "wal-size"))
+                 (not (nil? (get checkpoint "catalog")))
+                 (not (nil? (get checkpoint "databases"))))
+          checkpoint
+          (throw "CATALOG_PAGE_CORRUPT"))))))
+
+(defn afj-tcp-recover-lines [lines index prepared final-newline]
   (if (>= index (count lines))
     true
     (let [line (get lines index)
           last-line (= index (- (count lines) 1))
+          _size-check (if (> (count line) afj-tcp-wal-record-limit)
+                        (throw "WAL_RECORD_TOO_LARGE")
+                        true)
           event (if last-line
                   (try (json-parse line) (catch [error] nil))
                   (json-parse line))]
       (if (nil? event)
-        (if last-line true (throw "WAL_CORRUPT"))
+        (if (and last-line (not final-newline))
+          true
+          (throw "WAL_CORRUPT"))
         (let [tx (get event "tx")]
           (do
             (if (= (get event "type") "prepare")
@@ -46,36 +593,72 @@
                 (let [pending (get (deref prepared) tx)
                       body (if (nil? pending) nil (get pending "body"))]
                 (if (and (not (nil? body))
-                         (= (get pending "checksum") (get event "checksum")))
-                  (if (has-key? body "asts")
-                    (doseq [ast (get body "asts")] (execute-ast ast))
-                    (let [replayed (execute-ast (get body "ast"))]
-                      replayed))
+                         (afj-tcp-wal-record-valid? pending body)
+                         (afj-tcp-wal-record-valid? event body))
+                  (afj-tcp-replay-commit-body body)
                   nil))
                 nil))
-            (afj-tcp-recover-lines lines (+ index 1) prepared)))))))
+            (afj-tcp-recover-lines lines (+ index 1) prepared final-newline)))))))
+
+(defn afj-tcp-rebuild-all-indexes []
+  (reset! engine-indexes {})
+  (doseq [table (keys (deref engine-catalog))]
+    (let [definition (get (deref engine-catalog) table)]
+      (if (not (afj-tcp-lazy-placeholder? definition))
+        (engine-rebuild-table-indexes table definition)
+        nil)))
+  true)
 
 (defn afj-tcp-recover []
   (do
     (reset! engine-catalog {})
+    (reset! engine-indexes {})
     (reset! engine-databases {})
-    (if (file_exists afj-tcp-wal)
-      (try
-        (afj-tcp-recover-lines
-          (filter (fn [line] (not (= (str_trim line) "")))
-                  (str_lines (file_read afj-tcp-wal)))
-          0 (atom {}))
-        (catch [error] (throw "WAL_CORRUPT")))
-      nil)
+    (reset! afj-tcp-commit-revision 0)
+    (reset! afj-tcp-table-revisions {})
+    (reset! afj-tcp-row-versions {})
+    (let [checkpoint (if (and (not (nil? afj-tcp-catalog-page-path))
+                              (file_exists afj-tcp-catalog-page-path))
+                       (afj-tcp-read-catalog-pages)
+                       nil)
+          raw (if (file_exists afj-tcp-wal) (file_read afj-tcp-wal) "")
+          checkpoint-size (if (nil? checkpoint) 0
+                             (get checkpoint "wal-size"))
+          checkpoint-prefix (if (nil? checkpoint) nil
+                               (get checkpoint "wal-prefix"))
+          prefix-ok (and (not (nil? checkpoint))
+                         (<= checkpoint-size (count raw))
+                         (= checkpoint-prefix
+                            (sha256 (str-slice raw 0 checkpoint-size))))
+          replay-start (if prefix-ok checkpoint-size 0)]
+      (if prefix-ok
+        (do
+          (reset! engine-catalog (get checkpoint "catalog"))
+          (reset! engine-databases (get checkpoint "databases"))
+          (afj-tcp-rebuild-all-indexes)
+          (afj-tcp-record-row-versions (deref engine-catalog) 0))
+        nil)
+      (if (or (> (count raw) replay-start)
+              (and (= (count raw) 0) (not prefix-ok)))
+        (try
+          (afj-tcp-recover-lines
+            (filter (fn [line] (not (= (str_trim line) "")))
+                    (str_lines (str-slice raw replay-start (count raw))))
+            0 (atom {}) (str_ends_with raw "\n"))
+          (catch [error] (throw "WAL_CORRUPT")))
+        nil))
     true))
 
 (defn afj-tcp-record-asts [asts]
   (let [tx (uuid_short)
-        body {"asts" asts}
+        body {"version" 1 "asts" asts}
+        length (count (json_str body))
         checksum (sha256 (json_str body))]
     (afj-tcp-wal-append {"type" "prepare" "tx" tx
+                          "version" 1 "length" length
                           "body" body "checksum" checksum})
     (afj-tcp-wal-append {"type" "commit" "tx" tx
+                          "version" 1 "length" length
                           "checksum" checksum})
     true))
 
@@ -84,19 +667,27 @@
   ;; a disposable catalog snapshot before publishing the unchanged WAL format.
   (let [result (atom nil)
         catalog (json-parse (json_str (deref engine-catalog)))
+        indexes (json-parse (json_str (deref engine-indexes)))
         databases (json-parse (json_str (deref engine-databases)))]
     (try
       (doseq [ast asts] (execute-ast ast))
       (catch [error]
         (do
           (reset! engine-catalog catalog)
+          (reset! engine-indexes indexes)
           (reset! engine-databases databases)
           (throw error))))
     (reset! engine-catalog catalog)
+    (reset! engine-indexes indexes)
     (reset! engine-databases databases)
     (afj-tcp-record-asts asts)
     (doseq [ast asts]
       (reset! result (execute-ast ast)))
+    (swap! afj-tcp-commit-revision (fn [revision] (+ revision 1)))
+    (afj-tcp-mark-table-revisions asts (deref afj-tcp-commit-revision))
+    (afj-tcp-record-row-versions-for-asts
+      (deref engine-catalog) asts (deref afj-tcp-commit-revision))
+    (afj-tcp-write-catalog-pages)
     (deref result)))
 
 (defn afj-tcp-commit-ast [ast]
@@ -105,21 +696,309 @@
 (defn afj-tcp-copy [value]
   (json-parse (json_str value)))
 
-(defn afj-tcp-lock-table [token table]
+(defn afj-tcp-mark-table-revisions [asts revision]
+  (doseq [ast asts]
+    (let [table (get ast "table")]
+      (if (nil? table)
+        nil
+        (swap! afj-tcp-table-revisions assoc table revision))))
+  true)
+
+(defn afj-tcp-row-version-key [row]
+  (if (has-key? row "id")
+    (str (get row "id"))
+    (json_str row)))
+
+(defn afj-tcp-close-row-version [version revision]
+  (if (nil? (get version "deleted"))
+    (assoc version "deleted" revision)
+    version))
+
+(defn afj-tcp-row-version-current? [version snapshot]
+  (and (<= (get version "created" 0) snapshot)
+       (or (nil? (get version "deleted"))
+           (> (get version "deleted") snapshot))))
+
+(defn afj-tcp-record-table-row-versions [table rows revision]
+  (let [old-chain (get (deref afj-tcp-row-versions) table {})
+        current (atom {})]
+    (doseq [row rows]
+      (swap! current assoc (afj-tcp-row-version-key row) row))
+    ;; Rows that disappeared become tombstones at this commit revision.
+    (doseq [key (keys old-chain)]
+      (if (nil? (get (deref current) key))
+        (let [chain (get old-chain key)]
+          (swap! afj-tcp-row-versions assoc table
+                 (assoc (get (deref afj-tcp-row-versions) table {}) key
+                        (map (fn [version]
+                               (afj-tcp-close-row-version version revision)) chain))))
+        nil))
+    ;; Changed or newly inserted rows receive a fresh immutable version.
+    (doseq [key (keys (deref current))]
+      (let [row (get (deref current) key)
+            chain (get (get (deref afj-tcp-row-versions) table) key [])
+            latest (if (= (count chain) 0) nil (last chain))
+            same (and (not (nil? latest))
+                      (= (json_str (get latest "row")) (json_str row))
+                      (nil? (get latest "deleted")))]
+        (if same
+          nil
+          (let [closed (map (fn [version]
+                              (afj-tcp-close-row-version version revision)) chain)]
+            (swap! afj-tcp-row-versions assoc table
+                   (assoc (get (deref afj-tcp-row-versions) table {}) key
+                          (conj closed {"row" row "created" revision "deleted" nil})))))))
+    true))
+
+(defn afj-tcp-append-insert-row-versions [table rows revision]
+  (doseq [row rows]
+    (let [key (afj-tcp-row-version-key row)
+          table-chains (get (deref afj-tcp-row-versions) table {})
+          chain (get table-chains key [])
+          latest (if (= (count chain) 0) nil (last chain))
+          closed (if (nil? latest)
+                   chain
+                   (map (fn [version]
+                          (afj-tcp-close-row-version version revision)) chain))]
+      (swap! afj-tcp-row-versions assoc table
+             (assoc (get (deref afj-tcp-row-versions) table {}) key
+                    (conj closed {"row" row "created" revision "deleted" nil})))))
+  true)
+
+(defn afj-tcp-record-row-versions [catalog revision]
+  (doseq [table (keys catalog)]
+    (let [definition (get catalog table)]
+      (let [loaded (if (afj-tcp-lazy-placeholder? definition)
+                     (afj-tcp-read-page-set-value (get definition "path"))
+                     definition)]
+        (if (not (nil? loaded))
+          (afj-tcp-record-table-row-versions
+            table (get loaded "rows" []) revision)
+          nil))))
+  true)
+
+(defn afj-tcp-record-row-versions-for-asts [catalog asts revision]
+  (doseq [ast asts]
+    (let [table (get ast "table")
+          definition (if (nil? table) nil (get catalog table))]
+      (if (or (nil? table) (nil? definition))
+        nil
+        (if (= (get ast "type") "insert")
+          (afj-tcp-append-insert-row-versions table (get ast "rows" []) revision)
+          (afj-tcp-record-table-row-versions
+            table (get definition "rows" []) revision)))))
+  true)
+
+(defn afj-tcp-replay-commit-body [body]
+  (let [asts (if (has-key? body "asts")
+               (get body "asts")
+               [(get body "ast")])]
+    (doseq [ast asts]
+      (if (not (nil? (get ast "table")))
+        (afj-tcp-ensure-table-loaded (get ast "table"))
+        nil)
+      (execute-ast ast))
+    (swap! afj-tcp-commit-revision (fn [revision] (+ revision 1)))
+    (afj-tcp-mark-table-revisions asts (deref afj-tcp-commit-revision))
+    (afj-tcp-record-row-versions-for-asts
+      (deref engine-catalog) asts (deref afj-tcp-commit-revision))
+    true))
+
+(defn afj-tcp-versioned-rows [table fallback snapshot]
+  (let [chains (get (deref afj-tcp-row-versions) table)]
+    (if (nil? chains)
+      fallback
+      (filter (fn [row] (not (nil? row)))
+              (map (fn [key]
+                     (let [visible (filter
+                                      (fn [version]
+                                        (afj-tcp-row-version-current? version snapshot))
+                                      (get chains key []))]
+                       (if (= (count visible) 0)
+                         nil
+                         (get (last visible) "row"))))
+                   (keys chains))))))
+
+(defn afj-tcp-versioned-catalog [catalog snapshot]
+  (let [result (atom (afj-tcp-copy catalog))]
+    (doseq [table (keys catalog)]
+      (let [definition (get catalog table)
+            rows (get definition "rows")]
+        (if (nil? rows)
+          nil
+          (reset! result
+                  (assoc (deref result) table
+                         (assoc definition "rows"
+                                (afj-tcp-versioned-rows table rows snapshot)))))))
+    (deref result)))
+
+(defn afj-tcp-predicate-ast? [ast]
+  (and (= (get ast "type") "select")
+       (not (nil? (get ast "where")))))
+
+(defn afj-tcp-row-version-predicate-conflict? [table where snapshot]
+  (let [chains (get (deref afj-tcp-row-versions) table)
+        conflict (atom false)]
+    (if (nil? chains)
+      true
+      (do
+        (doseq [key (keys chains)]
+          (doseq [version (get chains key [])]
+            (let [created (get version "created" 0)
+                  deleted (get version "deleted")
+                  changed (or (> created snapshot)
+                              (and (not (nil? deleted)) (> deleted snapshot)))]
+              (if (and changed
+                       (engine-match? (get version "row") where))
+                (reset! conflict true)
+                nil))))
+        (deref conflict)))))
+
+(defn afj-tcp-predicate-conflict? [tx-state]
+  (let [snapshot (get tx-state "read-revisions")
+        conflict (atom false)]
+    (doseq [ast (get tx-state "read-predicates")]
+      (let [table (get ast "table")
+            table-snapshot (get snapshot table 0)
+            table-revision (get (deref afj-tcp-table-revisions) table 0)]
+        (if (not (= table-snapshot table-revision))
+          (if (afj-tcp-row-version-predicate-conflict?
+                table (get ast "where") table-snapshot)
+            (reset! conflict true)
+            nil)
+          nil)))
+    (deref conflict)))
+
+(defn afj-tcp-write-table-conflict? [tx-state]
+  (let [snapshot (get tx-state "read-revisions")
+        conflict (atom false)]
+    (doseq [ast (get tx-state "asts")]
+      (let [table (get ast "table")]
+        (if (not (= (get snapshot table 0)
+                    (get (deref afj-tcp-table-revisions) table 0)))
+          (reset! conflict true)
+          nil)))
+    (deref conflict)))
+
+(defn afj-tcp-lock-table-result [token table]
   (let [owner (get (deref afj-tcp-locks) table)]
     (if (or (nil? owner) (= owner token))
       (do
         (swap! afj-tcp-locks assoc table token)
-        true)
-      false)))
+        (swap! afj-tcp-wait-for dissoc token)
+        (swap! afj-tcp-wait-starts dissoc token)
+        {"ok" true})
+      (do
+        (swap! afj-tcp-wait-for assoc token owner)
+        (if (nil? (get (deref afj-tcp-wait-starts) token))
+          (swap! afj-tcp-wait-starts assoc token (now_ms))
+          nil)
+        (let [waited (- (now_ms) (get (deref afj-tcp-wait-starts) token))]
+          (if (>= waited afj-tcp-lock-wait-timeout-ms)
+            {"ok" false "error" "LOCK_TIMEOUT" "owner" owner
+             "waited-ms" waited}
+            (if (= (get (deref afj-tcp-wait-for) owner) token)
+              {"ok" false "error" "DEADLOCK_DETECTED" "owner" owner}
+              {"ok" false "error" "LOCK_CONFLICT" "owner" owner})))))))
+
+(defn afj-tcp-lock-table [token table]
+  (get (afj-tcp-lock-table-result token table) "ok"))
 
 (defn afj-tcp-release-token [token]
-  (do
-    (doseq [table (keys (deref afj-tcp-locks))]
-      (if (= (get (deref afj-tcp-locks) table) token)
-        (swap! afj-tcp-locks dissoc table)
-        nil))
+  (let [locks (deref afj-tcp-locks)
+        retained (atom {})]
+    (do
+      (doseq [table (keys locks)]
+        (if (not (= (get locks table) token))
+          (swap! retained assoc table (get locks table))
+          nil))
+      (reset! afj-tcp-locks (deref retained))
+      (swap! afj-tcp-wait-for dissoc token)
+      (swap! afj-tcp-wait-starts dissoc token)
+      true)))
+
+(defn afj-tcp-expire-token [token]
+  (let [tx-state (get (deref afj-tcp-transactions) token)]
+    (if (and (not (nil? tx-state))
+             (= (get tx-state "status") "active"))
+      (afj-tcp-rollback token)
+      nil)
+    (swap! afj-tcp-sessions dissoc token)
+    (swap! afj-tcp-session-expiries dissoc token)
+    (swap! afj-tcp-databases dissoc token)
+    (swap! afj-tcp-transactions dissoc token)
+    (afj-tcp-release-token token)
+    (server-expire-session token)
+    (audit-event "session" token "expired")
     true))
+
+(defn afj-tcp-session-active? [token]
+  (let [user (get (deref afj-tcp-sessions) token)
+        expiry (get (deref afj-tcp-session-expiries) token 0)]
+    (if (nil? user)
+      false
+      (if (and (> expiry 0) (>= (now_ms) expiry))
+        (do
+          (afj-tcp-expire-token token)
+          false)
+        true))))
+
+(defn afj-tcp-close-connection [connection]
+  (let [token (get (deref afj-tcp-connection-tokens) connection)]
+    (swap! afj-tcp-buffers dissoc connection)
+    (swap! afj-tcp-buffer-starts dissoc connection)
+    (if (nil? token)
+      true
+      (do
+        (afj-tcp-expire-token token)
+        (swap! afj-tcp-connection-tokens dissoc connection)
+        true))))
+
+(defn afj-tcp-connection-auth-available? [connection]
+  (nil? (get (deref afj-tcp-connection-tokens) connection)))
+
+(defn afj-tcp-timeout-buffer [connection started]
+  (if (= (get (deref afj-tcp-buffer-starts) connection) started)
+    (do
+      (afj-tcp-send connection {"ok" false "error" "REQUEST_TIMEOUT"})
+      (tcp-drop connection)
+      (swap! afj-tcp-buffers dissoc connection)
+      (swap! afj-tcp-buffer-starts dissoc connection)
+      "REQUEST_TIMEOUT")
+    nil))
+
+(defn afj-tcp-process-buffer [connection buffer]
+  (if (> (count buffer) afj-tcp-request-limit)
+    (do
+      (afj-tcp-send connection {"ok" false "error" "REQUEST_TOO_LARGE"})
+      (tcp-drop connection)
+      (swap! afj-tcp-buffers dissoc connection)
+      (swap! afj-tcp-buffer-starts dissoc connection)
+      "REQUEST_TOO_LARGE")
+    (let [newline (str-index-of buffer "\n")]
+      (if (< newline 0)
+        (do
+          (if (nil? (get (deref afj-tcp-buffer-starts) connection))
+            (let [started (now_ms)]
+              (swap! afj-tcp-buffer-starts assoc connection started)
+              (set-timeout
+                (fn [] (afj-tcp-timeout-buffer connection started))
+                afj-tcp-request-timeout-ms))
+            nil)
+          (swap! afj-tcp-buffers assoc connection buffer)
+          "BUFFERED")
+        (let [line (str_slice buffer 0 newline)
+              rest (str_slice buffer (+ newline 1))]
+          (swap! afj-tcp-buffer-starts dissoc connection)
+          ;; raw TCP chunks are binary-encoded by the runtime; avoid applying
+          ;; the text trim helper before JSON parsing so ASCII JSON from an
+          ;; external client follows the same path as in-process tests.
+          (if (not (= line ""))
+            (afj-tcp-line connection line)
+            nil)
+          (if (= rest "")
+            (swap! afj-tcp-buffers dissoc connection)
+            (afj-tcp-process-buffer connection rest)))))))
 
 (defn afj-tcp-resource [ast]
   (let [table (get ast "table")
@@ -150,24 +1029,94 @@
           nil)))
     (deref conflict)))
 
-(defn afj-tcp-begin [token]
-  (let [current (get (deref afj-tcp-transactions) token)]
+(defn afj-tcp-normalize-isolation [requested]
+  (let [level (if (nil? requested) "REPEATABLE READ"
+                (str_upper (str_trim requested)))]
+    (if (or (= level "READ COMMITTED")
+            (= level "REPEATABLE READ")
+            (= level "SERIALIZABLE"))
+      level
+      (throw "ISOLATION_LEVEL_UNSUPPORTED"))))
+
+(defn afj-tcp-begin-level [token requested]
+  (let [current (get (deref afj-tcp-transactions) token)
+        level (afj-tcp-normalize-isolation requested)]
     (if (and (not (nil? current))
              (= (get current "status") "active"))
       {"ok" false "error" "TX_ALREADY_ACTIVE"}
       (do
         (swap! afj-tcp-transactions assoc token
-               {"status" "active"
-                "snapshot" (afj-tcp-copy (deref engine-catalog))
+      {"status" "active"
+                "snapshot" (afj-tcp-versioned-catalog
+                              (afj-tcp-copy (deref engine-catalog))
+                              (deref afj-tcp-commit-revision))
+                "index-snapshot" (afj-tcp-copy (deref engine-indexes))
+                "working-catalog" (afj-tcp-versioned-catalog
+                                    (afj-tcp-copy (deref engine-catalog))
+                                    (deref afj-tcp-commit-revision))
+                "working-indexes" (afj-tcp-copy (deref engine-indexes))
+                "base-revision" (deref afj-tcp-commit-revision)
+                "read-revisions" (afj-tcp-copy (deref afj-tcp-table-revisions))
+                "read-predicates" []
+                "isolation-level" level
+                "savepoints" {}
                 "asts" []})
-        {"ok" true "status" "active"}))))
+        {"ok" true "status" "active" "isolation-level" level}))))
+
+(defn afj-tcp-begin [token]
+  (afj-tcp-begin-level token nil))
+
+(defn afj-tcp-savepoint [token name]
+  (let [current (get (deref afj-tcp-transactions) token)]
+    (if (or (nil? current) (not (= (get current "status") "active")))
+      {"ok" false "error" "TX_NOT_ACTIVE"}
+      (do
+        (swap! afj-tcp-transactions assoc token
+               (assoc current "savepoints"
+                      (assoc (get current "savepoints") name
+                             {"catalog" (afj-tcp-copy
+                                          (get current "working-catalog"))
+                              "indexes" (afj-tcp-copy
+                                          (get current "working-indexes"))
+                              "asts" (afj-tcp-copy (get current "asts"))})))
+        {"ok" true "status" "savepoint" "name" name}))))
+
+(defn afj-tcp-rollback-to-savepoint [token name]
+  (let [current (get (deref afj-tcp-transactions) token)
+        savepoint (if (nil? current) nil
+                    (get (get current "savepoints") name))]
+    (if (or (nil? current) (not (= (get current "status") "active")))
+      {"ok" false "error" "TX_NOT_ACTIVE"}
+      (if (nil? savepoint)
+        {"ok" false "error" "SAVEPOINT_NOT_FOUND"}
+        (do
+          (swap! afj-tcp-transactions assoc token
+                 (assoc current
+                        "working-catalog" (afj-tcp-copy
+                                            (get savepoint "catalog"))
+                        "working-indexes" (afj-tcp-copy
+                                           (get savepoint "indexes"))
+                        "asts" (afj-tcp-copy (get savepoint "asts"))))
+          {"ok" true "status" "rolled-back-to-savepoint"
+           "name" name})))))
+
+(defn afj-tcp-release-savepoint [token name]
+  (let [current (get (deref afj-tcp-transactions) token)]
+    (if (or (nil? current) (not (= (get current "status") "active")))
+      {"ok" false "error" "TX_NOT_ACTIVE"}
+      (if (nil? (get (get current "savepoints") name))
+        {"ok" false "error" "SAVEPOINT_NOT_FOUND"}
+        (do
+          (swap! afj-tcp-transactions assoc token
+                 (assoc current "savepoints"
+                        (dissoc (get current "savepoints") name)))
+          {"ok" true "status" "savepoint-released" "name" name})))))
 
 (defn afj-tcp-rollback [token]
   (let [current (get (deref afj-tcp-transactions) token)]
     (if (or (nil? current) (not (= (get current "status") "active")))
       {"ok" false "error" "TX_NOT_ACTIVE"}
       (do
-        (reset! engine-catalog (afj-tcp-copy (get current "snapshot")))
         (swap! afj-tcp-transactions dissoc token)
         (afj-tcp-release-token token)
         {"ok" true "status" "rolled-back"}))))
@@ -176,19 +1125,48 @@
   (let [current (get (deref afj-tcp-transactions) token)]
     (if (or (nil? current) (not (= (get current "status") "active")))
       {"ok" false "error" "TX_NOT_ACTIVE"}
-      (let [result (afj-tcp-record-asts (get current "asts"))]
-        (swap! afj-tcp-transactions dissoc token)
-        (afj-tcp-release-token token)
-        {"ok" true "status" "committed"
-         "statements" (count (get current "asts"))}))))
+      (let [has-predicates (> (count (get current "read-predicates")) 0)
+            stale (if has-predicates
+                    (or (afj-tcp-write-table-conflict? current)
+                        (afj-tcp-predicate-conflict? current))
+                    (not (= (get current "base-revision")
+                            (deref afj-tcp-commit-revision))))]
+      (if (and (> (count (get current "asts")) 0) stale)
+        (do
+          ;; Optimistic validation closes the write-skew/lost-update hole for
+          ;; transactions that touched different tables and did not contend on
+          ;; the table-granular lock.
+          (afj-tcp-rollback token)
+          {"ok" false "error" "TX_CONFLICT" "victim" token
+           "status" "rolled-back"})
+        (let [asts (get current "asts")]
+          (if (> (count asts) 0)
+            (afj-tcp-record-asts asts)
+            nil)
+          (reset! engine-catalog
+                  (afj-tcp-copy (get current "working-catalog")))
+          (reset! engine-indexes
+                  (afj-tcp-copy (get current "working-indexes")))
+          (if (> (count asts) 0)
+            (do
+              (swap! afj-tcp-commit-revision (fn [revision] (+ revision 1)))
+              (afj-tcp-mark-table-revisions asts (deref afj-tcp-commit-revision))
+              (afj-tcp-record-row-versions-for-asts
+                (deref engine-catalog) asts (deref afj-tcp-commit-revision)))
+            nil)
+          (afj-tcp-write-catalog-pages)
+          (swap! afj-tcp-transactions dissoc token)
+          (afj-tcp-release-token token)
+          {"ok" true "status" "committed"
+           "statements" (count asts)}))))))
 
 (defn afj-tcp-tx-request [request]
   (let [token (get request "token")
         op (get request "op")]
-    (if (nil? (get (deref afj-tcp-sessions) token))
+    (if (not (afj-tcp-session-active? token))
       {"ok" false "error" "AUTH_REQUIRED"}
       (if (= op "BEGIN")
-        (afj-tcp-begin token)
+        (afj-tcp-begin-level token (get request "isolation-level"))
         (if (= op "COMMIT")
           (afj-tcp-commit token)
           (if (= op "ROLLBACK")
@@ -205,7 +1183,7 @@
    "wal" (file_exists afj-tcp-wal)})
 
 (defn afj-tcp-shutdown [request]
-  (if (nil? (get (deref afj-tcp-sessions) (get request "token")))
+  (if (not (afj-tcp-session-active? (get request "token")))
     {"ok" false "error" "AUTH_REQUIRED"}
     (do
       (set-timeout
@@ -221,15 +1199,126 @@
     "db.read"
     "db.write"))
 
+(defn afj-tcp-mutating-ast? [ast]
+  (not (or (= (get ast "type") "select")
+           (= (get ast "type") "use-database")
+           (= (get ast "type") "transaction"))))
+
+(defn afj-tcp-refresh-read-view [token tx-state]
+  (if (not (= (get tx-state "isolation-level") "READ COMMITTED"))
+    tx-state
+    (let [global-catalog (afj-tcp-copy (deref engine-catalog))
+          global-indexes (afj-tcp-copy (deref engine-indexes))
+          refreshed (atom nil)]
+      (try
+        (do
+          (reset! engine-catalog (afj-tcp-copy global-catalog))
+          (reset! engine-indexes (afj-tcp-copy global-indexes))
+          (doseq [ast (get tx-state "asts")]
+            (if (not (nil? (get ast "table")))
+              (afj-tcp-ensure-table-loaded (get ast "table"))
+              nil)
+            (execute-ast ast))
+          (reset! refreshed
+                  (assoc tx-state
+                         "working-catalog" (afj-tcp-copy (deref engine-catalog))
+                         "working-indexes" (afj-tcp-copy (deref engine-indexes))
+                         ;; A READ COMMITTED transaction without local writes
+                         ;; may advance its validation point with each fresh
+                         ;; statement. Once it stages a write, retain the
+                         ;; original point so a concurrent commit cannot be
+                         ;; silently overwritten.
+                         "base-revision"
+                         (if (= (count (get tx-state "asts")) 0)
+                           (deref afj-tcp-commit-revision)
+                           (get tx-state "base-revision"))))
+          (reset! engine-catalog global-catalog)
+          (reset! engine-indexes global-indexes)
+          (swap! afj-tcp-transactions assoc token (deref refreshed))
+          (deref refreshed))
+        (catch [error]
+          (do
+            (reset! engine-catalog global-catalog)
+            (reset! engine-indexes global-indexes)
+            (throw error)))))))
+
+(defn afj-tcp-materialize-snapshot-table [tx-state table]
+  (let [snapshot (get tx-state "snapshot")
+        snapshot-table (if (nil? snapshot) nil (get snapshot table))]
+    (if (or (nil? table)
+            (not (afj-tcp-lazy-placeholder? snapshot-table)))
+      tx-state
+      (let [global-table (get (deref engine-catalog) table)
+            fallback-rows (if (nil? global-table) []
+                            (get global-table "rows" []))
+            visible-rows (afj-tcp-versioned-rows
+                           table fallback-rows (get tx-state "base-revision"))
+            loaded (if (nil? global-table)
+                     nil
+                     (assoc global-table "rows" visible-rows))]
+        (if (nil? loaded)
+          tx-state
+          (assoc tx-state "snapshot"
+                 (assoc snapshot table loaded)))))))
+
+(defn afj-tcp-active-working-state [tx-state table]
+  (let [snapshot-state (afj-tcp-materialize-snapshot-table tx-state table)
+        working-catalog (get snapshot-state "working-catalog")
+        working-table (if (nil? table) nil (get working-catalog table))
+        snapshot-table (if (nil? table) nil
+                         (get (get snapshot-state "snapshot") table))]
+    (if (and (not (nil? table))
+             (afj-tcp-lazy-placeholder? working-table)
+             (not (nil? snapshot-table)))
+      (assoc snapshot-state "working-catalog"
+             (assoc working-catalog table snapshot-table))
+      snapshot-state)))
+
+(defn afj-tcp-execute-active [token tx-state ast]
+  (let [table (get ast "table")
+        _load (if (nil? table) true (afj-tcp-ensure-table-loaded table))
+        refreshed-state (afj-tcp-refresh-read-view token tx-state)
+        effective-state (afj-tcp-active-working-state refreshed-state table)
+        global-catalog (afj-tcp-copy (deref engine-catalog))
+        global-indexes (afj-tcp-copy (deref engine-indexes))
+        result (atom nil)]
+    (reset! engine-catalog
+            (afj-tcp-copy (get effective-state "working-catalog")))
+    (reset! engine-indexes
+            (afj-tcp-copy (get effective-state "working-indexes")))
+    (try
+      (do
+        (reset! result (execute-ast ast))
+        (swap! afj-tcp-transactions assoc token
+               (assoc effective-state
+                      "working-catalog" (afj-tcp-copy (deref engine-catalog))
+                      "working-indexes" (afj-tcp-copy (deref engine-indexes))
+                      "read-predicates"
+                      (if (afj-tcp-predicate-ast? ast)
+                        (conj (get effective-state "read-predicates") ast)
+                        (get effective-state "read-predicates"))
+                      "asts" (if (afj-tcp-mutating-ast? ast)
+                                (conj (get effective-state "asts") ast)
+                                (get effective-state "asts"))))
+        (reset! engine-catalog global-catalog)
+        (reset! engine-indexes global-indexes)
+        (deref result))
+      (catch [error]
+        (do
+          (reset! engine-catalog global-catalog)
+          (reset! engine-indexes global-indexes)
+          (throw error))))))
+
 (defn afj-tcp-execute-query [request ast]
   (let [token (get request "token")
         statement (get request "statement")
         user (get (deref afj-tcp-sessions) token)
         table (get ast "table")
+        _load (if (nil? table) true (afj-tcp-ensure-table-loaded table))
         resource (afj-tcp-resource ast)
         owner (afj-tcp-conflicting-owner token resource table)
         blocked (not (nil? owner))]
-    (if (nil? user)
+    (if (not (afj-tcp-session-active? token))
       {"ok" false "error" "AUTH_REQUIRED"}
       (let [permission (afj-tcp-permission statement)]
         (if (not (authorize user permission))
@@ -237,119 +1326,259 @@
           (let [tx-state (get (deref afj-tcp-transactions) token)
                 active (and (not (nil? tx-state))
                             (= (get tx-state "status") "active"))
-                acquired (if (and (= permission "db.write") active)
-                           (afj-tcp-lock-table token resource)
-                           true)]
-            (if (or blocked (not acquired))
-              {"ok" false "error" "TX_CONFLICT" "table" table}
-              (let [result (if (and (= permission "db.write") active)
-                             (let [applied (execute-ast ast)]
-                               (swap! afj-tcp-transactions assoc token
-                                      (assoc tx-state "asts"
-                                             (conj (get tx-state "asts") ast)))
-                               applied)
+                lock-needed (and active
+                                 (or (= permission "db.write")
+                                     (and (= permission "db.read")
+                                          (= (get tx-state "isolation-level")
+                                             "SERIALIZABLE"))))
+                lock-result (if lock-needed
+                              ;; The current lock manager is table-granular. Use
+                              ;; the table key consistently so two row writes in
+                              ;; one table cannot bypass wait/deadlock tracking.
+                              (afj-tcp-lock-table-result token table)
+                              {"ok" true})]
+            (if (or (and blocked (not active))
+                    (not (get lock-result "ok")))
+              (let [error-code (if (and blocked (not active)) "TX_CONFLICT"
+                                  (get lock-result "error"))]
+                (if (or (= error-code "DEADLOCK_DETECTED")
+                        (= error-code "LOCK_TIMEOUT"))
+                  (do
+                    ;; The requesting transaction is the deterministic victim.
+                    ;; Roll it back so staged data and every owned lock disappear.
+                    (afj-tcp-rollback token)
+                    {"ok" false "error" error-code "victim" token
+                     "status" "rolled-back" "table" table})
+                  {"ok" false "error" error-code "table" table}))
+              (let [result (if active
+                             (afj-tcp-execute-active token tx-state ast)
                              (if (= permission "db.read")
                                (execute-ast ast)
                                (let [committed (afj-tcp-commit-ast ast)]
                                  (afj-tcp-release-token token)
                                  committed)))]
+                (afj-tcp-lazy-evict table)
                 {"ok" true "result" result}))))))))
 
 (defn afj-tcp-query [request]
   (let [token (get request "token")
-        user (get (deref afj-tcp-sessions) token)]
-    (if (nil? user)
+        user (get (deref afj-tcp-sessions) token)
+        statement (get request "statement")]
+    (if (not (afj-tcp-session-active? token))
       {"ok" false "error" "AUTH_REQUIRED"}
-      (let [ast (parse-sql (get request "statement"))
-            kind (get ast "type")
-            permission (if (or (= kind "select") (= kind "use-database"))
-                         "db.read" "db.write")]
-        (if (not (authorize user permission))
-          {"ok" false "error" "PERMISSION_DENIED" "permission" permission}
-          (if (= kind "transaction")
-            (let [active (= (get (get (deref afj-tcp-transactions) token) "status") "active")
-                  op (get ast "op")]
-              (if (= op "BEGIN")
-                (do
-                  (if active (afj-tcp-commit token) nil)
-                  (afj-tcp-begin token))
-                (if active
-                  (afj-tcp-tx-request {"token" token "op" op})
-                  {"ok" true "status" (if (= op "ROLLBACK") "rolled-back" "committed")})))
-            (if (= kind "use-database")
-              (let [database (get ast "database")]
-                (if (has-key? (deref engine-databases) database)
+      (if (not (nil? (afj-tcp-sql-size-error statement)))
+        {"ok" false "error" (afj-tcp-sql-size-error statement)}
+        (let [ast (parse-sql statement)
+              kind (get ast "type")
+              permission (if (or (= kind "select") (= kind "use-database"))
+                           "db.read" "db.write")]
+          (if (not (authorize user permission))
+            {"ok" false "error" "PERMISSION_DENIED" "permission" permission}
+            (if (= kind "savepoint")
+              (let [op (get ast "op")
+                    name (get ast "name")]
+                (if (= op "SAVEPOINT")
+                  (afj-tcp-savepoint token name)
+                  (if (= op "ROLLBACK_TO")
+                    (afj-tcp-rollback-to-savepoint token name)
+                    (afj-tcp-release-savepoint token name))))
+              (if (= kind "transaction")
+              (let [active (= (get (get (deref afj-tcp-transactions) token) "status") "active")
+                    op (get ast "op")]
+                (if (= op "BEGIN")
                   (do
-                    (swap! afj-tcp-databases assoc token database)
-                    {"ok" true "database" database})
-                  {"ok" false "error" "DATABASE_NOT_FOUND"}))
-              (do
-                ;; Database DDL ends this session's active transaction.
-                (if (or (= kind "create-database") (= kind "drop-database"))
-                  (if (= (get (get (deref afj-tcp-transactions) token) "status") "active")
-                    (afj-tcp-commit token) nil)
-                  nil)
-                (let [result (afj-tcp-execute-query request
-                               (engine-scope-ast ast (get (deref afj-tcp-databases) token)))]
-                  (if (and (get result "ok") (= kind "drop-database"))
-                    (doseq [session (keys (deref afj-tcp-databases))]
-                      (if (= (get (deref afj-tcp-databases) session) (get ast "database"))
-                        (swap! afj-tcp-databases dissoc session) nil))
+                    (if active (afj-tcp-commit token) nil)
+                    (afj-tcp-begin-level token (get ast "isolation-level")))
+                  (if active
+                    (afj-tcp-tx-request {"token" token "op" op})
+                    {"ok" true "status" (if (= op "ROLLBACK") "rolled-back" "committed")})))
+              (if (= kind "use-database")
+                (let [database (get ast "database")]
+                  (if (has-key? (deref engine-databases) database)
+                    (do
+                      (swap! afj-tcp-databases assoc token database)
+                      {"ok" true "database" database})
+                    {"ok" false "error" "DATABASE_NOT_FOUND"}))
+                (do
+                  ;; Database DDL ends this session's active transaction.
+                  (if (or (= kind "create-database") (= kind "drop-database"))
+                    (if (= (get (get (deref afj-tcp-transactions) token) "status") "active")
+                      (afj-tcp-commit token) nil)
                     nil)
-                  result)))))))))
+                  (let [result (afj-tcp-execute-query request
+                                 (engine-scope-ast ast (get (deref afj-tcp-databases) token)))]
+                    (if (and (get result "ok") (= kind "drop-database"))
+                      (doseq [session (keys (deref afj-tcp-databases))]
+                        (if (= (get (deref afj-tcp-databases) session) (get ast "database"))
+                          (swap! afj-tcp-databases dissoc session) nil))
+                      nil)
+                    result)))))))))))
+
+(defn afj-tcp-sql-literal [value]
+  (if (nil? value)
+    "NULL"
+    (if (boolean? value)
+      (if value "TRUE" "FALSE")
+      (if (number? value)
+        (str value)
+        (str "'" (str-replace-in (str value) "'" "''") "'")))))
+
+(defn afj-tcp-bind-parameters-at
+  [statement index quoted parameter-index result parameters]
+  (if (>= index (count statement))
+    (if (= parameter-index (count parameters))
+      result
+      (throw "PARAMETER_COUNT_MISMATCH"))
+    (let [character (str-slice statement index (+ index 1))]
+      (if (= character "'")
+        (afj-tcp-bind-parameters-at
+          statement (+ index 1) (not quoted) parameter-index
+          (str result character) parameters)
+        (if (and (not quoted) (= character "?"))
+          (if (>= parameter-index (count parameters))
+            (throw "PARAMETER_COUNT_MISMATCH")
+            (afj-tcp-bind-parameters-at
+              statement (+ index 1) quoted (+ parameter-index 1)
+              (str result (afj-tcp-sql-literal
+                            (get parameters parameter-index)))
+              parameters))
+          (afj-tcp-bind-parameters-at
+            statement (+ index 1) quoted parameter-index
+            (str result character) parameters))))))
+
+(defn afj-tcp-bind-parameters [statement parameters]
+  (afj-tcp-bind-parameters-at statement 0 false 0 "" parameters))
+
+(defn afj-tcp-prepare [request]
+  (let [token (get request "token")
+        statement (get request "statement")]
+    (if (not (afj-tcp-session-active? token))
+      {"ok" false "error" "AUTH_REQUIRED"}
+      (if (not (nil? (afj-tcp-sql-size-error statement)))
+        {"ok" false "error" (afj-tcp-sql-size-error statement)}
+        (do
+          (parse-sql statement)
+          (prepare token statement))))))
+
+(defn afj-tcp-execute-prepared [request]
+  (let [token (get request "token")
+        statement-id (get request "statement-id")
+        prepared (get (get (deref server-state) "prepared") statement-id)]
+    (if (not (afj-tcp-session-active? token))
+      {"ok" false "error" "AUTH_REQUIRED"}
+      (if (or (nil? prepared)
+              (not (= (get prepared "owner") token)))
+        {"ok" false "error" "PREPARED_NOT_FOUND"}
+        (let [parameters (if (nil? (get request "parameters")) []
+                           (get request "parameters"))
+              statement (afj-tcp-bind-parameters
+                         (get prepared "statement") parameters)]
+          (afj-tcp-query {"token" token "statement" statement})))))
+  )
 
 (defn afj-tcp-line [conn line]
-  (let [request (try
-                  (json-parse line)
-                  (catch [error] nil))]
-    (if (nil? request)
-      (afj-tcp-send conn {"ok" false "error" "INVALID_JSON"})
+  (if (not (afj-tcp-rate-allowed? conn))
+    (afj-tcp-send conn {"ok" false "error" "RATE_LIMITED"})
+    (if (not (nil? (afj-tcp-request-size-error line)))
+    (afj-tcp-send conn {"ok" false "error" (afj-tcp-request-size-error line)})
+    (let [request (try
+                    (json-parse line)
+                    (catch [error] nil))]
+      (if (nil? request)
+        (afj-tcp-send conn {"ok" false "error" "INVALID_JSON"})
       (if (= (get request "type") "login")
-        (let [auth (authenticate (get request "user")
-                                 (get request "password"))]
-          (if (get auth "ok")
-            (let [login (server-login (get request "user"))
-                  token (get login "token")]
-              (swap! afj-tcp-sessions assoc token (get request "user"))
-              (afj-tcp-send conn {"ok" true "token" token
-                                   "user" (get request "user")}))
-            (afj-tcp-send conn {"ok" false "error" "AUTH_FAILED"})))
+        (if (not (afj-tcp-connection-auth-available? conn))
+            (afj-tcp-send conn {"ok" false "error" "SESSION_ALREADY_AUTHENTICATED"})
+            (let [requested-user (get request "user")
+                  auth (authenticate requested-user
+                                     (get request "password"))]
+              (if (>= (count (keys (deref afj-tcp-sessions))) afj-tcp-session-limit)
+                (afj-tcp-send conn {"ok" false "error" "SESSION_LIMIT"})
+                (if (get auth "ok")
+                  (let [login (server-login (get request "user"))
+                        token (get login "token")]
+                    (audit-event "login" requested-user "success")
+                (swap! afj-tcp-sessions assoc token (get request "user"))
+                (swap! afj-tcp-connection-tokens assoc conn token)
+                (swap! afj-tcp-session-expiries assoc token
+                       (+ (now_ms) afj-tcp-session-ttl-ms))
+                    (afj-tcp-send conn {"ok" true "token" token
+                                         "user" (get request "user")}))
+                  (do
+                    (audit-event "login" requested-user "failure")
+                    (afj-tcp-send conn {"ok" false "error" "AUTH_FAILED"}))))))
+        (if (= (get request "type") "prepare")
+          (try
+            (afj-tcp-send conn (afj-tcp-prepare request))
+            (catch [error]
+              (afj-tcp-send conn {"ok" false
+                                   "error" (afj-tcp-error-code error)})))
+        (if (= (get request "type") "execute")
+          (try
+            (afj-tcp-send conn (afj-tcp-execute-prepared request))
+            (catch [error]
+              (afj-tcp-send conn {"ok" false
+                                   "error" (afj-tcp-error-code error)})))
         (if (= (get request "type") "tx")
           (afj-tcp-send conn (afj-tcp-tx-request request))
           (if (= (get request "type") "query")
           (try
             (afj-tcp-send conn (afj-tcp-query request))
             (catch [error]
-              (afj-tcp-send conn {"ok" false "error" "SQL_ERROR"})))
+              (afj-tcp-send conn {"ok" false
+                                   "error" (afj-tcp-error-code error)})))
           (if (= (get request "type") "ping")
             (afj-tcp-send conn {"ok" true "type" "pong"})
             (if (= (get request "type") "health")
               (afj-tcp-send conn (afj-tcp-health))
               (if (= (get request "type") "shutdown")
                 (afj-tcp-send conn (afj-tcp-shutdown request))
-                (afj-tcp-send conn {"ok" false "error" "UNKNOWN_REQUEST"}))))))))))
+                (afj-tcp-send conn {"ok" false "error" "UNKNOWN_REQUEST"}))))))))))))))
 
-(defn afj-db-tcp-handler [event conn payload]
-  (if (= event "data")
-    (let [line (str_trim payload)]
-      (if (not (= line ""))
-        (afj-tcp-line conn line)
-        nil))
-    nil))
+(defn afj-db-tcp-handler [event conn payload peer]
+  (if (= event "connect")
+    (swap! afj-tcp-peer-addresses assoc conn peer)
+    (if (= event "data")
+    (let [combined (str (get (deref afj-tcp-buffers) conn "") payload)]
+      (afj-tcp-process-buffer conn combined))
+    (if (= event "close")
+      (do
+        (afj-tcp-close-connection conn)
+        (swap! afj-tcp-peer-addresses dissoc conn))
+      nil))))
 
 (defn start-afj-tcp []
   (do
     (afj-tcp-recover)
+    (afj-tcp-write-catalog-pages)
     (reset! afj-tcp-transactions {})
+    (reset! afj-tcp-sessions {})
+    (reset! afj-tcp-session-expiries {})
     (reset! afj-tcp-databases {})
     (reset! afj-tcp-locks {})
+    (reset! afj-tcp-wait-for {})
+    (reset! afj-tcp-wait-starts {})
+    (reset! afj-tcp-rate-state {})
+    (reset! afj-tcp-peer-addresses {})
+    (reset! afj-tcp-connection-tokens {})
+    (reset! afj-tcp-buffers {})
+    (reset! afj-tcp-buffer-starts {})
+    (reset! afj-tcp-event-loop-active true)
     (server-start "afj-db95-tcp")
-    (let [started (tcp-server-raw afj-tcp-port "afj-db-tcp-handler" afj-tcp-host)]
+    (let [started (if (and (= afj-db-mode "production")
+                          (not afj-tcp-local-host?))
+                    (tcp-server-tls afj-tcp-port "afj-db-tcp-handler"
+                                    afj-tcp-tls-cert afj-tcp-tls-key afj-tcp-host
+                                    afj-tcp-tls-ca afj-tcp-tls-require-client)
+                    (tcp-server-raw afj-tcp-port "afj-db-tcp-handler" afj-tcp-host))]
       (if (= started "ok")
-        {"ok" true "host" afj-tcp-host "port" afj-tcp-port}
+        (do
+          (set-timeout (fn [] (afj-tcp-event-drain-loop)) 0)
+          {"ok" true "host" afj-tcp-host "port" afj-tcp-port})
         {"ok" false "error" "TCP_START_FAILED" "detail" started}))))
 
 (defn stop-afj-tcp []
   (do
+    (reset! afj-tcp-event-loop-active false)
     (tcp-server-stop afj-tcp-port)
     (server-stop)))

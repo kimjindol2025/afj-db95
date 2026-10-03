@@ -1,0 +1,136 @@
+;; AFJ-014 range predicate / phantom validation.
+(load "/root/kilo-freelang/projects/afj-db95/src/tcp-server.fls")
+
+(server-start "tcp-range-predicate-test")
+(reset! engine-catalog {})
+(reset! engine-indexes {})
+(reset! afj-tcp-commit-revision 0)
+(reset! afj-tcp-table-revisions {})
+(reset! afj-tcp-row-versions {})
+(reset! afj-tcp-sessions {"range-reader" "root" "range-writer" "root"})
+(reset! afj-tcp-session-expiries {})
+(reset! afj-tcp-transactions {})
+(reset! afj-tcp-locks {})
+(reset! afj-tcp-wait-for {})
+(reset! afj-tcp-wait-starts {})
+
+(afj-tcp-commit-ast
+  {"type" "create-table" "table" "range_users"
+   "schema" {"columns" [{"name" "id" "type" "INTEGER"
+                            "nullable" false "primary" true}]
+              "primary-key" "id" "unique-columns" []}})
+(afj-tcp-commit-ast
+  {"type" "create-table" "table" "range_markers"
+   "schema" {"columns" [{"name" "id" "type" "INTEGER"
+                            "nullable" false "primary" true}]
+              "primary-key" "id" "unique-columns" []}})
+(afj-tcp-commit-ast
+  {"type" "insert" "table" "range_users"
+   "rows" [{"id" "5"} {"id" "15"}]})
+
+(let [parsed (parse-sql "SELECT * FROM range_users WHERE id > 10")
+      direct (execute-ast parsed)
+      ge (execute-ast (parse-sql "SELECT * FROM range_users WHERE id >= 10"))
+      lt (execute-ast (parse-sql "SELECT * FROM range_users WHERE id < 10"))
+      le (execute-ast (parse-sql "SELECT * FROM range_users WHERE id <= 10"))
+      ne (execute-ast (parse-sql "SELECT * FROM range_users WHERE id != 10"))
+      alt-ne (execute-ast (parse-sql "SELECT * FROM range_users WHERE id <> 10"))]
+  (if (and (= (get (get parsed "where") "operator") ">")
+           (= (get (get parsed "where") "value") "10")
+           (= (get direct "plan") "index-range-scan")
+           (= (count (get direct "rows")) 1)
+           (= (count (get ge "rows")) 1)
+           (= (count (get lt "rows")) 1)
+           (= (count (get le "rows")) 1)
+           (= (count (get ne "rows")) 2)
+           (= (count (get alt-ne "rows")) 2))
+    nil
+    (throw "range predicate parser failed")))
+
+(afj-tcp-begin-level "range-reader" "REPEATABLE READ")
+(afj-tcp-begin-level "range-writer" "REPEATABLE READ")
+(let [first-read (afj-tcp-query
+                   {"token" "range-reader"
+                    "statement" "SELECT * FROM range_users WHERE id > 10"})
+      writer-insert (afj-tcp-query
+                      {"token" "range-writer"
+                       "statement" "INSERT INTO range_users (id) VALUES (20)"})]
+  (if (and (get first-read "ok")
+           (= (count (get (get first-read "result") "rows")) 1)
+           (get writer-insert "ok"))
+    nil
+    (throw "range predicate initial read failed")))
+(afj-tcp-commit "range-writer")
+(let [second-read (afj-tcp-query
+                    {"token" "range-reader"
+                     "statement" "SELECT * FROM range_users WHERE id > 10"})]
+  (if (= (count (get (get second-read "result") "rows")) 1)
+    nil
+    (throw "repeatable-read range phantom became visible")))
+(afj-tcp-query {"token" "range-reader"
+                "statement" "INSERT INTO range_markers (id) VALUES (1)"})
+(let [stale-commit (afj-tcp-commit "range-reader")]
+  (if (and (not (get stale-commit "ok"))
+           (= (get stale-commit "error") "TX_CONFLICT"))
+    (println "afj-db95 TCP range predicate conflict PASS")
+    (throw "range predicate conflict validation failed")))
+
+;; A write outside the observed range must not create a false-positive
+;; conflict when the row-version chain can prove it is irrelevant.
+(reset! afj-tcp-sessions
+        (assoc (deref afj-tcp-sessions)
+               "range-reader-out" "root"
+               "range-writer-out" "root"))
+(afj-tcp-begin-level "range-reader-out" "REPEATABLE READ")
+(afj-tcp-begin-level "range-writer-out" "REPEATABLE READ")
+(afj-tcp-query {"token" "range-reader-out"
+                "statement" "SELECT * FROM range_users WHERE id > 10"})
+(afj-tcp-query {"token" "range-writer-out"
+                "statement" "INSERT INTO range_users (id) VALUES (1)"})
+(let [outside-write (afj-tcp-commit "range-writer-out")]
+  (if (get outside-write "ok")
+    nil
+    (throw "range outside-write setup failed")))
+(afj-tcp-query {"token" "range-reader-out"
+                "statement" "INSERT INTO range_markers (id) VALUES (3)"})
+(let [outside-commit (afj-tcp-commit "range-reader-out")]
+  (if (get outside-commit "ok")
+    (println "afj-db95 TCP granular range validation PASS")
+    (throw "range outside predicate was falsely conflicted")))
+
+;; Updates that move or rewrite a row in the observed range are conflicts.
+(reset! afj-tcp-sessions
+        (assoc (deref afj-tcp-sessions)
+               "range-reader-update" "root"
+               "range-writer-update" "root"
+               "range-reader-delete" "root"
+               "range-writer-delete" "root"))
+(afj-tcp-begin-level "range-reader-update" "REPEATABLE READ")
+(afj-tcp-begin-level "range-writer-update" "REPEATABLE READ")
+(afj-tcp-query {"token" "range-reader-update"
+                "statement" "SELECT * FROM range_users WHERE id > 10"})
+(afj-tcp-query {"token" "range-writer-update"
+                "statement" "UPDATE range_users SET id=21 WHERE id=20"})
+(afj-tcp-commit "range-writer-update")
+(afj-tcp-query {"token" "range-reader-update"
+                "statement" "INSERT INTO range_markers (id) VALUES (4)"})
+(let [update-conflict (afj-tcp-commit "range-reader-update")]
+  (if (and (not (get update-conflict "ok"))
+           (= (get update-conflict "error") "TX_CONFLICT"))
+    nil
+    (throw "range update conflict was not detected")))
+
+(afj-tcp-begin-level "range-reader-delete" "REPEATABLE READ")
+(afj-tcp-begin-level "range-writer-delete" "REPEATABLE READ")
+(afj-tcp-query {"token" "range-reader-delete"
+                "statement" "SELECT * FROM range_users WHERE id > 10"})
+(afj-tcp-query {"token" "range-writer-delete"
+                "statement" "DELETE FROM range_users WHERE id=15"})
+(afj-tcp-commit "range-writer-delete")
+(afj-tcp-query {"token" "range-reader-delete"
+                "statement" "INSERT INTO range_markers (id) VALUES (5)"})
+(let [delete-conflict (afj-tcp-commit "range-reader-delete")]
+  (if (and (not (get delete-conflict "ok"))
+           (= (get delete-conflict "error") "TX_CONFLICT"))
+    (println "afj-db95 TCP granular range update/delete PASS")
+    (throw "range delete conflict was not detected")))

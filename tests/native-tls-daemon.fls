@@ -1,0 +1,22 @@
+;; Native FreeLang runtime TLS listener harness.
+(defn native-tls-echo-handler [event conn payload peer]
+  (if (= event "data")
+    (tcp-write conn payload)
+    nil))
+
+(let [raw-port (env-get "AFJ_NATIVE_TLS_PORT")
+      port (str-to-num raw-port)
+      cert (env-get "AFJ_NATIVE_TLS_CERT")
+      key (env-get "AFJ_NATIVE_TLS_KEY")
+      host (env-or "AFJ_NATIVE_TLS_HOST" "127.0.0.1")
+      started (tcp-server-tls port "native-tls-echo-handler" cert key host)]
+  (if (= started "ok")
+    (do
+      (println "afj-db95 native TLS STARTED")
+      (set-timeout
+        (fn []
+          (do
+            (tcp-server-stop port)
+            (println "afj-db95 native TLS STOPPED")))
+        30000))
+    (throw (str "native TLS start failed: " started))))

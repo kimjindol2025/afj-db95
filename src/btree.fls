@@ -38,25 +38,99 @@
 (defn btree-root [entries]
   {"leaf" true "entries" entries})
 
-(defn btree-root-insert [root entry max-entries]
-  (if (get root "leaf")
-    (let [entries (arr_sort_by (conj (get root "entries") entry) "key")]
+(defn btree-node-first-key [node]
+  (if (get node "leaf")
+    (get (first (get node "entries")) "key")
+    (btree-node-first-key (first (get node "children")))))
+
+(defn btree-node-separators [children]
+  (map (fn [child] (btree-node-first-key child)) (rest children)))
+
+(defn btree-child-index [separators key index]
+  (if (>= index (count separators))
+    index
+    (if (< key (get separators index))
+      index
+      (btree-child-index separators key (+ index 1)))))
+
+(defn btree-replace-at [items index value]
+  (if (= index 0)
+    (append [value] (rest items))
+    (append [(first items)]
+            (btree-replace-at (rest items) (- index 1) value))))
+
+(defn btree-insert-at [items index value]
+  (if (= index 0)
+    (append [value] items)
+    (append [(first items)]
+            (btree-insert-at (rest items) (- index 1) value))))
+
+(defn btree-split-children [children]
+  (let [middle (floor (/ (count children) 2))
+        left (take middle children)
+        right (drop middle children)
+        left-separators (btree-node-separators left)
+        right-separators (btree-node-separators right)]
+    {"left" {"leaf" false
+              "separators" left-separators
+              "children" left}
+     "right" {"leaf" false
+               "separators" right-separators
+               "children" right}
+     "separator" (btree-node-first-key (first right))}))
+
+(defn btree-insert-node [node entry max-entries]
+  (if (get node "leaf")
+    (let [entries (arr_sort_by (conj (get node "entries") entry) "key")]
       (if (<= (count entries) max-entries)
-        {"leaf" true "entries" entries}
+        {"split" false "node" {"leaf" true "entries" entries}}
         (let [split (btree-split-leaf entries)]
-          {"leaf" false
-           "separator" (get split "separator")
-           "children" [{"leaf" true "entries" (get split "left")}
-                        {"leaf" true "entries" (get split "right")}]})))
-    root))
+          {"split" true
+           "left" {"leaf" true "entries" (get split "left")}
+           "right" {"leaf" true "entries" (get split "right")}
+           "separator" (get split "separator")})))
+    (let [separators (get node "separators" [])
+          children (get node "children" [])
+          index (btree-child-index separators (get entry "key") 0)
+          child-result (btree-insert-node (get children index) entry max-entries)]
+      (if (not (get child-result "split"))
+        (let [updated-children
+                (btree-replace-at children index (get child-result "node"))
+              next-separators (btree-node-separators updated-children)]
+          {"split" false
+           "node" {"leaf" false
+                    "separators" next-separators
+                    "children" updated-children}})
+        (let [with-left (btree-replace-at children index (get child-result "left"))
+              with-right (btree-insert-at with-left (+ index 1)
+                                           (get child-result "right"))
+              next-separators (btree-node-separators with-right)]
+          (if (<= (count with-right) max-entries)
+            {"split" false
+             "node" {"leaf" false
+                      "separators" next-separators
+                      "children" with-right}}
+            (let [split (btree-split-children with-right)]
+              {"split" true
+               "left" (get split "left")
+               "right" (get split "right")
+               "separator" (get split "separator")})))))))
+
+(defn btree-root-insert [root entry max-entries]
+  (let [result (btree-insert-node root entry max-entries)]
+    (if (not (get result "split"))
+      (get result "node")
+      {"leaf" false
+       "separators" [(get result "separator")]
+       "children" [(get result "left") (get result "right")] })))
 
 (defn btree-root-get [root key]
   (if (get root "leaf")
     (btree-get (get root "entries") key)
-    (let [separator (get root "separator")
-          children (get root "children")
-          child (if (< key separator) (first children) (last children))]
-      (btree-get (get child "entries") key))))
+    (let [separators (get root "separators" [])
+          children (get root "children" [])
+          index (btree-child-index separators key 0)]
+      (btree-root-get (get children index) key))))
 
 (let [tree (btree-put (btree-put (btree-empty) 20 2) 10 1)]
   (if (and (= (get (first tree) "key") 10)
@@ -88,3 +162,17 @@
            (= (get (btree-root-get split 30) 0) 3))
     (println "afj-db95 btree root/leaf PASS")
     (throw "btree root split failure")))
+
+(let [tree (loop [index 0 value (btree-root [])]
+             (if (>= index 20)
+               value
+               (do
+                 (recur (+ index 1)
+                        (btree-root-insert value
+                                           {"key" index "row-id" index} 3))))) ]
+  (if (and (= (btree-root-get tree 0) [0])
+           (= (btree-root-get tree 7) [7])
+           (= (btree-root-get tree 19) [19])
+           (not (get tree "leaf")))
+    (println "afj-db95 btree recursive split PASS")
+    (throw "btree recursive split lookup failure")))

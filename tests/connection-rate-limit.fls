@@ -1,0 +1,9 @@
+;; Connection-level request rate limit contract.
+(load "/root/kilo-freelang/projects/afj-db95/src/tcp-server.fls")
+
+(if (and (afj-tcp-rate-allowed? "conn-test")
+         (afj-tcp-rate-allowed? "conn-test")
+         (not (afj-tcp-rate-allowed? "conn-test"))
+         (afj-tcp-rate-allowed? "other-connection"))
+  (println "afj-db95 connection rate limit PASS")
+  (throw "connection rate limit contract failure"))

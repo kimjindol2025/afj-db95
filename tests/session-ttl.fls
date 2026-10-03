@@ -1,0 +1,17 @@
+;; Session TTL is enforced at request time and cleans all session state.
+(load "/root/kilo-freelang/projects/afj-db95/src/tcp-server.fls")
+
+(server-start "session-ttl-test")
+(reset! afj-tcp-sessions {"ttl-token" "root"})
+(reset! afj-tcp-session-expiries
+        {"ttl-token" (+ (now_ms) 1000)})
+(reset! afj-tcp-transactions {})
+(reset! afj-tcp-locks {})
+(sleep_ms 1200)
+(let [expired (afj-tcp-query {"token" "ttl-token"
+                              "statement" "SELECT * FROM users"})]
+  (if (and (= (get expired "error") "AUTH_REQUIRED")
+           (nil? (get (deref afj-tcp-sessions) "ttl-token"))
+           (nil? (get (deref afj-tcp-session-expiries) "ttl-token")))
+    (println "afj-db95 session TTL PASS")
+    (throw "session TTL cleanup failure")))

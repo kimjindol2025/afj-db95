@@ -11,24 +11,396 @@
     (file_copy backup destination)))
 
 (defn backup-manifest [source]
-  {"source" source
-   "size" (file_size source)
-   "modified" (file_mtime source)
-   "checksum" (sha256 (file_read source))})
+  (if (not (file_exists source))
+    (throw (str "manifest source missing: " source))
+    nil)
+  (let [size (file_size source)
+        modified (file_mtime source)
+        checksum (sha256 (file_read source))]
+    {"source" source "size" size "modified" modified "checksum" checksum}))
+
+(defn backup-bundle [source destination]
+  (backup-file source destination)
+  (let [manifest-path (str destination ".manifest")
+        manifest (backup-manifest destination)]
+    (file_write manifest-path (json_str manifest))
+    {"data" destination "manifest" manifest-path}))
+
+(defn backup-manifest-core [manifest]
+  (let [base {"version" (get manifest "version")
+              "files" (get manifest "files")}
+        kind (get manifest "kind")]
+    (if (nil? kind)
+      base
+      (assoc base "kind" kind))))
+
+(defn backup-manifest-with-integrity [manifest]
+  (let [core (backup-manifest-core manifest)]
+    (assoc core "integrity" (sha256 (json_str core)))))
+
+(defn backup-set [entries manifest-path]
+  (let [records (map (fn [entry]
+                       (let [source (get entry "source")
+                             backup (get entry "backup")
+                             destination (get entry "destination")]
+                         (if (or (nil? source) (nil? backup) (nil? destination))
+                           (throw "BACKUP_ENTRY_INVALID")
+                           nil)
+                         (if (not (file_exists source))
+                           (throw "BACKUP_SOURCE_MISSING")
+                           nil)
+                         (let [source-size (file_size source)
+                               source-checksum (sha256 (file_read source))]
+                         (backup-file source backup)
+                         (if (or (not (= source-size (file_size backup)))
+                                 (not (= source-checksum (sha256 (file_read backup)))))
+                           (throw "BACKUP_SOURCE_CHANGED")
+                           nil)
+                         {"source" source
+                          "backup" backup
+                          "destination" destination
+                          "source-size" source-size
+                          "source-checksum" source-checksum
+                          "backup-size" (file_size backup)
+                          "backup-checksum" (sha256 (file_read backup))})))
+                     entries)
+        manifest (backup-manifest-with-integrity
+                   {"version" 2 "files" records})]
+    (file_write manifest-path (json_str manifest))
+    manifest-path))
+
+(defn restore-set-verified [manifest-path]
+  (if (not (file_exists manifest-path))
+    (throw "BACKUP_SET_MANIFEST_MISSING")
+    (let [manifest (json-parse (file_read manifest-path))
+          records (if (nil? manifest) nil (get manifest "files"))
+          expected-integrity (if (nil? manifest) nil
+                               (get manifest "integrity"))
+          actual-integrity (if (nil? manifest) nil
+                             (sha256 (json_str (backup-manifest-core manifest))))]
+      (if (or (not (= (get manifest "version") 2)) (nil? records)
+              (nil? expected-integrity)
+              (not (= expected-integrity actual-integrity)))
+        (throw "BACKUP_SET_MANIFEST_INVALID")
+        (do
+          (doseq [record records]
+            (let [backup (get record "backup")
+                  destination (get record "destination")
+                  expected (get record "backup-checksum")
+                  expected-size (get record "backup-size")]
+              (if (or (nil? backup) (nil? destination) (nil? expected)
+                      (nil? expected-size)
+                      (not (file_exists backup))
+                      (not (= expected-size (file_size backup)))
+                      (not (= expected (sha256 (file_read backup)))))
+                (throw "BACKUP_SET_CHECKSUM_MISMATCH")
+                nil)
+              (restore-file backup destination)
+              (if (= expected (sha256 (file_read destination)))
+                nil
+                (throw "BACKUP_SET_RESTORE_MISMATCH"))))
+          (count records))))))
+
+(defn backup-live-state-set [catalog indexes wal-path paths]
+  ;; Callers provide one in-memory catalog/index snapshot and a WAL path. The
+  ;; catalog and index snapshots are serialized before backup-set captures all
+  ;; three files under the same manifest/checksum contract.
+  (let [catalog-source (get paths "catalog-source")
+        index-source (get paths "index-source")
+        manifest-path (get paths "manifest")]
+    (if (or (nil? catalog-source) (nil? index-source)
+            (nil? wal-path) (nil? manifest-path))
+      (throw "BACKUP_LIVE_PATHS_INVALID")
+      (do
+        (file_write catalog-source (json_str catalog))
+        (file_write index-source (json_str indexes))
+        (backup-set
+          [{"source" catalog-source
+            "backup" (get paths "catalog-backup")
+            "destination" (get paths "catalog-destination")}
+           {"source" index-source
+            "backup" (get paths "index-backup")
+            "destination" (get paths "index-destination")}
+           {"source" wal-path
+            "backup" (get paths "wal-backup")
+            "destination" (get paths "wal-destination")}]
+          manifest-path)
+        (let [manifest (json-parse (file_read manifest-path))
+              live-manifest (backup-manifest-with-integrity
+                              (assoc manifest "kind" "afj-db95-live-state"))]
+          (file_write manifest-path (json_str live-manifest))
+          manifest-path)))))
+
+;; A checksum proves bytes were copied. This validator additionally proves that
+;; restored index buckets point to existing rows with matching indexed values.
+(defn backup-index-entries-valid? [rows column key-token row-ids index]
+  (if (>= index (count row-ids))
+    true
+    (let [row-id (get row-ids index)
+          row (if (and (number? row-id) (>= row-id 0)
+                       (< row-id (count rows)))
+                (get rows row-id)
+                nil)]
+      (and (not (nil? row))
+           (= (str (get row column)) key-token)
+           (backup-index-entries-valid? rows column key-token row-ids
+                                        (+ index 1))))))
+
+(defn backup-index-buckets-valid? [rows column buckets bucket-keys index]
+  (if (>= index (count bucket-keys))
+    true
+    (let [key-token (get bucket-keys index)
+          row-ids (get buckets key-token)]
+      (if (nil? row-ids)
+        false
+        (if (not (backup-index-entries-valid? rows column key-token row-ids 0))
+          false
+          (backup-index-buckets-valid? rows column buckets bucket-keys
+                                       (+ index 1)))))))
+
+(defn backup-indexes-consistent? [catalog indexes index-keys index]
+  (if (>= index (count index-keys))
+    true
+    (let [index-key (get index-keys index)
+          descriptor (get indexes index-key)
+          table-name (if (nil? descriptor) nil (get descriptor "table"))
+          column (if (nil? descriptor) nil (get descriptor "column"))
+          buckets (if (nil? descriptor) nil (get descriptor "buckets"))
+          table (if (nil? table-name) nil (get catalog table-name))]
+      (if (or (nil? table) (nil? column) (nil? buckets))
+        false
+        (if (not (backup-index-buckets-valid? (get table "rows") column buckets
+                                             (keys buckets) 0))
+          false
+          (backup-indexes-consistent? catalog indexes index-keys
+                                      (+ index 1)))))))
+
+(defn backup-validate-state-consistency [catalog indexes wal-path]
+  (if (or (nil? catalog) (nil? indexes) (nil? wal-path)
+          (not (file_exists wal-path))
+          (<= (file_size wal-path) 0)
+          (= (count (keys catalog)) 0)
+          (= (count (keys indexes)) 0)
+          (not (backup-indexes-consistent? catalog indexes
+                                            (keys indexes) 0)))
+    (throw "BACKUP_STATE_INCONSISTENT")
+    true))
+
+(defn restore-file-verified [backup manifest-path destination]
+  (if (not (file_exists manifest-path))
+    (throw (str "backup manifest missing: " manifest-path))
+    (let [manifest (json-parse (file_read manifest-path))
+          expected (get manifest "checksum")
+          actual (sha256 (file_read backup))]
+      (if (or (nil? expected) (not (= expected actual)))
+        (throw "BACKUP_CHECKSUM_MISMATCH")
+        (do
+          (restore-file backup destination)
+          (if (= expected (sha256 (file_read destination)))
+            destination
+            (throw "RESTORE_CHECKSUM_MISMATCH")))))))
 
 (defn backup-smoke-test []
   (let [source "/tmp/afj-db95-backup-source"
         copy "/tmp/afj-db95-backup-copy"
-        restored "/tmp/afj-db95-backup-restored"]
+        restored "/tmp/afj-db95-backup-restored"
+        manifest "/tmp/afj-db95-backup-copy.manifest"]
     (file_write source "afj-db95 backup payload")
-    (backup-file source copy)
-    (restore-file copy restored)
+    (backup-bundle source copy)
+    (restore-file-verified copy manifest restored)
     (if (= (get (backup-manifest source) "checksum")
            (get (backup-manifest restored) "checksum"))
       (println "afj-db95 backup PASS")
       (throw "backup checksum failure"))
+    (file_write manifest (json_str {"checksum" "corrupt"}))
+    (try
+      (do
+        (restore-file-verified copy manifest restored)
+        (throw "corrupt manifest was accepted"))
+      (catch [error]
+        (if (= (error_message error) "BACKUP_CHECKSUM_MISMATCH")
+          (println "afj-db95 backup corruption PASS")
+          (throw error))))
     (file_delete source)
     (file_delete copy)
-    (file_delete restored)))
+    (file_delete restored)
+    (file_delete manifest)))
+
+(defn backup-set-smoke-test []
+  (let [catalog "/tmp/afj-db95-backup-catalog"
+        wal "/tmp/afj-db95-backup-wal"
+        catalog-copy "/tmp/afj-db95-backup-catalog.copy"
+        wal-copy "/tmp/afj-db95-backup-wal.copy"
+        catalog-restored "/tmp/afj-db95-backup-catalog.restored"
+        wal-restored "/tmp/afj-db95-backup-wal.restored"
+        manifest "/tmp/afj-db95-backup-set.manifest"]
+    (file_write catalog "catalog-v1")
+    (file_write wal "wal-v1")
+    (backup-set [{"source" catalog "backup" catalog-copy
+                  "destination" catalog-restored}
+                 {"source" wal "backup" wal-copy
+                  "destination" wal-restored}]
+                manifest)
+    (let [saved (json-parse (file_read manifest))
+          first-record (first (get saved "files"))]
+      (if (and (= (get saved "version") 2)
+               (not (nil? (get first-record "source-checksum")))
+               (not (nil? (get first-record "backup-checksum")))
+               (not (nil? (get saved "integrity"))))
+        nil
+        (throw "backup manifest integrity fields missing")))
+    (if (= 2 (restore-set-verified manifest))
+      nil
+      (throw "backup set count failure"))
+    (if (and (= (file_read catalog) (file_read catalog-restored))
+             (= (file_read wal) (file_read wal-restored)))
+      (println "afj-db95 backup set PASS")
+      (throw "backup set restore failure"))
+    (let [saved (json-parse (file_read manifest))]
+      (file_write manifest
+                  (json_str (assoc saved "integrity" "corrupt")))
+      (try
+        (do
+          (restore-set-verified manifest)
+          (throw "corrupt backup manifest was accepted"))
+        (catch [error]
+          (if (= (error_message error) "BACKUP_SET_MANIFEST_INVALID")
+            (println "afj-db95 backup manifest corruption PASS")
+            (throw error))))
+      (file_write manifest (json_str saved)))
+    (file_write wal-copy "corrupt")
+    (try
+      (do
+        (restore-set-verified manifest)
+        (throw "corrupt backup set was accepted"))
+      (catch [error]
+        (if (= (error_message error) "BACKUP_SET_CHECKSUM_MISMATCH")
+          (println "afj-db95 backup set corruption PASS")
+          (throw error))))
+    (doseq [path [catalog wal catalog-copy wal-copy catalog-restored
+                  wal-restored manifest]]
+      (if (file_exists path) (file_delete path) nil))))
+
+(defn backup-live-state-smoke-test []
+  (let [catalog-source "/tmp/afj-db95-live-catalog"
+        index-source "/tmp/afj-db95-live-index"
+        wal-source "/tmp/afj-db95-live-wal"
+        catalog-backup "/tmp/afj-db95-live-catalog.copy"
+        index-backup "/tmp/afj-db95-live-index.copy"
+        wal-backup "/tmp/afj-db95-live-wal.copy"
+        catalog-destination "/tmp/afj-db95-live-catalog.restored"
+        index-destination "/tmp/afj-db95-live-index.restored"
+        wal-destination "/tmp/afj-db95-live-wal.restored"
+        manifest "/tmp/afj-db95-live.manifest"
+        paths {"catalog-source" catalog-source
+               "index-source" index-source
+               "catalog-backup" catalog-backup
+               "index-backup" index-backup
+               "wal-backup" wal-backup
+               "catalog-destination" catalog-destination
+               "index-destination" index-destination
+               "wal-destination" wal-destination
+               "manifest" manifest}]
+    (file_write wal-source "wal-live-v1")
+    (backup-live-state-set {"users" {"rows" [{"id" 1}]}}
+                           {"users.id" {"table" "users" "column" "id"
+                                         "buckets" {"1" [0]}}}
+                           wal-source paths)
+    (let [saved (json-parse (file_read manifest))]
+      (if (and (= (get saved "version") 2)
+               (= (get saved "kind") "afj-db95-live-state")
+               (= (count (get saved "files")) 3)
+               (not (nil? (get saved "integrity"))))
+        nil
+        (throw "live backup manifest missing state files")))
+    (if (= (restore-set-verified manifest) 3)
+      nil
+      (throw "live backup restore count failure"))
+    (if (and (= (file_read catalog-source) (file_read catalog-destination))
+             (= (file_read index-source) (file_read index-destination))
+             (= (file_read wal-source) (file_read wal-destination)))
+      (do
+        (backup-validate-state-consistency
+          (json-parse (file_read catalog-destination))
+          (json-parse (file_read index-destination))
+          wal-destination)
+        (println "afj-db95 live backup state PASS")
+        (file_write index-destination
+                    (json_str {"users.id" {"table" "users"
+                                            "column" "id"
+                                            "buckets" {"1" [9]}}}))
+        (try
+          (do
+            (backup-validate-state-consistency
+              (json-parse (file_read catalog-destination))
+              (json-parse (file_read index-destination))
+              wal-destination)
+            (throw "inconsistent restored index was accepted"))
+          (catch [error]
+            (if (= (error_message error) "BACKUP_STATE_INCONSISTENT")
+              (println "afj-db95 live backup consistency PASS")
+              (throw error)))))
+      (throw "live backup state restore mismatch"))
+    (doseq [path [catalog-source index-source wal-source catalog-backup
+                  index-backup wal-backup catalog-destination index-destination
+                  wal-destination manifest]]
+      (if (file_exists path) (file_delete path) nil))))
+
+(defn backup-empty-partial-smoke-test []
+  (let [empty-source "/tmp/afj-db95-empty-source"
+        empty-backup "/tmp/afj-db95-empty-backup"
+        empty-destination "/tmp/afj-db95-empty-restored"
+        partial-source "/tmp/afj-db95-partial-source"
+        partial-backup "/tmp/afj-db95-partial-backup"
+        partial-destination "/tmp/afj-db95-partial-restored"
+        manifest "/tmp/afj-db95-empty-partial.manifest"]
+    (file_write empty-source "")
+    (file_write partial-source "partial-v1")
+    (backup-set [{"source" empty-source "backup" empty-backup
+                  "destination" empty-destination}
+                 {"source" partial-source "backup" partial-backup
+                  "destination" partial-destination}]
+                manifest)
+    (if (= (restore-set-verified manifest) 2)
+      (println "afj-db95 empty backup PASS")
+      (throw "empty backup restore failure"))
+    (file_delete partial-backup)
+    (try
+      (do
+        (restore-set-verified manifest)
+        (throw "partial backup was accepted"))
+      (catch [error]
+        (if (= (error_message error) "BACKUP_SET_CHECKSUM_MISMATCH")
+          (println "afj-db95 partial backup PASS")
+          (throw error))))
+    (doseq [path [empty-source empty-backup empty-destination partial-source
+                  partial-backup partial-destination manifest]]
+      (if (file_exists path) (file_delete path) nil))))
+
+(defn backup-large-smoke-test []
+  (let [source "/tmp/afj-db95-large-source"
+        backup "/tmp/afj-db95-large-backup"
+        destination "/tmp/afj-db95-large-restored"
+        manifest "/tmp/afj-db95-large.manifest"
+        payload (str_join (repeat 2097152 "L") "")]
+    (file_write source payload)
+    (backup-set [{"source" source "backup" backup
+                  "destination" destination}]
+                manifest)
+    (if (= (restore-set-verified manifest) 1)
+      nil
+      (throw "large backup restore count failure"))
+    (if (and (= (file_size source) 2097152)
+             (= (file_size destination) 2097152)
+             (= (sha256 (file_read source))
+                (sha256 (file_read destination))))
+      (println "afj-db95 large backup PASS")
+      (throw "large backup checksum failure"))
+    (doseq [path [source backup destination manifest]]
+      (if (file_exists path) (file_delete path) nil))))
 
 (backup-smoke-test)
+(backup-set-smoke-test)
+(backup-live-state-smoke-test)
+(backup-empty-partial-smoke-test)
+(backup-large-smoke-test)

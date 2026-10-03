@@ -1,0 +1,88 @@
+;; TCP WAL envelope format contract.
+(load "/root/kilo-freelang/projects/afj-db95/src/tcp-server.fls")
+
+(if (file_exists afj-tcp-wal) (file_delete afj-tcp-wal) nil)
+
+(defn assert-format [label expected actual]
+  (if (= expected actual)
+    (println (str "PASS " label))
+    (throw (str "FAIL " label))))
+
+(afj-tcp-record-asts [{"type" "test-event"}])
+(let [lines (filter (fn [line] (not (= (str_trim line) "")))
+                    (str_lines (file_read afj-tcp-wal)))
+      prepare (json-parse (first lines))
+      commit (json-parse (get lines 1))
+      body (get prepare "body")
+      body-length (count (json_str body))]
+  (assert-format "WAL version" 1 (get body "version"))
+  (assert-format "prepare version" 1 (get prepare "version"))
+  (assert-format "commit version" 1 (get commit "version"))
+  (assert-format "prepare length" body-length (get prepare "length"))
+  (assert-format "commit length" body-length (get commit "length"))
+  (assert-format "prepare checksum" (sha256 (json_str body))
+                 (get prepare "checksum"))
+  (assert-format "commit checksum" (sha256 (json_str body))
+                 (get commit "checksum")))
+
+(println "afj-db95 WAL format PASS")
+
+;; Recovery must publish only prepare+commit pairs and tolerate a torn final
+;; fragment without accepting corruption in the middle of the WAL.
+(if (file_exists afj-tcp-wal) (file_delete afj-tcp-wal) nil)
+(afj-tcp-record-asts
+ [{"type" "create-table" "table" "recovery_users"
+   "schema" {"columns" [{"name" "id" "type" "INTEGER"
+                            "nullable" false "primary" true}
+                           {"name" "name" "type" "TEXT"
+                            "nullable" true}]
+              "primary-key" "id" "unique-columns" []}}
+  {"type" "insert" "table" "recovery_users"
+   "row" {"id" 1 "name" "durable"}}])
+(reset! engine-catalog {})
+(reset! engine-indexes {})
+(reset! engine-databases {})
+(afj-tcp-recover)
+(let [recovered (get (deref engine-catalog) "recovery_users")]
+  (if (= (count (get recovered "rows")) 1)
+    (println "afj-db95 WAL restart recovery PASS")
+    (throw "committed WAL was not recovered")))
+(file_append afj-tcp-wal "{\"type\":\"commit\"")
+(reset! engine-catalog {})
+(reset! engine-indexes {})
+(reset! engine-databases {})
+(afj-tcp-recover)
+(if (= (count (get (get (deref engine-catalog) "recovery_users") "rows")) 1)
+  (println "afj-db95 WAL torn-tail PASS")
+  (throw "torn WAL tail changed recovered data"))
+(file_write afj-tcp-wal "not-json\n")
+(try
+  (do
+    (afj-tcp-recover)
+    (throw "middle WAL corruption was accepted"))
+  (catch [error]
+    (if (= (error_message error) "WAL_CORRUPT")
+      (println "afj-db95 WAL corruption rejection PASS")
+      (throw error))))
+
+;; A process kill after prepare but before commit must not publish the staged
+;; transaction during restart recovery.
+(if (file_exists afj-tcp-wal) (file_delete afj-tcp-wal) nil)
+(let [tx (uuid_short)
+      body {"version" 1
+            "asts" [{"type" "create-table" "table" "prepared_only_users"
+                     "schema" {"columns" [{"name" "id" "type" "INTEGER"
+                                               "nullable" false "primary" true}]
+                                "primary-key" "id" "unique-columns" []}}]}
+      encoded (json_str body)]
+  (afj-tcp-wal-append {"type" "prepare" "tx" tx
+                        "version" 1 "length" (count encoded)
+                        "body" body "checksum" (sha256 encoded)})
+  (reset! engine-catalog {})
+  (reset! engine-indexes {})
+  (reset! engine-databases {})
+  (afj-tcp-recover)
+  (if (nil? (get (deref engine-catalog) "prepared_only_users"))
+    (println "afj-db95 WAL uncommitted recovery PASS")
+    (throw "uncommitted WAL transaction was published")))
+(if (file_exists afj-tcp-wal) (file_delete afj-tcp-wal) nil)

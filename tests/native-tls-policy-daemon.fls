@@ -1,0 +1,32 @@
+;; Native TLS mTLS and certificate reload control daemon.
+(defn native-tls-policy-handler [event conn payload peer]
+  (if (= event "data")
+    (if (= payload "reload\n")
+      (tcp-write conn
+                 (str "RELOAD:" (tcp-server-tls-reload
+                                   (str-to-num (env-get "AFJ_NATIVE_TLS_PORT"))
+                                   (env-get "AFJ_NATIVE_TLS_CERT")
+                                   (env-get "AFJ_NATIVE_TLS_KEY")
+                                   (env-get "AFJ_NATIVE_TLS_CA") true) "\n"))
+      (if (= payload "reload-bad\n")
+        (tcp-write conn
+                   (str "BAD:" (tcp-server-tls-reload
+                                  (str-to-num (env-get "AFJ_NATIVE_TLS_PORT"))
+                                  "/missing/native-tls.crt"
+                                  (env-get "AFJ_NATIVE_TLS_KEY")
+                                  (env-get "AFJ_NATIVE_TLS_CA") true) "\n"))
+        (tcp-write conn payload)))
+    nil))
+
+(define native-tls-policy-port (str-to-num (env-get "AFJ_NATIVE_TLS_PORT")))
+(define native-tls-policy-start
+  (tcp-server-tls native-tls-policy-port "native-tls-policy-handler"
+                  (env-get "AFJ_NATIVE_TLS_CERT")
+                  (env-get "AFJ_NATIVE_TLS_KEY")
+                  (env-or "AFJ_NATIVE_TLS_HOST" "127.0.0.1")
+                  (env-get "AFJ_NATIVE_TLS_CA") true))
+(if (= native-tls-policy-start "ok")
+  (do
+    (println "afj-db95 native TLS mTLS STARTED")
+    (set-timeout (fn [] (tcp-server-stop native-tls-policy-port)) 30000))
+  (throw native-tls-policy-start))

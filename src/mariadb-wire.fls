@@ -1,0 +1,459 @@
+;; AFJ-010 MariaDB packet codec.
+;; The socket adapter delivers binary strings; packet state and encoding stay
+;; in FreeLang Script. Host runtime only supplies raw↔base64 conversion.
+
+(defn mariadb-u24le [value]
+  (buf-concat [(buf-u8 (bit-and value 255))
+               (buf-u8 (bit-and (bit_shr value 8) 255))
+               (buf-u8 (bit-and (bit_shr value 16) 255))]))
+
+(load "/root/kilo-freelang/projects/afj-db95/src/sha1.fls")
+
+(defn mariadb-read-u24le [bytes offset]
+  (+ (buf-read-u8 bytes offset)
+     (* (buf-read-u8 bytes (+ offset 1)) 256)
+     (* (buf-read-u8 bytes (+ offset 2)) 65536)))
+
+(defn mariadb-u32le [value]
+  (buf-concat [(buf-u8 (bit-and value 255))
+               (buf-u8 (bit-and (bit_shr value 8) 255))
+               (buf-u8 (bit-and (bit_shr value 16) 255))
+               (buf-u8 (bit-and (bit_shr value 24) 255))]))
+
+(defn mariadb-read-u32le [bytes offset]
+  (+ (buf-read-u8 bytes offset)
+     (* (buf-read-u8 bytes (+ offset 1)) 256)
+     (* (buf-read-u8 bytes (+ offset 2)) 65536)
+     (* (buf-read-u8 bytes (+ offset 3)) 16777216)))
+
+(defn mariadb-read-str [bytes offset length]
+  (utf8-decode-strict (buf-slice bytes offset length)))
+
+(defn mariadb-packet [sequence payload]
+  (buf-concat [(mariadb-u24le (buf-len payload))
+               (buf-u8 sequence)
+               payload]))
+
+(defn mariadb-packet-complete? [bytes]
+  (and (>= (buf-len bytes) 4)
+       (>= (buf-len bytes) (+ 4 (mariadb-read-u24le bytes 0)))))
+
+(defn mariadb-packet-payload [bytes]
+  (buf-slice bytes 4 (mariadb-read-u24le bytes 0)))
+
+(defn mariadb-packet-sequence [bytes]
+  (buf-read-u8 bytes 3))
+
+(defn mariadb-lenenc-string [value]
+  (let [encoded (utf8-encode value)
+        length (buf-len encoded)]
+    (if (< length 251)
+      (buf-concat [(buf-u8 length) encoded])
+      (throw "MARIADB_LENENC_TOO_LARGE"))))
+
+(defn mariadb-ok-payload [affected last-id]
+  (buf-concat [(buf-u8 0)
+               (buf-u8 affected)
+               (buf-u8 last-id)
+               (buf-u8 2)
+               (buf-u8 0)
+               (buf-u8 0)
+               (buf-u8 0)]))
+
+(defn mariadb-error-payload [code message]
+  (buf-concat [(buf-u8 255)
+               (buf-u8 (bit-and code 255))
+               (buf-u8 (bit-and (bit_shr code 8) 255))
+               (utf8-encode "#HY000")
+               (utf8-encode message)]))
+
+;; Minimal native protocol session state. The query engine remains the
+;; FreeLang executor; this module only translates MariaDB packets.
+(define mariadb-wire-sessions (atom {}))
+(define mariadb-wire-scramble (utf8-encode "afjdb95-native-key12"))
+(define mariadb-client-protocol-41 512)
+(define mariadb-server-capabilities 172545)
+(define mariadb-wire-root-password
+  (let [configured (env-get "AFJ_DB_ROOT_PASSWORD")
+        mode (env-or "AFJ_DB_MODE" "development")]
+    (if (nil? configured)
+      (if (= mode "production")
+        (throw "AFJ_DB_ROOT_PASSWORD_REQUIRED")
+        "development-only")
+      configured)))
+
+(defn mariadb-wire-login-capabilities [bytes]
+  (if (< (buf-len bytes) 4)
+    0
+    (let [b0 (buf-read-u8 bytes 0)
+          b1 (buf-read-u8 bytes 1)
+          b2 (buf-read-u8 bytes 2)
+          b3 (buf-read-u8 bytes 3)]
+      (+ b0 (* b1 256) (* b2 65536) (* b3 16777216)))))
+
+(defn mariadb-wire-capability? [capabilities flag]
+  (= (bit-and capabilities flag) flag))
+
+(defn mariadb-wire-login-user-at [bytes start cursor]
+  (if (>= cursor (buf-len bytes))
+    ""
+    (if (= (buf-read-u8 bytes cursor) 0)
+      (mariadb-read-str bytes start (- cursor start))
+      (mariadb-wire-login-user-at bytes start (+ cursor 1)))))
+
+(defn mariadb-wire-login-user [bytes]
+  (if (< (buf-len bytes) 33)
+    ""
+    (mariadb-wire-login-user-at bytes 32 32)))
+
+(defn mariadb-wire-login-auth-offset [bytes]
+  (+ 33 (count (mariadb-wire-login-user bytes))))
+
+(defn mariadb-wire-login-state [bytes]
+  (let [capabilities (mariadb-wire-login-capabilities bytes)
+        max-packet (if (>= (buf-len bytes) 8)
+                     (mariadb-read-u32le bytes 4)
+                     0)
+        charset (if (>= (buf-len bytes) 9)
+                  (buf-read-u8 bytes 8)
+                  0)
+        username (mariadb-wire-login-user bytes)
+        auth-offset (+ 33 (count username))
+        auth-length (if (< auth-offset (buf-len bytes))
+                      (buf-read-u8 bytes auth-offset)
+                      0)
+        auth-response (if (and (< auth-offset (buf-len bytes))
+                              (>= (buf-len bytes) (+ auth-offset 1 auth-length)))
+                       (buf-slice bytes (+ auth-offset 1) auth-length)
+                       "")
+        negotiated (bit-and capabilities mariadb-server-capabilities)]
+    {"client-capabilities" capabilities
+     "negotiated-capabilities" negotiated
+     "max-packet-size" max-packet
+     "charset" charset
+     "username" username
+     "auth-response-length" auth-length
+     "auth-response" auth-response}))
+
+(defn mariadb-wire-bytes-equal? [left right index difference]
+  (if (not (= (buf-len left) (buf-len right)))
+    false
+    (if (>= index (buf-len left))
+      true
+      (if (= (buf-read-u8 left index) (buf-read-u8 right index))
+        (mariadb-wire-bytes-equal? left right (+ index 1) difference)
+        false))))
+
+(defn mariadb-wire-auth-valid? [login]
+  (let [expected (sha1-mysql-native-token mariadb-wire-root-password
+                                           mariadb-wire-scramble)
+        actual (get login "auth-response")]
+    (mariadb-wire-bytes-equal? expected actual 0 0)))
+
+(defn mariadb-handshake-payload []
+  (buf-concat [(buf-u8 10)
+               (utf8-encode "afj-db95-0.1") (buf-u8 0)
+               (mariadb-u32le 1)
+               (buf-slice mariadb-wire-scramble 0 8)
+               (buf-u8 0)
+               ;; CLIENT_LONG_PASSWORD | PROTOCOL_41 | TRANSACTIONS |
+               ;; SECURE_CONNECTION | MULTI_RESULTS = 0x0002a201.
+               (buf-u8 1) (buf-u8 162)
+               (buf-u8 33)
+               (buf-u8 2) (buf-u8 0)
+               (buf-u8 2) (buf-u8 0)
+               (buf-u8 21)
+               (buf-u8 0) (buf-u8 0) (buf-u8 0) (buf-u8 0)
+               (buf-u8 0) (buf-u8 0) (buf-u8 0) (buf-u8 0)
+               (buf-u8 0) (buf-u8 0)
+               (buf-slice mariadb-wire-scramble 8 12) (buf-u8 0)]))
+
+(defn mariadb-wire-column [name]
+  (buf-concat [(mariadb-lenenc-string "def")
+               (mariadb-lenenc-string "")
+               (mariadb-lenenc-string "")
+               (mariadb-lenenc-string "")
+               (mariadb-lenenc-string name)
+               (mariadb-lenenc-string name)
+               (buf-u8 12) (buf-u8 33) (buf-u8 0)
+               (buf-u8 0) (buf-u8 4) (buf-u8 0) (buf-u8 0)
+               (buf-u8 253)
+               (buf-u8 0) (buf-u8 0) (buf-u8 0)
+               (buf-u8 0) (buf-u8 0)]))
+
+(defn mariadb-wire-value [value]
+  (if (nil? value)
+    (buf-u8 251)
+    (mariadb-lenenc-string (str value))))
+
+(defn mariadb-wire-row [row columns]
+  (buf-concat (map (fn [column] (mariadb-wire-value (get row column))) columns)))
+
+(defn mariadb-wire-prepare-payload [statement-id parameter-count]
+  (buf-concat [(buf-u8 0)
+               (mariadb-u32le statement-id)
+               (buf-u8 0) (buf-u8 0)
+               (buf-u8 parameter-count) (buf-u8 0)
+               (buf-u8 0) (buf-u8 0) (buf-u8 0)]))
+
+(defn mariadb-wire-parameter-literal [value]
+  (if (nil? value)
+    "NULL"
+    (if (number? value)
+      (str value)
+      (str "'" (str-replace-in (str value) "'" "''") "'"))))
+
+(defn mariadb-wire-placeholder-count-at [statement index quoted total]
+  (if (>= index (count statement))
+    total
+    (let [character (str-slice statement index (+ index 1))]
+      (if (= character "'")
+        (mariadb-wire-placeholder-count-at statement (+ index 1)
+                                            (not quoted) total)
+        (mariadb-wire-placeholder-count-at statement (+ index 1) quoted
+                                            (if (and (not quoted) (= character "?"))
+                                              (+ total 1)
+                                              total))))))
+
+(defn mariadb-wire-placeholder-count [statement]
+  (mariadb-wire-placeholder-count-at statement 0 false 0))
+
+(defn mariadb-wire-bind-at [statement index quoted parameter-index result parameters]
+  (if (>= index (count statement))
+    (if (= parameter-index (count parameters))
+      result
+      (throw "PARAMETER_COUNT_MISMATCH"))
+    (let [character (str-slice statement index (+ index 1))]
+      (if (= character "'")
+        (mariadb-wire-bind-at statement (+ index 1) (not quoted)
+                               parameter-index (str result character) parameters)
+        (if (and (not quoted) (= character "?"))
+          (if (>= parameter-index (count parameters))
+            (throw "PARAMETER_COUNT_MISMATCH")
+            (mariadb-wire-bind-at
+              statement (+ index 1) quoted (+ parameter-index 1)
+              (str result
+                   (mariadb-wire-parameter-literal (get parameters parameter-index)))
+              parameters))
+          (mariadb-wire-bind-at statement (+ index 1) quoted parameter-index
+                                 (str result character) parameters))))))
+
+(defn mariadb-wire-bind [statement parameters]
+  (mariadb-wire-bind-at statement 0 false 0 "" parameters))
+
+(defn mariadb-wire-lenenc-value [payload offset]
+  (let [length (buf-read-u8 payload offset)]
+    (let [value (mariadb-read-str payload (+ offset 1) length)]
+      {"value" value "next" (+ offset 1 length)})))
+
+(defn mariadb-wire-null-parameter? [payload null-offset index]
+  (let [bit-index (- index (* (floor (/ index 8)) 8))
+        mask (bit_shl 1 bit-index)]
+    (= (bit-and (buf-read-u8 payload (+ null-offset (floor (/ index 8))))
+                mask)
+       mask)))
+
+(defn mariadb-wire-read-types-at [payload offset index total result]
+  (if (>= index total)
+    result
+    (mariadb-wire-read-types-at
+      payload (+ offset 2) (+ index 1) total
+      (conj result {"type" (buf-read-u8 payload offset)
+                    "unsigned" (= (buf-read-u8 payload (+ offset 1)) 128)}))))
+
+(defn mariadb-wire-read-parameter [payload offset type]
+  (let [kind (get type "type")]
+    (if (= kind 6)
+      {"value" nil "next" offset}
+      (if (= kind 3)
+        (let [value (mariadb-read-u32le payload offset)]
+          {"value" value "next" (+ offset 4)})
+        (if (or (= kind 15) (= kind 252) (= kind 253) (= kind 254))
+          (mariadb-wire-lenenc-value payload offset)
+          (throw (str "UNSUPPORTED_PARAMETER_TYPE:" kind)))))))
+
+(defn mariadb-wire-read-parameters-at
+  [payload offset null-offset index types result]
+  (if (>= index (count types))
+    {"values" result "next" offset}
+    (if (mariadb-wire-null-parameter? payload null-offset index)
+      (mariadb-wire-read-parameters-at payload offset null-offset (+ index 1)
+                                       types (conj result nil))
+      (let [decoded (mariadb-wire-read-parameter payload offset (get types index))]
+        (mariadb-wire-read-parameters-at
+          payload (get decoded "next") null-offset (+ index 1) types
+          (conj result (get decoded "value")))))))
+
+(defn mariadb-wire-prepare [conn state payload]
+  (let [statement (mariadb-read-str payload 1 (- (buf-len payload) 1))
+        statement-id (get state "next-statement-id")
+        parameter-count (mariadb-wire-placeholder-count statement)
+        prepared (assoc (get state "prepared") statement-id
+                        {"statement" statement
+                         "parameter-count" parameter-count
+                         "types" nil})
+        next-state (assoc (assoc state "prepared" prepared)
+                          "next-statement-id" (+ statement-id 1))]
+    (swap! mariadb-wire-sessions assoc conn next-state)
+    (tcp-write conn (b64-to-raw
+                      (mariadb-packet 1
+                                      (mariadb-wire-prepare-payload
+                                        statement-id
+                                        parameter-count))))
+    next-state))
+
+(defn mariadb-wire-execute [conn state payload]
+  (let [statement-id (mariadb-read-u32le payload 1)
+        entry (get (get state "prepared") statement-id)
+        parameter-count (if (nil? entry) 0 (get entry "parameter-count"))]
+    (if (nil? entry)
+      (tcp-write conn (b64-to-raw
+                        (mariadb-packet 1
+                                        (mariadb-error-payload 1243
+                                                               "PREPARED_NOT_FOUND"))))
+      (if (= parameter-count 0)
+        (mariadb-wire-query conn (get entry "statement"))
+        (let [null-length (ceil (/ parameter-count 8))
+              type-offset (+ 10 null-length)
+              new-types (buf-read-u8 payload type-offset)
+              old-types (get entry "types")
+              types (if (= new-types 1)
+                      (mariadb-wire-read-types-at payload (+ type-offset 1) 0
+                                                  parameter-count [])
+                      (if (nil? old-types)
+                        (throw "COM_STMT_TYPES_REQUIRED")
+                        old-types))
+              values-offset (if (= new-types 1)
+                              (+ type-offset 1 (* parameter-count 2))
+                              (+ type-offset 1))
+              decoded (mariadb-wire-read-parameters-at payload values-offset
+                                                        10 0 types [])
+              next-entry (assoc entry "types" types)
+              next-state (assoc state "prepared"
+                                 (assoc (get state "prepared") statement-id
+                                        next-entry))]
+          (swap! mariadb-wire-sessions assoc conn next-state)
+          (mariadb-wire-query conn
+                              (mariadb-wire-bind (get entry "statement")
+                                                 (get decoded "values"))))))))
+
+(defn mariadb-wire-result [conn sequence rows]
+  (let [columns (if (= (count rows) 0) ["result"] (keys (first rows)))
+        start sequence]
+    (tcp-write conn (b64-to-raw (mariadb-packet start
+                                                (buf-u8 (count columns)))))
+    (doseq [index (range 0 (count columns))]
+      (tcp-write conn (b64-to-raw
+                        (mariadb-packet (+ start index 1)
+                                        (mariadb-wire-column (get columns index))))))
+    (tcp-write conn (b64-to-raw
+                      (mariadb-packet (+ start (count columns) 1)
+                                      (buf-concat [(buf-u8 254) (buf-u8 0)
+                                                   (buf-u8 0) (buf-u8 2)
+                                                   (buf-u8 0)]))))
+    (doseq [index (range 0 (count rows))]
+      (tcp-write conn (b64-to-raw
+                        (mariadb-packet (+ start (count columns) 2 index)
+                                        (mariadb-wire-row (get rows index) columns)))))
+    (tcp-write conn (b64-to-raw
+                      (mariadb-packet (+ start (count columns) 2 (count rows))
+                                      (buf-concat [(buf-u8 254) (buf-u8 0)
+                                                   (buf-u8 0) (buf-u8 2)
+                                                   (buf-u8 0)])))))
+)
+
+(defn mariadb-wire-query [conn query]
+  (try
+    (let [result (execute-ast (parse-sql query))
+          rows (get result "rows")]
+      (if (nil? rows)
+        (tcp-write conn (b64-to-raw (mariadb-packet 1 (mariadb-ok-payload 0 0))))
+        (mariadb-wire-result conn 1 rows)))
+    (catch [error]
+      (tcp-write conn (b64-to-raw
+                        (mariadb-packet 1
+                                        (mariadb-error-payload 1064
+                                                               (error_message error))))))))
+
+(defn mariadb-wire-frame [conn frame]
+  (let [state (get (deref mariadb-wire-sessions) conn)
+        payload (mariadb-packet-payload frame)
+        phase (get state "phase")]
+    (if (= phase "handshake")
+      (let [login (mariadb-wire-login-state payload)
+            capabilities (get login "client-capabilities")]
+        (if (not (mariadb-wire-capability? capabilities mariadb-client-protocol-41))
+          (tcp-write conn (b64-to-raw
+                            (mariadb-packet 2
+                                            (mariadb-error-payload 1043
+                                                                   "CLIENT_PROTOCOL_UNSUPPORTED"))))
+          (if (or (not (= (get login "username") "root"))
+                  (= (get login "auth-response-length") 0)
+                  (not (mariadb-wire-auth-valid? login)))
+            (tcp-write conn (b64-to-raw
+                              (mariadb-packet 2
+                                              (mariadb-error-payload 1045
+                                                                     "ACCESS_DENIED"))))
+            (do
+            (swap! mariadb-wire-sessions assoc conn
+                   (assoc (assoc state "phase" "ready")
+                          "client-capabilities" capabilities
+                          "negotiated-capabilities"
+                          (get login "negotiated-capabilities")
+                          "max-packet-size" (get login "max-packet-size")
+                          "charset" (get login "charset")
+                          "username" (get login "username")
+                          "auth-response-length"
+                          (get login "auth-response-length")))
+            (tcp-write conn (b64-to-raw (mariadb-packet 2 (mariadb-ok-payload 0 0))))))))
+        (let [command (buf-read-u8 payload 0)]
+        (if (= command 3)
+          (mariadb-wire-query conn
+                              (mariadb-read-str payload 1 (- (buf-len payload) 1)))
+          (if (= command 22)
+            (mariadb-wire-prepare conn state payload)
+            (if (= command 23)
+              (try
+                (mariadb-wire-execute conn state payload)
+                (catch [error]
+                  (tcp-write conn (b64-to-raw
+                                    (mariadb-packet 1
+                                                    (mariadb-error-payload 1210
+                                                                           (error_message error)))))))
+              (if (= command 25)
+                (swap! mariadb-wire-sessions assoc conn
+                       (assoc state "prepared"
+                              (dissoc (get state "prepared")
+                                      (mariadb-read-u32le payload 1))))
+                (tcp-write conn (b64-to-raw
+                                  (mariadb-packet 1
+                                                  (mariadb-error-payload 1047
+                                                                         "UNSUPPORTED_COMMAND"))))))))))))
+
+(defn mariadb-wire-drain [conn bytes]
+  (if (mariadb-packet-complete? bytes)
+    (let [length (+ 4 (mariadb-read-u24le bytes 0))
+          frame (buf-slice bytes 0 length)
+          rest (buf-slice bytes length (- (buf-len bytes) length))]
+      (mariadb-wire-frame conn frame)
+      (mariadb-wire-drain conn rest))
+    bytes))
+
+(defn mariadb-wire-handler [event conn payload peer]
+  (if (= event "connect")
+    (do
+      (swap! mariadb-wire-sessions assoc conn
+             {"phase" "handshake" "buffer" "" "prepared" {}
+              "next-statement-id" 1})
+      (tcp-write conn (b64-to-raw (mariadb-packet 0 (mariadb-handshake-payload)))))
+    (if (= event "data")
+      (let [state (get (deref mariadb-wire-sessions) conn)
+            bytes (buf-concat [(get state "buffer") (raw-to-b64 payload)])
+            remaining (mariadb-wire-drain conn bytes)]
+        ;; Preserve phase changes made while draining the frame.
+        (let [current (get (deref mariadb-wire-sessions) conn)]
+          (swap! mariadb-wire-sessions assoc conn
+                 (assoc current "buffer" remaining))))
+      (if (= event "close")
+        (swap! mariadb-wire-sessions dissoc conn)
+        nil))))

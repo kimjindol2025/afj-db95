@@ -9,9 +9,9 @@
   {"name" "WAL/recovery" "area" "storage" "weight" 12 "passed" true}
   {"name" "page checksum" "area" "storage" "weight" 4 "passed" true}
   {"name" "COMMIT/ROLLBACK" "area" "transaction" "weight" 8 "passed" true}
-  {"name" "MVCC" "area" "transaction" "weight" 6 "passed" true}
+  {"name" "MVCC" "area" "transaction" "weight" 6 "passed" false}
   {"name" "locks/isolation" "area" "transaction" "weight" 6 "passed" true}
-  {"name" "B+Tree" "area" "index" "weight" 6 "passed" true}
+  {"name" "B+Tree" "area" "index" "weight" 6 "passed" false}
   {"name" "TCP/auth" "area" "server" "weight" 8 "passed" true}
   {"name" "permissions" "area" "server" "weight" 4 "passed" true}
   {"name" "backup/restore" "area" "ops" "weight" 5 "passed" true}

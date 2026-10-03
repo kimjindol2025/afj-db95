@@ -15,6 +15,7 @@
     (reset! tx-engine-state
             {"status" "active"
              "snapshot" (tx-copy (deref engine-catalog))
+             "index-snapshot" (tx-copy (deref engine-indexes))
              "savepoints" {}})))
 
 (defn tx-assert-active []
@@ -30,7 +31,8 @@
   (tx-assert-active)
   (swap! tx-engine-state assoc "savepoints"
          (assoc (get (deref tx-engine-state) "savepoints")
-                name (tx-copy (deref engine-catalog))))
+                name {"catalog" (tx-copy (deref engine-catalog))
+                      "indexes" (tx-copy (deref engine-indexes))}))
   name)
 
 (defn tx-rollback-to-engine [name]
@@ -39,11 +41,15 @@
         snapshot (get savepoints name)]
     (if (nil? snapshot)
       (throw "SAVEPOINT_NOT_FOUND")
-      (reset! engine-catalog (tx-copy snapshot)))))
+      (do
+        (reset! engine-catalog (tx-copy (get snapshot "catalog")))
+        (reset! engine-indexes (tx-copy (get snapshot "indexes")))))))
 
 (defn tx-rollback-engine []
   (tx-assert-active)
   (reset! engine-catalog (tx-copy (get (deref tx-engine-state) "snapshot")))
+  (reset! engine-indexes
+          (tx-copy (get (deref tx-engine-state) "index-snapshot")))
   (reset! tx-engine-state {"status" "idle" "snapshot" nil "savepoints" {}})
   {"ok" true "status" "rolled-back"})
 
@@ -60,6 +66,20 @@
 (tx-rollback-engine)
 (if (has-key? (deref engine-catalog) "rollback_users")
   (throw "transaction rollback leaked catalog changes")
+  nil)
+
+;; Rollback must restore index metadata together with the catalog snapshot.
+(tx-begin-engine)
+(tx-execute-engine {"type" "create-table" "table" "rollback_index_users"
+                    "schema" {"columns" [{"name" "id" "type" "INTEGER"
+                                               "nullable" false "primary" true}]
+                               "primary-key" "id" "unique-columns" []}})
+(tx-execute-engine {"type" "insert" "table" "rollback_index_users"
+                    "row" {"id" 1}})
+(tx-rollback-engine)
+(if (or (has-key? (deref engine-catalog) "rollback_index_users")
+        (has-key? (deref engine-indexes) "rollback_index_users.id"))
+  (throw "transaction rollback leaked index metadata")
   nil)
 
 ;; Commit preserves the same engine changes.

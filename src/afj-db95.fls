@@ -6,20 +6,35 @@
 (define replaying (atom false))
 (define storage-path (atom nil))
 (define afj-page-size 4096)
+(define afj-wal-version 1)
+(define afj-wal-record-limit 1048576)
+(define afj-page-cache-max
+  (let [raw (env-get "AFJ_DB_PAGE_CACHE_PAGES")]
+    (if (nil? raw)
+      64
+      (let [parsed (str-to-num raw)]
+        (if (and (number? parsed) (> parsed 0) (<= parsed 4096))
+          parsed
+          (throw "AFJ_DB_PAGE_CACHE_PAGES_INVALID"))))))
+(define afj-page-cache (atom {}))
+(define afj-page-cache-tick (atom 0))
 
 (defn page-payload [page]
   (let [encoded (json_str page)]
-    (if (> (count encoded) afj-page-size)
-      (throw "PAGE_TOO_LARGE")
-      (json_str {"magic" "AFJPG"
-                 "version" 1
-                 "length" (count encoded)
-                 "checksum" (sha256 encoded)
-                 "payload" page}))))
+    (let [envelope {"magic" "AFJPG"
+                    "version" 1
+                    "length" (count encoded)
+                    "checksum" (sha256 encoded)
+                    "payload" page}
+          serialized (json_str envelope)]
+      (if (> (count serialized) afj-page-size)
+        (throw "PAGE_TOO_LARGE")
+        serialized))))
 
 (defn valid-page? [page]
   (and (= (get page "magic") "AFJPG")
        (= (get page "version") 1)
+       (<= (count (json_str page)) afj-page-size)
        (= (get page "length") (count (json_str (get page "payload"))))
        (= (get page "checksum") (sha256 (json_str (get page "payload"))))))
 
@@ -32,11 +47,167 @@
       (get page "payload")
       (throw (str "invalid AFJ page: " path)))))
 
+;; Bounded page cache for page-set reads. Entries are explicitly invalidated
+;; when this module writes a page set; the LRU bound prevents page reads from
+;; growing memory without limit.
+(defn afj-page-cache-key [path index fingerprint]
+  ;; Include the raw line fingerprint so an external file change or page
+  ;; corruption cannot be hidden by a stale cached page.
+  (str path "#" index "#" fingerprint))
+
+(defn afj-page-cache-oldest [cache candidates oldest-key oldest-used]
+  (if (= (count candidates) 0)
+    oldest-key
+    (let [key (first candidates)
+          entry (get cache key)
+          used (get entry "used")]
+      (if (or (nil? oldest-key) (< used oldest-used))
+        (afj-page-cache-oldest cache (rest candidates) key used)
+        (afj-page-cache-oldest cache (rest candidates)
+                                oldest-key oldest-used)))))
+
+(defn afj-page-cache-clear [path]
+  (doseq [key (keys (deref afj-page-cache))]
+    (if (str_starts_with key (str path "#"))
+      (swap! afj-page-cache dissoc key)
+      nil))
+  true)
+
+(defn afj-page-cache-get [path index fingerprint]
+  (let [key (afj-page-cache-key path index fingerprint)
+        entry (get (deref afj-page-cache) key)]
+    (if (nil? entry)
+      nil
+      (let [tick (swap! afj-page-cache-tick (fn [value] (+ value 1)))]
+        (swap! afj-page-cache assoc key (assoc entry "used" tick))
+        (get entry "page")))))
+
+(defn afj-page-cache-put [path index fingerprint page]
+  (let [key (afj-page-cache-key path index fingerprint)
+        tick (swap! afj-page-cache-tick (fn [value] (+ value 1)))]
+    (swap! afj-page-cache assoc key {"page" page "used" tick})
+    (if (> (count (deref afj-page-cache)) afj-page-cache-max)
+      (let [victim (afj-page-cache-oldest
+                     (deref afj-page-cache)
+                     (keys (deref afj-page-cache)) nil 0)]
+        (if (nil? victim)
+          nil
+          (swap! afj-page-cache dissoc victim)))
+      nil)
+    page))
+
+(defn afj-page-split-at [encoded index chunks]
+  (if (>= index (count encoded))
+    chunks
+    (let [next-index (+ index 2048)
+          end (if (> next-index (count encoded))
+                (count encoded)
+                next-index)]
+      (afj-page-split-at encoded end
+                         (conj chunks (str-slice encoded index end))))))
+
+(defn write-page-set [path value]
+  (let [encoded (json_str value)
+        chunks (afj-page-split-at encoded 0 [])
+        total (count chunks)]
+    (if (= total 0)
+      (throw "PAGE_SET_EMPTY")
+      (do
+        (afj-page-cache-clear path)
+        (file_write path "")
+        (doseq [index (range 0 total)]
+          (let [page {"set-version" 1
+                      "id" index
+                      "total" total
+                      "data" (get chunks index)}]
+            (file_append path (str (page-payload page) "\n"))))
+        total))))
+
+(defn read-page-set-lines-cached [path lines index total encoded]
+  (if (>= index (count lines))
+    (if (= index total)
+      (json-parse encoded)
+      (throw "PAGE_SET_INCOMPLETE"))
+    (let [raw-line (get lines index)
+          fingerprint (sha256 raw-line)
+          cached (afj-page-cache-get path index fingerprint)
+          page (if (nil? cached)
+                 (let [parsed (try
+                                (json-parse raw-line)
+                                (catch [error] nil))]
+                   (if (nil? parsed)
+                     nil
+                     (afj-page-cache-put path index fingerprint parsed)))
+                 cached)
+          payload (if (nil? page) nil (get page "payload"))]
+      (if (or (nil? page)
+              (not (valid-page? page))
+              (nil? payload)
+              (not (= (get payload "set-version") 1))
+              (not (= (get payload "id") index))
+              (not (= (get payload "total") total)))
+        (throw "PAGE_SET_CORRUPT")
+        (read-page-set-lines-cached path lines (+ index 1) total
+                                     (str encoded (get payload "data")))))))
+
+(defn read-page-set-cached [path]
+  (if (not (file_exists path))
+    (throw "PAGE_SET_MISSING")
+    (let [lines (filter (fn [line] (not (= (str_trim line) "")))
+                        (str_lines (file_read path)))
+          first-page (if (= (count lines) 0) nil
+                       (try (json-parse (first lines)) (catch [error] nil)))
+          first-payload (if (nil? first-page) nil (get first-page "payload"))
+          total (if (nil? first-payload) 0 (get first-payload "total"))]
+      (if (or (= total 0) (not (= total (count lines))))
+        (throw "PAGE_SET_CORRUPT")
+        (read-page-set-lines-cached path lines 0 total "")))))
+
+(defn read-page-set-lines [lines index total encoded]
+  (if (>= index (count lines))
+    (if (= index total)
+      (json-parse encoded)
+      (throw "PAGE_SET_INCOMPLETE"))
+    (let [page (try
+                 (json-parse (get lines index))
+                 (catch [error] nil))
+          payload (if (nil? page) nil (get page "payload"))]
+      (if (or (nil? page)
+              (not (valid-page? page))
+              (nil? payload)
+              (not (= (get payload "set-version") 1))
+              (not (= (get payload "id") index))
+              (not (= (get payload "total") total)))
+        (throw "PAGE_SET_CORRUPT")
+        (read-page-set-lines lines (+ index 1) total
+                             (str encoded (get payload "data")))))))
+
+(defn read-page-set [path]
+  (if (not (file_exists path))
+    (throw "PAGE_SET_MISSING")
+    (let [lines (filter (fn [line] (not (= (str_trim line) "")))
+                        (str_lines (file_read path)))
+          first-page (if (= (count lines) 0) nil
+                       (try (json-parse (first lines)) (catch [error] nil)))
+          first-payload (if (nil? first-page) nil (get first-page "payload"))
+          total (if (nil? first-payload) 0 (get first-payload "total"))]
+      (if (or (= total 0) (not (= total (count lines))))
+        (throw "PAGE_SET_CORRUPT")
+        (read-page-set-lines lines 0 total "")))))
+
 (defn persist-wal-event [event]
   (let [path (deref storage-path)]
     (if (nil? path)
       true
-      (file_append path (str (json_str event) "\n")))))
+      (let [encoded (json_str event)
+            envelope {"version" afj-wal-version
+                      "length" (count encoded)
+                      "checksum" (sha256 encoded)
+                      "body" event}
+            line (json_str envelope)]
+        (if (> (count line) afj-wal-record-limit)
+          (throw "WAL_RECORD_TOO_LARGE")
+          (file_append path (str line "\n")))))))
 
 (defn append-wal [event]
   (if (not (deref replaying))
@@ -118,16 +289,42 @@
   (reset! wal events)
   (count events))
 
+(defn valid-wal-envelope? [record]
+  (let [body (get record "body")
+        encoded (if (nil? body) nil (json_str body))
+        length (get record "length")]
+    (and (= (get record "version") afj-wal-version)
+         (not (nil? body))
+         (number? length)
+         (>= length 0)
+         (<= length afj-wal-record-limit)
+         (= length (count encoded))
+         (= (get record "checksum") (sha256 encoded)))))
+
+(defn load-wal-events-at [lines index final-newline events]
+  (if (>= index (count lines))
+    events
+    (let [line (get lines index)
+          last-line (= index (- (count lines) 1))
+          parsed (try
+                   (json-parse line)
+                   (catch [error] nil))]
+      (if (nil? parsed)
+        (if (and last-line (not final-newline))
+          events
+          (throw "WAL_CORRUPT"))
+        (if (not (valid-wal-envelope? parsed))
+          (throw "WAL_CORRUPT")
+          (load-wal-events-at lines (+ index 1) final-newline
+                              (conj events (get parsed "body"))))))))
+
 (defn load-wal-events [path]
   (if (not (file_exists path))
     []
-    (let [lines (str_lines (file_read path))]
-      (map (fn [line]
-             (try
-               (json-parse line)
-               (catch [error]
-                 (throw (str "WAL_CORRUPT: " (error_message error))))))
-           (filter (fn [line] (not (= (str_trim line) ""))) lines)))))
+    (let [raw (file_read path)
+          lines (filter (fn [line] (not (= (str_trim line) "")))
+                        (str_lines raw))]
+      (load-wal-events-at lines 0 (str_ends_with raw "\n") []))))
 
 (defn open-store [path]
   (if (not (file_exists path))
@@ -144,7 +341,13 @@
 (defn checkpoint [path]
   (file_write path
               (str_join_lines
-                (map (fn [event] (json_str event)) (deref wal))))
+                (map (fn [event]
+                       (let [encoded (json_str event)]
+                         (json_str {"version" afj-wal-version
+                                   "length" (count encoded)
+                                   "checksum" (sha256 encoded)
+                                   "body" event})))
+                     (deref wal))))
   true)
 
 (defn page-smoke-test []
@@ -154,6 +357,37 @@
     (assert-equal "page roundtrip" expected (read-page path))
     (file_delete path)
     (println "afj-db95 page PASS")))
+
+(defn page-set-smoke-test []
+  (let [path "/tmp/afj-db95-page-set-test"
+        padding (str_join (repeat 3000 "payload") "")
+        padded {"table" "large_users"
+                "rows" [{"id" 1 "name"
+                          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+                         {"id" 2 "name"
+                          "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}]
+                "padding" padding}]
+    (write-page-set path padded)
+    (reset! afj-page-cache {})
+    (let [restored (read-page-set-cached path)]
+      (if (and (= (get restored "table") "large_users")
+               (= (count (get restored "rows")) 2)
+               (= (get restored "padding") padding)
+               (<= (count (deref afj-page-cache)) afj-page-cache-max))
+        (println "PASS page set roundtrip")
+        (throw "page set roundtrip mismatch")))
+    (let [raw (file_read path)]
+      (file_write path (str (str_slice raw 0 (- (count raw) 2)) "x\n")))
+    (try
+      (do
+        (read-page-set-cached path)
+        (throw "corrupt page set was accepted"))
+      (catch [error]
+        (if (= (error_message error) "PAGE_SET_CORRUPT")
+          (println "afj-db95 page set corruption PASS")
+          (throw error))))
+    (file_delete path)
+    (println "afj-db95 page set PASS")))
 
 (defn durable-wal-smoke-test []
   (let [path "/tmp/afj-db95-wal-test"]
@@ -182,6 +416,41 @@
           (throw error))))
     (file_delete path)))
 
+(defn torn-wal-smoke-test []
+  (let [path "/tmp/afj-db95-torn-wal"]
+    (if (file_exists path) (file_delete path) true)
+    (open-store path)
+    (create-table "torn_users" {"id" "INTEGER"})
+    (insert-row "torn_users" {"id" 1})
+    (close-store)
+    (file_append path "{\"version\":1,\"length\":")
+    (open-store path)
+    (assert-equal "torn WAL keeps committed rows" 1
+                  (count (select-all "torn_users")))
+    (close-store)
+    (file_delete path)
+    (println "afj-db95 torn WAL PASS")))
+
+(defn oversized-wal-smoke-test []
+  (let [path "/tmp/afj-db95-oversized-wal"
+        padding (str_join (repeat (+ afj-wal-record-limit 1) "x") "")
+        body {"op" "test" "padding" padding}
+        encoded (json_str body)
+        envelope {"version" afj-wal-version
+                  "length" (count encoded)
+                  "checksum" (sha256 encoded)
+                  "body" body}]
+    (file_write path (str (json_str envelope) "\n"))
+    (try
+      (do
+        (load-wal-events path)
+        (throw "oversized WAL was accepted"))
+      (catch [error]
+        (if (= (error_message error) "WAL_CORRUPT")
+          (println "afj-db95 oversized WAL PASS")
+          (throw error))))
+    (file_delete path)))
+
 (defn assert-equal [label expected actual]
   (if (= expected actual)
     (println (str "PASS " label))
@@ -206,5 +475,8 @@
 
 (smoke-test)
 (page-smoke-test)
+(page-set-smoke-test)
 (durable-wal-smoke-test)
 (corrupt-wal-smoke-test)
+(torn-wal-smoke-test)
+(oversized-wal-smoke-test)

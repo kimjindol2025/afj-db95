@@ -1,0 +1,37 @@
+;; TCP transaction deadlock detection contract.
+(load "/root/kilo-freelang/projects/afj-db95/src/tcp-server.fls")
+
+(server-start "tcp-deadlock-test")
+(reset! engine-catalog {})
+(reset! engine-indexes {})
+(reset! afj-tcp-sessions {"dead-a" "root" "dead-b" "root"})
+(reset! afj-tcp-transactions {})
+(reset! afj-tcp-locks {})
+(reset! afj-tcp-wait-for {})
+(execute-ast {"type" "create-table" "table" "dead_a"
+              "schema" {"columns" [{"name" "id" "type" "INTEGER"
+                                      "nullable" true}]
+                         "unique-columns" []}})
+(execute-ast {"type" "create-table" "table" "dead_b"
+              "schema" {"columns" [{"name" "id" "type" "INTEGER"
+                                      "nullable" true}]
+                         "unique-columns" []}})
+(afj-tcp-begin "dead-a")
+(afj-tcp-begin "dead-b")
+(afj-tcp-query {"token" "dead-a"
+                "statement" "INSERT INTO dead_a (id) VALUES (1)"})
+(afj-tcp-query {"token" "dead-b"
+                "statement" "INSERT INTO dead_b (id) VALUES (1)"})
+(let [first-conflict (afj-tcp-query {"token" "dead-a"
+                                     "statement" "INSERT INTO dead_b (id) VALUES (1)"})
+      cycle (afj-tcp-query {"token" "dead-b"
+                            "statement" "INSERT INTO dead_a (id) VALUES (1)"})]
+  (if (and (= (get first-conflict "error") "LOCK_CONFLICT")
+           (= (get cycle "error") "DEADLOCK_DETECTED")
+           (= (get cycle "victim") "dead-b")
+           (= (get cycle "status") "rolled-back")
+           (nil? (get (deref afj-tcp-transactions) "dead-b"))
+           (nil? (get (deref afj-tcp-locks) "dead_b")))
+    (println "afj-db95 TCP deadlock PASS")
+    (throw "TCP deadlock detection failure")))
+(afj-tcp-rollback "dead-a")

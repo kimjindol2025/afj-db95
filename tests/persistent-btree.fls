@@ -1,0 +1,22 @@
+;; AFJ-013 page-backed recursive B+Tree snapshot contract.
+(load "/root/kilo-freelang/projects/afj-db95/src/afj-db95.fls")
+(load "/root/kilo-freelang/projects/afj-db95/src/btree.fls")
+
+(let [path "/tmp/afj-db95-recursive-btree.page"
+      tree (loop [index 0 value (btree-root [])]
+             (if (>= index 20)
+               value
+               (recur (+ index 1)
+                      (btree-root-insert value
+                                         {"key" index "row-id" index} 3))))]
+  (if (file_exists path) (file_delete path) true)
+  (write-page path {"kind" "btree-recursive" "tree" tree})
+  (let [restored (read-page path)
+        restored-tree (get restored "tree")]
+    (if (and (= (get restored "kind") "btree-recursive")
+             (= (btree-root-get restored-tree 0) [0])
+             (= (btree-root-get restored-tree 7) [7])
+             (= (btree-root-get restored-tree 19) [19]))
+      (println "afj-db95 persistent recursive B+Tree PASS")
+      (throw "recursive B+Tree changed after page reopen")))
+  (file_delete path))

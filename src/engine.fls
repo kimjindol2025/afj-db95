@@ -3,6 +3,250 @@
 
 (define engine-catalog (atom {}))
 (define engine-databases (atom {}))
+(define engine-indexes (atom {}))
+
+(defn engine-index-columns [table]
+  (let [schema (get table "schema" {})
+        primary (get schema "primary-key")
+        unique-columns (get schema "unique-columns" [])]
+    (if (nil? primary)
+      unique-columns
+      (conj unique-columns primary))))
+
+(defn engine-build-index [rows column row-id index]
+  (if (>= row-id (count rows))
+    index
+    (let [row (get rows row-id)
+          key (get row column)
+          key-token (str key)
+          existing-bucket (get index key-token)
+          bucket (if (nil? existing-bucket) [] existing-bucket)]
+      (engine-build-index rows column (+ row-id 1)
+                          (assoc index key-token (conj bucket row-id))))))
+
+(defn engine-btree-node-first-key [node]
+  (if (get node "leaf")
+    (get (first (get node "entries" [])) "key")
+    (engine-btree-node-first-key (first (get node "children" [])))))
+
+(defn engine-btree-node-separators [children]
+  (map (fn [child] (engine-btree-node-first-key child))
+       (rest children)))
+
+(defn engine-btree-child-index [separators key index]
+  (if (>= index (count separators))
+    index
+    (if (< key (get separators index))
+      index
+      (engine-btree-child-index separators key (+ index 1)))))
+
+(defn engine-btree-replace-at [items index value]
+  (if (= index 0)
+    (append [value] (rest items))
+    (append [(first items)]
+            (engine-btree-replace-at (rest items) (- index 1) value))))
+
+(defn engine-btree-insert-at [items index value]
+  (if (= index 0)
+    (append [value] items)
+    (append [(first items)]
+            (engine-btree-insert-at (rest items) (- index 1) value))))
+
+(defn engine-btree-key-before? [left right]
+  (if (and (number? left) (number? right))
+    (< left right)
+    (< (str left) (str right))))
+
+(defn engine-btree-insert-sorted [entries entry]
+  (if (= (count entries) 0)
+    [entry]
+    (let [first-entry (first entries)]
+      (if (engine-btree-key-before?
+            (get entry "key") (get first-entry "key"))
+        (append [entry] entries)
+        (append [first-entry]
+                (engine-btree-insert-sorted (rest entries) entry))))))
+
+(defn engine-btree-split-leaf [entries]
+  (let [middle (floor (/ (count entries) 2))
+        left (take middle entries)
+        right (drop middle entries)]
+    {"left" left "right" right
+     "separator" (get (first right) "key")}))
+
+(defn engine-btree-split-children [children]
+  (let [middle (floor (/ (count children) 2))
+        left (take middle children)
+        right (drop middle children)]
+    {"left" {"leaf" false
+              "separators" (engine-btree-node-separators left)
+              "children" left}
+     "right" {"leaf" false
+               "separators" (engine-btree-node-separators right)
+               "children" right}
+     "separator" (engine-btree-node-first-key (first right))}))
+
+(defn engine-btree-insert-node [node entry max-entries]
+  (if (get node "leaf")
+    (let [entries (engine-btree-insert-sorted
+                    (get node "entries" []) entry)]
+      (if (<= (count entries) max-entries)
+        {"split" false "node" {"leaf" true "entries" entries}}
+        (let [split (engine-btree-split-leaf entries)]
+          {"split" true
+           "left" {"leaf" true "entries" (get split "left")}
+           "right" {"leaf" true "entries" (get split "right")}
+           "separator" (get split "separator")})))
+    (let [separators (get node "separators" [])
+          children (get node "children" [])
+          index (engine-btree-child-index separators (get entry "key") 0)
+          child-result (engine-btree-insert-node
+                         (get children index) entry max-entries)]
+      (if (not (get child-result "split"))
+        (let [updated (engine-btree-replace-at
+                        children index (get child-result "node"))]
+          {"split" false
+           "node" {"leaf" false
+                    "separators" (engine-btree-node-separators updated)
+                    "children" updated}})
+        (let [with-left (engine-btree-replace-at
+                          children index (get child-result "left"))
+              with-right (engine-btree-insert-at
+                           with-left (+ index 1) (get child-result "right"))]
+          (if (<= (count with-right) max-entries)
+            {"split" false
+             "node" {"leaf" false
+                      "separators"
+                        (engine-btree-node-separators with-right)
+                      "children" with-right}}
+            (let [split (engine-btree-split-children with-right)]
+              {"split" true
+               "left" (get split "left")
+               "right" (get split "right")
+               "separator" (get split "separator")})))))))
+
+(defn engine-btree-root-insert [root entry max-entries]
+  (let [result (engine-btree-insert-node root entry max-entries)]
+    (if (not (get result "split"))
+      (get result "node")
+      {"leaf" false
+       "separators" [(get result "separator")]
+       "children" [(get result "left") (get result "right")]})))
+
+(defn engine-btree-root-get [root key]
+  (if (get root "leaf")
+    (map (fn [entry] (get entry "row-id"))
+         (filter (fn [entry] (= (get entry "key") key))
+                 (get root "entries" [])))
+    (let [index (engine-btree-child-index
+                  (get root "separators" []) key 0)]
+      (engine-btree-root-get
+        (get (get root "children" []) index) key))))
+
+(defn engine-btree-entries [node]
+  (if (get node "leaf")
+    (get node "entries" [])
+    (arr_flatten (map engine-btree-entries (get node "children" [])))))
+
+(defn engine-build-btree [rows column row-id root]
+  (if (>= row-id (count rows))
+    root
+    (engine-build-btree
+      rows column (+ row-id 1)
+      (engine-btree-root-insert
+        root {"key" (get (get rows row-id) column) "row-id" row-id} 32))))
+
+(defn engine-build-btree-leaf [rows column row-id entries]
+  (if (>= row-id (count rows))
+    {"leaf" true "entries" entries}
+    (engine-build-btree-leaf
+      rows column (+ row-id 1)
+      (conj entries
+            {"key" (get (get rows row-id) column) "row-id" row-id}))))
+
+(defn engine-drop-table-indexes [name]
+  (doseq [index-key (keys (deref engine-indexes))]
+    (if (str_starts_with index-key (str name "."))
+      (reset! engine-indexes (dissoc (deref engine-indexes) index-key))
+      nil))
+  true)
+
+(defn engine-rebuild-table-indexes [name table]
+  (do
+    (engine-drop-table-indexes name)
+    (doseq [column (engine-index-columns table)]
+      (let [persisted (get (get table "page-indexes" {}) column)
+            tree persisted]
+        (reset! engine-indexes
+                (assoc (deref engine-indexes) (str name "." column)
+                       {"table" name
+                        "column" column
+                        "buckets" (engine-build-index (get table "rows")
+                                                       column 0 {})
+                        "btree" tree}))))
+    true))
+
+(defn engine-index-add-row [name table row row-id]
+  (doseq [column (engine-index-columns table)]
+    (let [index-key (str name "." column)
+          index (get (deref engine-indexes) index-key)]
+      (if (nil? index)
+        nil
+        (let [buckets (get index "buckets")
+              key-token (str (get row column))
+              existing (get buckets key-token)
+              bucket (if (nil? existing) [] existing)]
+          (reset! engine-indexes
+                  (assoc (deref engine-indexes) index-key
+                         (assoc index "buckets"
+                                (assoc buckets key-token (conj bucket row-id))))))))
+  ))
+
+(defn engine-index-add-rows [name table rows row-id]
+  (if (>= row-id (count rows))
+    true
+    (do
+      (engine-index-add-row name table (get rows row-id) row-id)
+      (engine-index-add-rows name table rows (+ row-id 1)))))
+
+(defn engine-index-rows [name table where]
+  (let [column (get where "column")
+        index (get (deref engine-indexes) (str name "." column))]
+    (if (and (not (nil? index)) (has-key? where "equals"))
+      (map (fn [row-id] (get (get table "rows") row-id))
+           (if (not (nil? (get index "btree")))
+             (engine-btree-root-get (get index "btree")
+                                    (get where "equals"))
+             (if (nil? (get (get index "buckets")
+                            (str (get where "equals"))))
+               []
+               (get (get index "buckets")
+                    (str (get where "equals"))))))
+      (get table "rows"))))
+
+;; Range predicates use the same persistent index buckets as equality
+;; predicates, but inspect only bucket keys that satisfy the predicate. The
+;; final engine-match? pass remains authoritative for row-level semantics.
+(defn engine-index-range-rows [table index where keys-to-scan]
+  (if (not (nil? (get index "btree")))
+    (map (fn [entry] (get (get table "rows") (get entry "row-id")))
+         (filter (fn [entry]
+                   (engine-match?
+                     (assoc {} (get where "column") (get entry "key"))
+                     where))
+                 (engine-btree-entries (get index "btree"))))
+    (if (= (count keys-to-scan) 0)
+      []
+      (let [key-token (first keys-to-scan)
+            key-row (assoc {} (get where "column") key-token)
+            bucket (get (get index "buckets") key-token)
+            matches? (engine-match? key-row where)
+            rows (if (or (not matches?) (nil? bucket))
+                   []
+                   (map (fn [row-id] (get (get table "rows") row-id)) bucket))]
+        (concat rows
+                (engine-index-range-rows table index where
+                                         (rest keys-to-scan)))))))
 
 (defn execute-database [ast]
   (let [name (get ast "database")
@@ -13,16 +257,18 @@
         (if (any? (fn [table] (str_starts_with table (str name ".")))
                   (keys (deref engine-catalog)))
           (throw "DATABASE_NAMESPACE_CONFLICT")
-          (swap! engine-databases assoc name true)))
+          (reset! engine-databases (assoc (deref engine-databases) name true))))
       (if (or exists (get ast "if-exists" false))
         (do
           (if exists
             (doseq [table (keys (deref engine-catalog))]
               (if (str_starts_with table (str name "."))
-                (swap! engine-catalog dissoc table)
+                (do
+                  (reset! engine-catalog (dissoc (deref engine-catalog) table))
+                  (engine-drop-table-indexes table))
                 nil))
             nil)
-          (swap! engine-databases dissoc name))
+          (reset! engine-databases (dissoc (deref engine-databases) name)))
         (throw "DATABASE_NOT_FOUND")))
     {"ok" true "type" (get ast "type") "database" name}))
 
@@ -72,7 +318,8 @@
     row
     (let [qualified (atom row)]
       (doseq [column (keys row)]
-        (swap! qualified assoc (str alias "." column) (get row column)))
+        (reset! qualified
+                (assoc (deref qualified) (str alias "." column) (get row column))))
       (deref qualified))))
 
 (defn engine-match? [row where]
@@ -82,7 +329,26 @@
       (if (get where "is-null")
         (nil? (get row (get where "column")))
         (not (nil? (get row (get where "column")))))
-      (= (get row (get where "column")) (get where "equals")))))
+      (let [left (get row (get where "column"))
+            right (if (has-key? where "value")
+                    (get where "value")
+                    (get where "equals"))
+            operator (get where "operator" "=")
+            left-number (if (and (string? left)
+                                 (regex_match left "^-?[0-9]+$"))
+                          (str-to-num left) left)
+            right-number (if (and (string? right)
+                                  (regex_match right "^-?[0-9]+$"))
+                           (str-to-num right) right)]
+        (if (= operator "=")
+          (= left right)
+          (if (or (= operator "!=") (= operator "<>"))
+            (not (= left right))
+            (if (= operator ">") (> left-number right-number)
+              (if (= operator ">=") (>= left-number right-number)
+                (if (= operator "<") (< left-number right-number)
+                  (if (= operator "<=") (<= left-number right-number)
+                    false))))))))))
 
 (defn engine-join [left right left-key right-key]
   (arr_flatten
@@ -119,8 +385,9 @@
                       true
                       (not (nil? (get row count-column))))]
         (if include
-          (swap! groups assoc key
-                 (assoc current "count" (+ (get current "count") 1)))
+          (reset! groups
+                  (assoc (deref groups) key
+                         (assoc current "count" (+ (get current "count") 1))))
           nil)))
     (map (fn [key]
            (let [group (get (deref groups) key)
@@ -134,14 +401,16 @@
 (defn engine-project-row [row columns]
   (let [projected (atom {})]
     (doseq [column columns]
-      (swap! projected assoc (engine-key column) (get row column)))
+      (reset! projected
+              (assoc (deref projected) (engine-key column) (get row column))))
     (deref projected)))
 
 (defn engine-group-count [rows column]
   (let [counts (atom {})]
     (doseq [row rows]
-      (let [key (get row column)]
-        (swap! counts assoc key (+ (get (deref counts) key 0) 1))))
+      (let [key (str (get row column))]
+        (reset! counts
+                (assoc (deref counts) key (+ (get (deref counts) key 0) 1)))))
     (deref counts)))
 
 (defn engine-type-valid? [value type]
@@ -219,9 +488,11 @@
   (let [name (get ast "table")]
     (if (has-key? (deref engine-catalog) name)
       (throw (str "table already exists: " name))
-      (swap! engine-catalog assoc name
-             (assoc {"name" name "rows" [] "columns" []}
-                    "schema" (get ast "schema" {}))))
+      (reset! engine-catalog
+              (assoc (deref engine-catalog) name
+                     (assoc {"name" name "rows" [] "columns" []}
+                            "schema" (get ast "schema" {})))))
+    (engine-rebuild-table-indexes name (engine-table name))
     {"ok" true "type" "create-table" "table" name}))
 
 (defn execute-alter [ast]
@@ -233,21 +504,27 @@
                              (get (get table "schema" {}) "columns" [])))]
     (if (contains? columns column)
       (throw (str "column already exists: " column))
-      (let [rows (map (fn [row] (assoc row column nil)) (get table "rows"))]
-        (swap! engine-catalog assoc name
-               (assoc table "columns" (conj (get table "columns" []) column)
-                      "rows" rows
-                      "schema" (if (has-key? ast "definition")
-                                 (assoc (get table "schema" {}) "columns"
-                                        (conj (get (get table "schema" {}) "columns" [])
-                                              (get ast "definition")))
-                                 (get table "schema" {}))))
+      (let [rows (map (fn [row] (assoc row column nil)) (get table "rows"))
+            schema (if (has-key? ast "definition")
+                     (assoc (get table "schema" {}) "columns"
+                            (conj (get (get table "schema" {}) "columns" [])
+                                  (get ast "definition")))
+                     (get table "schema" {}))
+            updated-table (dissoc
+                            (assoc table "columns"
+                                   (conj (get table "columns" []) column)
+                                   "rows" rows "schema" schema)
+                            "page-indexes")]
+        (reset! engine-catalog
+                (assoc (deref engine-catalog) name updated-table))
+        (engine-rebuild-table-indexes name (engine-table name))
         {"ok" true "type" "alter-table" "table" name "column" column}))))
 
 (defn execute-drop [ast]
   (let [name (get ast "table")]
     (engine-table name)
-    (swap! engine-catalog dissoc name)
+    (reset! engine-catalog (dissoc (deref engine-catalog) name))
+    (engine-drop-table-indexes name)
     {"ok" true "type" "drop-table" "table" name}))
 
 (defn engine-positional-row [table values]
@@ -257,7 +534,8 @@
       (throw "COLUMN_COUNT_MISMATCH")
       (let [row (atom {})]
         (doseq [index (range 0 (count columns))]
-          (swap! row assoc (get columns index) (get values index)))
+          (reset! row
+                  (assoc (deref row) (get columns index) (get values index))))
         (deref row)))))
 
 (defn execute-insert [ast]
@@ -273,17 +551,48 @@
         candidate (atom existing)]
     (doseq [row new-rows]
       (engine-validate-row (get table "schema" {}) row (deref candidate))
-      (swap! candidate conj row))
-    (let [rows (deref candidate)]
-    (swap! engine-catalog assoc name (assoc table "rows" rows))
+      (reset! candidate (conj (deref candidate) row)))
+    (let [rows (deref candidate)
+          updated-table (dissoc (assoc table "rows" rows)
+                                "page-indexes")]
+    (reset! engine-catalog (assoc (deref engine-catalog) name updated-table))
+    (engine-rebuild-table-indexes name updated-table)
     {"ok" true "type" "insert" "count" (count new-rows)})))
+
+;; Keep the index lookup helper adjacent to the executor so the bootstrap
+;; loader registers it before any self-test query invokes the planner.
+(defn engine-index-rows-safe [name table where]
+  (let [column (get where "column")
+        index (get (deref engine-indexes) (str name "." column))
+        operator (get where "operator")]
+    (if (nil? index)
+      (get table "rows")
+      (if (has-key? where "equals")
+        (map (fn [row-id] (get (get table "rows") row-id))
+             (if (not (nil? (get index "btree")))
+               (engine-btree-root-get (get index "btree")
+                                      (get where "equals"))
+               (if (nil? (get (get index "buckets")
+                              (str (get where "equals"))))
+                 []
+                 (get (get index "buckets")
+                      (str (get where "equals"))))))
+        (if (or (= operator ">") (= operator ">=")
+                (= operator "<") (= operator "<=")
+                (= operator "!=") (= operator "<>"))
+          (engine-index-range-rows table index where
+                                   (keys (get index "buckets")))
+          (get table "rows"))))))
 
 (defn execute-select [ast]
   (let [table (engine-table (get ast "table"))
+        where (get ast "where")
+        source-rows (if (nil? where)
+                      (get table "rows")
+                      (engine-index-rows-safe (get ast "table") table where))
         rows (map (fn [row]
                     (engine-qualify-row row (get ast "table-alias")))
-                  (get table "rows"))
-        where (get ast "where")
+                  source-rows)
         filtered (if (nil? where)
                    rows
                    (filter (fn [row] (engine-match? row where)) rows))
@@ -317,14 +626,24 @@
         {"ok" true "type" "select" "rows" aggregate-rows})
       (if (nil? (get ast "group-by"))
         {"ok" true "type" "select"
+         "plan" (if (and (not (nil? where))
+                         (not (nil? (get (deref engine-indexes)
+                                        (str (get ast "table") "."
+                                             (get where "column")))))
+                    )
+                    (if (has-key? where "equals")
+                      "index-scan"
+                      "index-range-scan")
+                    "full-scan")
          "rows" (if (or (nil? (get ast "columns"))
                         (= (get ast "columns") ["*"]))
                    limited
                    (map (fn [row]
                           (engine-project-row row (get ast "columns")))
                         limited))}
-        {"ok" true "type" "select" "groups"
-         (engine-group-count limited (engine-key (get ast "group-by")))}))))
+        (let [grouped (engine-group-count
+                        limited (engine-key (get ast "group-by")))]
+          {"ok" true "type" "select" "groups" grouped})))))
 
 (defn execute-update [ast]
   (let [name (get ast "table")
@@ -335,7 +654,10 @@
                       (obj-merge row (get ast "changes"))
                       row))
                   (get table "rows"))]
-    (swap! engine-catalog assoc name (assoc table "rows" rows))
+    (let [updated-table (dissoc (assoc table "rows" rows)
+                                "page-indexes")]
+      (reset! engine-catalog (assoc (deref engine-catalog) name updated-table))
+      (engine-rebuild-table-indexes name updated-table))
     {"ok" true "type" "update" "rows" rows}))
 
 (defn execute-delete [ast]
@@ -347,7 +669,10 @@
                (filter (fn [row]
                          (not (engine-match? row where)))
                        (get table "rows")))]
-    (swap! engine-catalog assoc name (assoc table "rows" rows))
+    (let [updated-table (dissoc (assoc table "rows" rows)
+                                "page-indexes")]
+      (reset! engine-catalog (assoc (deref engine-catalog) name updated-table))
+      (engine-rebuild-table-indexes name updated-table))
     {"ok" true "type" "delete" "rows" rows}))
 
 (defn execute-ast [ast]
@@ -385,6 +710,49 @@
   (if (= (count (get result "rows")) 1)
     (println "afj-db95 WHERE executor PASS")
     (throw "WHERE executor failure")))
+
+(execute-ast {"type" "create-table" "table" "indexed_plan_users"
+              "schema" {"columns" [{"name" "id" "type" "INTEGER"
+                                      "nullable" false "primary" true}
+                                     {"name" "name" "type" "TEXT"
+                                      "nullable" true}]
+                         "primary-key" "id" "unique-columns" []}})
+(execute-ast {"type" "insert" "table" "indexed_plan_users"
+              "row" {"id" 1 "name" "Kim"}})
+(execute-ast {"type" "insert" "table" "indexed_plan_users"
+              "row" {"id" 2 "name" "Lee"}})
+(let [indexed-result (execute-ast {"type" "select" "table" "indexed_plan_users"
+                                   "where" {"column" "id" "equals" 2}})
+      scan-result (execute-ast {"type" "select" "table" "indexed_plan_users"
+                                "where" {"column" "name" "equals" "Lee"}})]
+  (if (and (= (get indexed-result "plan") "index-scan")
+           (= (get scan-result "plan") "full-scan")
+           (= (get (first (get indexed-result "rows")) "name")
+              (get (first (get scan-result "rows")) "name")))
+    (println "afj-db95 index optimizer PASS")
+    (throw (str "index and full scan results differ index-plan="
+                (get indexed-result "plan")
+                " scan-plan=" (get scan-result "plan")
+                " index-rows=" (count (get indexed-result "rows"))
+                " scan-rows=" (count (get scan-result "rows"))))))
+(let [updated (execute-ast {"type" "update" "table" "indexed_plan_users"
+                             "where" {"column" "id" "equals" 2}
+                             "changes" {"name" "Lee-updated"}})
+      after-update (execute-ast {"type" "select" "table" "indexed_plan_users"
+                                 "where" {"column" "id" "equals" 2}})
+      deleted (execute-ast {"type" "delete" "table" "indexed_plan_users"
+                            "where" {"column" "id" "equals" 2}})
+      after-delete (execute-ast {"type" "select" "table" "indexed_plan_users"
+                                 "where" {"column" "id" "equals" 2}})]
+  (if (and (= (get (first (filter (fn [row] (= (get row "id") 2))
+                                  (get updated "rows"))) "name") "Lee-updated")
+           (= (get after-update "plan") "index-scan")
+           (= (get (first (get after-update "rows")) "name") "Lee-updated")
+           (= (count (get deleted "rows")) 1)
+           (= (get after-delete "plan") "index-scan")
+           (= (count (get after-delete "rows")) 0))
+    (println "afj-db95 index CRUD maintenance PASS")
+    (throw "index CRUD maintenance failure")))
 (let [result (execute-ast {"type" "update" "table" "users"
                            "where" {"column" "name" "equals" "Kim"}
                            "changes" {"age" 31}})]
@@ -399,7 +767,7 @@
       ordered (execute-ast {"type" "select" "table" "users"
                             "order-by" "id"})]
   (if (and (= (count (get joined "rows")) 2)
-           (= (get (get groups "groups") 10) 2)
+           (= (get (get groups "groups") "10") 2)
            (= (get (first (get ordered "rows")) "id") 1))
     (println "afj-db95 JOIN/GROUP engine PASS")
     (if (= (count (get joined "rows")) 1)

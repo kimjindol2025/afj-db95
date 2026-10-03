@@ -1,0 +1,50 @@
+;; TCP SAVEPOINT contract: partial rollback keeps earlier staged work.
+(load "/root/kilo-freelang/projects/afj-db95/src/tcp-server.fls")
+
+(server-start "tcp-savepoint-test")
+(reset! engine-catalog {})
+(reset! engine-indexes {})
+(reset! afj-tcp-sessions {"sp-a" "root" "sp-b" "root"})
+(reset! afj-tcp-transactions {})
+(reset! afj-tcp-locks {})
+(reset! afj-tcp-wait-for {})
+(execute-ast {"type" "create-table" "table" "savepoint_users"
+              "schema" {"columns" [{"name" "id" "type" "INTEGER"
+                                      "nullable" false "primary" true}
+                                     {"name" "name" "type" "TEXT"
+                                      "nullable" true}]
+                         "primary-key" "id" "unique-columns" []}})
+
+(let [started (afj-tcp-query {"token" "sp-a" "statement" "START TRANSACTION"})
+      first-write (afj-tcp-query
+                   {"token" "sp-a"
+                    "statement" "INSERT INTO savepoint_users (id,name) VALUES (1,'before')"})
+      saved (afj-tcp-query
+             {"token" "sp-a" "statement" "SAVEPOINT before_update"})
+      second-write (afj-tcp-query
+                    {"token" "sp-a"
+                     "statement" "INSERT INTO savepoint_users (id,name) VALUES (2,'after')"})
+      rolled (afj-tcp-query
+              {"token" "sp-a"
+               "statement" "ROLLBACK TO SAVEPOINT before_update"})
+      own-read (afj-tcp-query
+                {"token" "sp-a" "statement" "SELECT * FROM savepoint_users"})
+      other-read (afj-tcp-query
+                  {"token" "sp-b" "statement" "SELECT * FROM savepoint_users"})
+      released (afj-tcp-query
+                {"token" "sp-a" "statement" "RELEASE SAVEPOINT before_update"})
+      committed (afj-tcp-query {"token" "sp-a" "statement" "COMMIT"})
+      published (afj-tcp-query
+                 {"token" "sp-b" "statement" "SELECT * FROM savepoint_users"})]
+  (if (and (get started "ok")
+           (get first-write "ok")
+           (get saved "ok")
+           (get second-write "ok")
+           (get rolled "ok")
+           (= (count (get (get own-read "result") "rows")) 1)
+           (= (count (get (get other-read "result") "rows")) 0)
+           (get released "ok")
+           (get committed "ok")
+           (= (count (get (get published "result") "rows")) 1))
+    (println "afj-db95 TCP savepoint PASS")
+    (throw "TCP SAVEPOINT partial rollback contract failed")))

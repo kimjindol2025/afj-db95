@@ -24,4 +24,8 @@ M1: 파일 페이지 포맷과 append-only WAL.
 M2: SELECT 파서와 조건식 실행기.
 M3: 트랜잭션·잠금·MVCC.
 
+실행 태스크의 단일 기준은 `docs/IMPROVEMENT-TASKS.md`다. 현재 우선 작업은
+`AFJ-001` 운영 기본값 정리, `AFJ-002` WAL·페이지 포맷 고정,
+`AFJ-003` 백업·복구 무결성이다.
+
 커밋과 push는 사용자 명시 요청 전까지 수행하지 않는다.

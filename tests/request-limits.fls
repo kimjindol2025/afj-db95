@@ -1,0 +1,20 @@
+;; Request and SQL size boundary contract.
+(load "/root/kilo-freelang/projects/afj-db95/src/tcp-server.fls")
+
+(defn assert-limit [label expected actual]
+  (if (= expected actual)
+    (println (str "PASS " label))
+    (throw (str "FAIL " label))))
+
+(let [request-limit (str_repeat "x" 1048577)
+      sql-limit (str_repeat "x" 262145)]
+  (assert-limit "request under limit" nil
+                (afj-tcp-request-size-error "small"))
+  (assert-limit "request over limit" "REQUEST_TOO_LARGE"
+                (afj-tcp-request-size-error request-limit))
+  (assert-limit "sql under limit" nil
+                (afj-tcp-sql-size-error "SELECT 1"))
+  (assert-limit "sql over limit" "SQL_TOO_LARGE"
+                (afj-tcp-sql-size-error sql-limit)))
+
+(println "afj-db95 request limits PASS")

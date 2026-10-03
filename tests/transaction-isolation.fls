@@ -1,0 +1,50 @@
+;; TCP transaction staging contract: uncommitted writes stay private.
+(load "/root/kilo-freelang/projects/afj-db95/src/tcp-server.fls")
+
+(server-start "transaction-isolation-test")
+(reset! engine-catalog {})
+(reset! engine-indexes {})
+(reset! afj-tcp-sessions {"tx-a" "root" "tx-b" "root"})
+(reset! afj-tcp-transactions {})
+(reset! afj-tcp-locks {})
+(execute-ast {"type" "create-table" "table" "isolation_users"
+              "schema" {"columns" [{"name" "id" "type" "INTEGER"
+                                      "nullable" false "primary" true}
+                                     {"name" "name" "type" "TEXT"
+                                      "nullable" true}]
+                         "primary-key" "id" "unique-columns" []}})
+
+(afj-tcp-begin "tx-a")
+(let [written (afj-tcp-query
+                {"token" "tx-a"
+                 "statement" "INSERT INTO isolation_users (id,name) VALUES (1,'private')"})
+      other-read (afj-tcp-query
+                   {"token" "tx-b"
+                    "statement" "SELECT * FROM isolation_users"})
+      own-read (afj-tcp-query
+                 {"token" "tx-a"
+                  "statement" "SELECT * FROM isolation_users"})]
+  (if (and (get written "ok")
+           (= (count (get (get other-read "result") "rows")) 0)
+           (= (count (get (get own-read "result") "rows")) 1))
+    nil
+    (throw "uncommitted transaction leaked to another session")))
+(afj-tcp-rollback "tx-a")
+(let [after-rollback (afj-tcp-query
+                       {"token" "tx-b"
+                        "statement" "SELECT * FROM isolation_users"})]
+  (if (= (count (get (get after-rollback "result") "rows")) 0)
+    nil
+    (throw "rollback retained staged transaction data")))
+
+(afj-tcp-begin "tx-a")
+(afj-tcp-query
+  {"token" "tx-a"
+   "statement" "INSERT INTO isolation_users (id,name) VALUES (2,'committed')"})
+(afj-tcp-commit "tx-a")
+(let [after-commit (afj-tcp-query
+                     {"token" "tx-b"
+                      "statement" "SELECT * FROM isolation_users"})]
+  (if (= (count (get (get after-commit "result") "rows")) 1)
+    (println "afj-db95 transaction isolation PASS")
+    (throw "committed transaction was not published")))

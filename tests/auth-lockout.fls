@@ -1,0 +1,18 @@
+;; Authentication failure lockout contract.
+(load "/root/kilo-freelang/projects/afj-db95/src/auth.fls")
+
+(create-role "lockout-role")
+(grant "lockout-role" "db.read")
+(create-user "lockout-user" "correct-password" "lockout-role")
+
+(let [first (authenticate "lockout-user" "wrong-1")
+      second (authenticate "lockout-user" "wrong-2")
+      third (authenticate "lockout-user" "wrong-3")
+      fourth (authenticate "lockout-user" "wrong-4")
+      fifth (authenticate "lockout-user" "wrong-5")
+      locked (authenticate "lockout-user" "correct-password")]
+  (if (and (not (get first "ok"))
+           (not (get fifth "ok"))
+           (= (get locked "error") "AUTH_LOCKED"))
+    (println "afj-db95 auth lockout PASS")
+    (throw "auth lockout contract failure")))
