@@ -1,8 +1,8 @@
 # AFJ-016 Release Gate Report
 
-- Generated: 2026-10-03T23:26:43Z
+- Generated: 2026-10-03T23:47:14Z
 - Repository: afj-db95
-- Automated cases: 50 PASS, 1 FAIL
+- Automated cases: 51 PASS, 0 FAIL
 - Release status: **BLOCKED**
 
 ## Automated evidence
@@ -19,7 +19,7 @@
 | TCP lazy catalog eviction | PASS |
 | persistent recursive B+Tree | PASS |
 | TCP concurrency | PASS |
-| TCP 5m performance envelope | FAIL |
+| TCP 5m performance envelope | PASS |
 | backup smoke | PASS |
 | compatibility scorecard | PASS |
 | WAL format | PASS |

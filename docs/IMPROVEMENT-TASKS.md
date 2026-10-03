@@ -425,7 +425,7 @@
     그러나 MariaDB production hardening, 완전한 row-version MVCC,
     index-range granular validation, executor lazy catalog eviction을
     명시적으로 감지해 release status를 `BLOCKED`로 유지한다.
-  - 최신 실행 기록: `2026-10-03T23:26:43Z`, 자동 케이스 `50 PASS, 1 FAIL` (`TCP 5m performance envelope`).
+  - 최신 실행 기록: `2026-10-03T23:47:14Z`, 자동 케이스 `51 PASS, 0 FAIL`.
     범위 predicate conflict 회귀도 통과했지만, 위 구조적 차단 항목 때문에
     exit status 2와 `Release status: BLOCKED`를 유지했다.
 
