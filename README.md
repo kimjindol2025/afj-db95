@@ -38,6 +38,7 @@ TCP 운영 인스턴스는 환경변수로 인스턴스별 WAL 위치와 root �
 AFJ_DB_WAL=/var/lib/afj-db95/catalog.wal
 AFJ_DB_ROOT_PASSWORD=<운영용-비밀번호>
 AFJ_DB_PORT=43995
+AFJ_DB_BIND_HOST=127.0.0.1
 ```
 
 운영에서는 `/tmp` 기본 WAL 경로와 `development-only` 기본 비밀번호를 사용하지
@@ -47,6 +48,9 @@ AFJ_DB_PORT=43995
 응답의 `ok`, `service`, `status`, `wal` 필드를 readiness/liveness 점검에 사용합니다.
 인증된 세션은 `{"type":"shutdown","token":"..."}` 요청으로 graceful shutdown을
 수행할 수 있습니다. 포트는 `AFJ_DB_PORT`로 지정하며 1~65535 범위만 허용합니다.
+bind 주소는 `AFJ_DB_BIND_HOST`로 지정합니다. 기본값은 기존 호환성을 위해
+`0.0.0.0`이며, 외부 노출을 막으려면 `127.0.0.1` 또는 운영 네트워크 주소를
+지정해야 합니다.
 
 ## 목표
 

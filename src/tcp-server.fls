@@ -14,6 +14,7 @@
         (if (and (number? parsed) (> parsed 0) (< parsed 65536))
           parsed
           (throw "AFJ_DB_PORT_INVALID"))))))
+(define afj-tcp-host (env-or "AFJ_DB_BIND_HOST" "0.0.0.0"))
 (define afj-tcp-sessions (atom {}))
 (define afj-tcp-databases (atom {}))
 (define afj-tcp-transactions (atom {}))
@@ -343,9 +344,9 @@
     (reset! afj-tcp-databases {})
     (reset! afj-tcp-locks {})
     (server-start "afj-db95-tcp")
-    (let [started (tcp-server-raw afj-tcp-port "afj-db-tcp-handler")]
+    (let [started (tcp-server-raw afj-tcp-port "afj-db-tcp-handler" afj-tcp-host)]
       (if (= started "ok")
-        {"ok" true "port" afj-tcp-port}
+        {"ok" true "host" afj-tcp-host "port" afj-tcp-port}
         {"ok" false "error" "TCP_START_FAILED" "detail" started}))))
 
 (defn stop-afj-tcp []
