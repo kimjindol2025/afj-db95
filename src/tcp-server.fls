@@ -11,7 +11,7 @@
 (define afj-tcp-databases (atom {}))
 (define afj-tcp-transactions (atom {}))
 (define afj-tcp-locks (atom {}))
-(define afj-tcp-wal "/tmp/afj-db95-tcp-catalog.wal")
+(define afj-tcp-wal (env-or "AFJ_DB_WAL" "/tmp/afj-db95-tcp-catalog.wal"))
 
 (defn afj-tcp-wal-append [event]
   (let [fd (fd_open afj-tcp-wal "a")]

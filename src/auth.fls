@@ -2,6 +2,7 @@
 
 (define users (atom {}))
 (define roles (atom {}))
+(define afj-root-password (env-or "AFJ_DB_ROOT_PASSWORD" "development-only"))
 
 (defn create-role [name]
   (swap! roles assoc name {"name" name "permissions" []})
@@ -42,10 +43,10 @@
 (create-role "admin")
 (grant "admin" "db.read")
 (grant "admin" "db.write")
-(create-user "root" "development-only" "admin")
+(create-user "root" afj-root-password "admin")
 
-(if (and (get (authenticate "root" "development-only") "ok")
+(if (and (get (authenticate "root" afj-root-password) "ok")
          (authorize "root" "db.write")
-         (not (get (authenticate "root" "wrong") "ok")))
+         (not (get (authenticate "root" (str afj-root-password "-wrong")) "ok")))
   (println "afj-db95 auth PASS")
   (throw "auth contract failure"))

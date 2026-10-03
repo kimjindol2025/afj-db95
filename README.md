@@ -31,6 +31,17 @@ transaction 복구 기준선을 제공합니다. 아직 공식 1.0 DB는 아닙�
 node /root/freelang-surface-v0-clean-ek3qo2/v11/bootstrap.js run src/afj-db95.fls
 ```
 
+TCP 운영 인스턴스는 환경변수로 인스턴스별 WAL 위치와 root 비밀번호를 지정할 수
+있습니다. 미설정 시 기존 개발 기본값을 사용합니다.
+
+```text
+AFJ_DB_WAL=/var/lib/afj-db95/catalog.wal
+AFJ_DB_ROOT_PASSWORD=<운영용-비밀번호>
+```
+
+운영에서는 `/tmp` 기본 WAL 경로와 `development-only` 기본 비밀번호를 사용하지
+않아야 합니다.
+
 ## 목표
 
 MariaDB 내부 구현을 복제하는 것이 아니라, 주요 SQL·트랜잭션·운영 기능을 FreeLang Script로 단계적으로 호환합니다.

@@ -4,7 +4,7 @@
 (let [login (json-parse
               (tcp-send "127.0.0.1" afj-tcp-port
                         (json_str {"type" "login" "user" "root"
-                                   "password" "development-only"})
+                                   "password" (env-or "AFJ_DB_ROOT_PASSWORD" "development-only")})
                         3000))
       token (get login "token")
       selected (json-parse

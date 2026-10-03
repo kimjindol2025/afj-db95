@@ -7,10 +7,10 @@
     response))
 
 (let [login (tx-request {"type" "login" "user" "root"
-                          "password" "development-only"})
+                          "password" (env-or "AFJ_DB_ROOT_PASSWORD" "development-only")})
       token (get login "token")
       login2 (tx-request {"type" "login" "user" "root"
-                           "password" "development-only"})
+                           "password" (env-or "AFJ_DB_ROOT_PASSWORD" "development-only")})
       token2 (get login2 "token")
       create (tx-request {"type" "query" "token" token
                           "statement" "CREATE TABLE tcp_tx_users"})
