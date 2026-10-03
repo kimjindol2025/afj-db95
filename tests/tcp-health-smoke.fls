@@ -1,0 +1,36 @@
+;; Unauthenticated TCP health probe contract.
+(load "/root/kilo-freelang/projects/afj-db95/src/tcp-server.fls")
+
+(let [health (json-parse
+               (tcp-send "127.0.0.1" afj-tcp-port
+                         (json_str {"type" "health"})
+                         3000))
+      login (json-parse
+              (tcp-send "127.0.0.1" afj-tcp-port
+                        (json_str {"type" "login" "user" "root"
+                                   "password" (env-or "AFJ_DB_ROOT_PASSWORD" "development-only")})
+                        3000))
+      token (get login "token")
+      _create (json-parse
+                (tcp-send "127.0.0.1" afj-tcp-port
+                          (json_str {"type" "query" "token" token
+                                     "statement" "CREATE TABLE health_users"})
+                          3000))
+      _insert (json-parse
+                (tcp-send "127.0.0.1" afj-tcp-port
+                          (json_str {"type" "query" "token" token
+                                     "statement" "INSERT INTO health_users (id,name) VALUES (1,'Health')"})
+                          3000))
+      after-write (json-parse
+                    (tcp-send "127.0.0.1" afj-tcp-port
+                              (json_str {"type" "health"})
+                              3000))]
+  (println (json_str {"before" health "after-write" after-write}))
+  (if (and (get health "ok")
+           (= (get health "service") "afj-db95")
+           (= (get health "status") "running")
+           (not (get health "wal"))
+           (get login "ok")
+           (get after-write "wal"))
+    (println "afj-db95 TCP health probe PASS")
+    (throw "TCP health probe failure")))

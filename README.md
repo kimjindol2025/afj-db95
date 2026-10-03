@@ -42,6 +42,9 @@ AFJ_DB_ROOT_PASSWORD=<운영용-비밀번호>
 운영에서는 `/tmp` 기본 WAL 경로와 `development-only` 기본 비밀번호를 사용하지
 않아야 합니다.
 
+모니터링은 TCP JSON 요청 `{"type":"health"}`를 인증 없이 사용할 수 있습니다.
+응답의 `ok`, `service`, `status`, `wal` 필드를 readiness/liveness 점검에 사용합니다.
+
 ## 목표
 
 MariaDB 내부 구현을 복제하는 것이 아니라, 주요 SQL·트랜잭션·운영 기능을 FreeLang Script로 단계적으로 호환합니다.

@@ -190,6 +190,12 @@
 (defn afj-tcp-send [conn body]
   (tcp-write conn (str (json_str body) "\n")))
 
+(defn afj-tcp-health []
+  {"ok" true
+   "service" "afj-db95"
+   "status" "running"
+   "wal" (file_exists afj-tcp-wal)})
+
 (defn afj-tcp-permission [statement]
   (if (= (get (parse-sql statement) "type") "select")
     "db.read"
@@ -297,7 +303,9 @@
               (afj-tcp-send conn {"ok" false "error" "SQL_ERROR"})))
           (if (= (get request "type") "ping")
             (afj-tcp-send conn {"ok" true "type" "pong"})
-            (afj-tcp-send conn {"ok" false "error" "UNKNOWN_REQUEST"}))))))))
+            (if (= (get request "type") "health")
+              (afj-tcp-send conn (afj-tcp-health))
+              (afj-tcp-send conn {"ok" false "error" "UNKNOWN_REQUEST"})))))))))
 
 (defn afj-db-tcp-handler [event conn payload]
   (if (= event "data")
