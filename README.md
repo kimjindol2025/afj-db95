@@ -37,6 +37,7 @@ TCP 운영 인스턴스는 환경변수로 인스턴스별 WAL 위치와 root �
 ```text
 AFJ_DB_WAL=/var/lib/afj-db95/catalog.wal
 AFJ_DB_ROOT_PASSWORD=<운영용-비밀번호>
+AFJ_DB_PORT=43995
 ```
 
 운영에서는 `/tmp` 기본 WAL 경로와 `development-only` 기본 비밀번호를 사용하지
@@ -44,6 +45,8 @@ AFJ_DB_ROOT_PASSWORD=<운영용-비밀번호>
 
 모니터링은 TCP JSON 요청 `{"type":"health"}`를 인증 없이 사용할 수 있습니다.
 응답의 `ok`, `service`, `status`, `wal` 필드를 readiness/liveness 점검에 사용합니다.
+인증된 세션은 `{"type":"shutdown","token":"..."}` 요청으로 graceful shutdown을
+수행할 수 있습니다. 포트는 `AFJ_DB_PORT`로 지정하며 1~65535 범위만 허용합니다.
 
 ## 목표
 

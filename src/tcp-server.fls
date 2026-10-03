@@ -6,7 +6,14 @@
 (load "/root/kilo-freelang/projects/afj-db95/src/protocol.fls")
 (load "/root/kilo-freelang/projects/afj-db95/src/auth.fls")
 
-(define afj-tcp-port 43995)
+(define afj-tcp-port
+  (let [raw (env-get "AFJ_DB_PORT")]
+    (if (nil? raw)
+      43995
+      (let [parsed (str-to-num raw)]
+        (if (and (number? parsed) (> parsed 0) (< parsed 65536))
+          parsed
+          (throw "AFJ_DB_PORT_INVALID"))))))
 (define afj-tcp-sessions (atom {}))
 (define afj-tcp-databases (atom {}))
 (define afj-tcp-transactions (atom {}))
@@ -196,6 +203,18 @@
    "status" "running"
    "wal" (file_exists afj-tcp-wal)})
 
+(defn afj-tcp-shutdown [request]
+  (if (nil? (get (deref afj-tcp-sessions) (get request "token")))
+    {"ok" false "error" "AUTH_REQUIRED"}
+    (do
+      (set-timeout
+        (fn []
+          (do
+            (stop-afj-tcp)
+            (process-exit 0)))
+        0)
+      {"ok" true "status" "stopping"})))
+
 (defn afj-tcp-permission [statement]
   (if (= (get (parse-sql statement) "type") "select")
     "db.read"
@@ -305,7 +324,9 @@
             (afj-tcp-send conn {"ok" true "type" "pong"})
             (if (= (get request "type") "health")
               (afj-tcp-send conn (afj-tcp-health))
-              (afj-tcp-send conn {"ok" false "error" "UNKNOWN_REQUEST"})))))))))
+              (if (= (get request "type") "shutdown")
+                (afj-tcp-send conn (afj-tcp-shutdown request))
+                (afj-tcp-send conn {"ok" false "error" "UNKNOWN_REQUEST"}))))))))))
 
 (defn afj-db-tcp-handler [event conn payload]
   (if (= event "data")

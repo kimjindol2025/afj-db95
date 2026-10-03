@@ -5,6 +5,7 @@
 - prepared statement는 서버 상태에 ID로 저장한다.
 - ping/health는 인증 없이 사용할 수 있다.
 - health는 `ok`, `service`, `status`, `wal` 상태를 반환한다.
+- 인증된 shutdown 요청은 `stopping`을 반환하고 서버를 종료한다.
 - 알 수 없는 요청은 안정적인 `UNKNOWN_REQUEST` 오류를 반환한다.
 
 현재 모듈은 transport-independent JSON 요청 처리기다. 실제 TCP listener와

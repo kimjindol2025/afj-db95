@@ -1,0 +1,23 @@
+;; Authenticated graceful shutdown contract.
+(load "/root/kilo-freelang/projects/afj-db95/src/tcp-server.fls")
+
+(let [login (json-parse
+              (tcp-send "127.0.0.1" afj-tcp-port
+                        (json_str {"type" "login" "user" "root"
+                                   "password" (env-or "AFJ_DB_ROOT_PASSWORD" "development-only")})
+                        3000))
+      token (get login "token")
+      denied (json-parse
+               (tcp-send "127.0.0.1" afj-tcp-port
+                         (json_str {"type" "shutdown" "token" "bad"})
+                         3000))
+      stopped (json-parse
+                (tcp-send "127.0.0.1" afj-tcp-port
+                          (json_str {"type" "shutdown" "token" token})
+                          3000))]
+  (println (json_str {"denied" denied "stopped" stopped}))
+  (if (and (= (get denied "error") "AUTH_REQUIRED")
+           (get stopped "ok")
+           (= (get stopped "status") "stopping"))
+    (println "afj-db95 TCP graceful shutdown PASS")
+    (throw "TCP graceful shutdown failure")))
