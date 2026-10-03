@@ -1,0 +1,33 @@
+AFJ-DB95 final local official-runtime verification
+Commit under test: e4af4568cc36abf0b1102e8495733e6633fc19bb
+MariaDB: isolated MariaDB 11.8.3
+
+Differential runner:
+Same input statement count: MariaDB=21, AFJ=21
+Runner execution: PASS
+Same input both databases: PASS
+Result comparison: PASS
+AFJ cases: PASS=21 UNSUPPORTED=0 FAIL=0
+Error code tests: PASS
+Isolation tests: PASS
+
+TCP JSON evidence:
+case 7: {"ok":true,"result":{"ok":true,"type":"insert","count":3}}
+case 8: rows [{"id":"2","name":"Lee"},{"id":"1","name":"Kim"}]
+case 9: rows with Kim/Park and email null
+case 11: rows [{"name":"core","n":2},{"name":"ops","n":1}]
+case 14: {"ok":true,"status":"active"}
+case 16: {"ok":true,"status":"rolled-back"}
+case 17: rows [{"id":"2","active":true}]
+summary: {"total":21,"passed":21,"unsupported":0,"failed":0}
+No function object or execute-ast wrapper appeared in the JSON response.
+
+Other regressions:
+parser 28/28 PASS
+CRUD/constraints/FK/CHECK/aggregate PASS
+COMMIT/ROLLBACK/SAVEPOINT PASS
+indexed engine/B-tree/index WAL PASS
+durable store/torn tail/middle corruption rejection PASS
+
+73번 temporary environment: not a source result; runtime compatibility limitation.
+Original repository path was permission-inaccessible, so no source write occurred there.

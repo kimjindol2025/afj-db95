@@ -1,0 +1,34 @@
+AFJ-DB95 remote verification evidence
+Date: 2026-10-03
+Host: kim-pro-73
+User: kimjin
+Source tested: e4af4568cc36abf0b1102e8495733e6633fc19bb (GitHub main clone)
+MariaDB environment: isolated /tmp datadir, mariadbd 10.11.13, --skip-networking, --user=kimjin
+Operational MariaDB observed only: PID 3582, 0.0.0.0:3306; no operational writes.
+
+MariaDB corpus:
+- 21 statements executed.
+- Normalized checkpoints: exact historical sequence (Kim/Lee/Park, core=2, ops=1, remaining=3, rollback active=1, remaining=2).
+
+AFJ direct semantic corpus:
+- Runtime: /home/kimjin/freelang-v11-latest/bootstrap.js.
+- Temporary clone source load paths normalized only inside /tmp clone.
+- LOCAL_CORPUS PASS 21/21.
+
+TCP runner:
+- Same input count: MariaDB=21, AFJ=21.
+- AFJ accepted PASS=19, FAIL=2, UNSUPPORTED=0.
+- Case 7: multi-row users INSERT response disconnected/null.
+- Case 16: SQL ROLLBACK response error TX_UNKNOWN_OPERATION.
+- Some successful TCP responses serialized execute-ast as {"fn":"execute-ast",...}; TCP value equality therefore NOT_MEASURED.
+
+Runtime diagnostics:
+- /home/kimjin/freelang-v11: JOIN engine self-test failure.
+- /home/kimjin/freelang-v11-fx: schema constraint self-test failure.
+- /home/kimjin/.local/share/freelang-mcp-runtime-20260930/v11: JOIN engine self-test failure.
+- /home/kimjin/freelang-v11-latest: direct semantic corpus PASS after test-only self-test boundary isolation.
+
+Cleanup:
+- Temporary clone, datadir, socket, pid and AFJ process removed.
+- Operational mariadbd PID 3582 and 3306 listener remained.
+- No sudo, service restart, firewall, permission, credential or push action.
