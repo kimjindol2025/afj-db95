@@ -116,6 +116,6 @@ MariaDB wire protocol, 완전한 MVCC와 대규모 soak 같은 미완료 게이�
 ## 목표
 
 MariaDB 내부 구현을 복제하는 것이 아니라, 주요 SQL·트랜잭션·운영 기능을 FreeLang Script로 단계적으로 호환합니다.
-현재 실행 가능한 compatibility scorecard는 94%이며, 미검증 기능을 완료로
+현재 실행 가능한 compatibility scorecard는 88%이며, 미검증 기능을 완료로
 계산하지 않습니다. 이 수치는 공식 1.0 릴리스 판정이 아니라 현재 회귀 세트의
 검증 상태를 나타냅니다.
