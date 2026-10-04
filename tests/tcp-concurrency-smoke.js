@@ -189,6 +189,38 @@ async function main() {
     assert.deepStrictEqual(alterSinkRows.result.rows, [],
       "a stale reader's unrelated write must roll back after schema alteration");
 
+    await assertQueryOk(clients[0],
+      "CREATE TABLE ddl_batch_recreate (id INT PRIMARY KEY)");
+    await assertQueryOk(clients[0], "INSERT INTO ddl_batch_recreate (id) VALUES (1)");
+    await assertQueryOk(clients[0],
+      "CREATE TABLE ddl_batch_alter (id INT PRIMARY KEY)");
+    await assertQueryOk(clients[0], "INSERT INTO ddl_batch_alter (id) VALUES (1)");
+    await assertQueryOk(clients[0],
+      "CREATE TABLE ddl_batch_sink (id INT PRIMARY KEY)");
+    await assertQueryOk(clients[0], "START TRANSACTION ISOLATION LEVEL REPEATABLE READ");
+    assert.strictEqual((await clients[0].request({ type: "query", token: clients[0].token,
+      statement: "SELECT * FROM ddl_batch_recreate WHERE id=1" })).ok, true);
+    assert.strictEqual((await clients[0].request({ type: "query", token: clients[0].token,
+      statement: "SELECT * FROM ddl_batch_alter WHERE id=1" })).ok, true);
+    await assertQueryOk(clients[1], "START TRANSACTION");
+    await assertQueryOk(clients[1], "DROP TABLE ddl_batch_recreate");
+    await assertQueryOk(clients[1],
+      "CREATE TABLE ddl_batch_recreate (id INT PRIMARY KEY)");
+    await assertQueryOk(clients[1], "ALTER TABLE ddl_batch_alter ADD COLUMN note TEXT");
+    const batchWriterCommit = await clients[1].request({ type: "query",
+      token: clients[1].token, statement: "COMMIT" });
+    assert.strictEqual(batchWriterCommit.ok, true, JSON.stringify(batchWriterCommit));
+    await assertQueryOk(clients[0], "INSERT INTO ddl_batch_sink (id) VALUES (12)");
+    const staleBatchCommit = await clients[0].request({ type: "query",
+      token: clients[0].token, statement: "COMMIT" });
+    assert.strictEqual(staleBatchCommit.ok, false, JSON.stringify(staleBatchCommit));
+    assert.strictEqual(staleBatchCommit.error, "TX_CONFLICT");
+    const batchSinkRows = await clients[0].request({ type: "query", token: clients[0].token,
+      statement: "SELECT * FROM ddl_batch_sink" });
+    assert.strictEqual(batchSinkRows.ok, true);
+    assert.deepStrictEqual(batchSinkRows.result.rows, [],
+      "a reader of multiple tables must conflict when a DDL batch changes either schema");
+
     const create = await clients[0].request({
       type: "query", token: clients[0].token,
       statement: "CREATE TABLE concurrent_users (id INT PRIMARY KEY, name TEXT)",
