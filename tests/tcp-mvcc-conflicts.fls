@@ -203,3 +203,38 @@
              (any? (fn [row] (= (get row "note") "updated")) after))
       (println "afj-db95 MVCC duplicate unkeyed rows PASS")
       (throw "MVCC collapsed rows without a declared unique key"))))
+
+;; Recreating a table with an identical schema must not hide an intervening
+;; DDL generation change from a repeatable-read predicate reader.
+(afj-tcp-commit-asts
+  [{"type" "create-table" "table" "schema_generation_guard"
+    "schema" {"columns" [{"name" "id" "type" "INTEGER"
+                             "nullable" false "primary" true}]
+               "primary-key" "id" "unique-columns" []}}
+   {"type" "insert" "table" "schema_generation_guard"
+    "rows" [{"id" "1"}]}])
+(swap! afj-tcp-sessions assoc "mvcc-generation-reader" "root")
+(swap! afj-tcp-sessions assoc "mvcc-generation-writer" "root")
+(afj-tcp-begin-level "mvcc-generation-reader" "REPEATABLE READ")
+(let [read-before (afj-tcp-query
+                    {"token" "mvcc-generation-reader"
+                     "statement" "SELECT * FROM schema_generation_guard WHERE id=1"})
+      dropped (afj-tcp-query
+                {"token" "mvcc-generation-writer"
+                 "statement" "DROP TABLE schema_generation_guard"})
+      recreated (afj-tcp-query
+                  {"token" "mvcc-generation-writer"
+                   "statement" "CREATE TABLE schema_generation_guard (id INTEGER PRIMARY KEY)"})
+      inserted (afj-tcp-query
+                 {"token" "mvcc-generation-writer"
+                  "statement" "INSERT INTO schema_generation_guard (id) VALUES (1)"})
+      reader-write (afj-tcp-query
+                     {"token" "mvcc-generation-reader"
+                      "statement" "INSERT INTO quota_a (id) VALUES (4)"})
+      reader-commit (afj-tcp-commit "mvcc-generation-reader")]
+  (if (and (get read-before "ok") (get dropped "ok")
+           (get recreated "ok") (get inserted "ok")
+           (get reader-write "ok") (not (get reader-commit "ok"))
+           (= (get reader-commit "error") "TX_CONFLICT"))
+    (println "afj-db95 MVCC recreated schema generation conflict PASS")
+    (throw "drop/recreate hid a schema generation change from stale reader")))

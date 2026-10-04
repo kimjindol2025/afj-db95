@@ -1,6 +1,6 @@
 # AFJ-016 Release Gate Report
 
-- Generated: 2026-10-04T16:31:04Z
+- Generated: 2026-10-04T16:47:19Z
 - Repository: afj-db95
 - FreeLang runtime bootstrap: /tmp/gh-passfix.Uf7hVz/freelang-afj-runtime-candidate/bootstrap.js
 - Runtime native TCP/TLS patch: isolated test source; not yet committed to the original runtime worktree
@@ -75,15 +75,17 @@ The following are the remaining release-gate conditions; passing regression case
 do not waive an incomplete architectural condition:
 
 - Native raw TCP callbacks now provide peerAddress as a backward-compatible fourth argument. Native TLS/mTLS and certificate reload are exercised by the loopback cases above.
-- MariaDB standard-client interoperability is evidenced only when the MariaDB CLI cases above report PASS; BLOCKED cases remain unresolved.
+- MariaDB 10.11 standard-client and native-wire cases passed using a temporary
+  extracted CLI package; no system packages were installed.
 - DDL/schema-level MVCC granularity and full composite-key encoding/type-order
   compatibility are not complete; row-version WAL replay, row-level DML merge,
   compound predicate candidate validation, composite page-range recheck,
   multi-index intersection, range predicate conflict, and TCP transaction
   process-kill recovery cases are covered above.
-  - Batched commits now record the final row set once per touched table, so a
-    create-plus-insert batch cannot duplicate its initial MVCC version. Lazy
-    table repeatable-read and duplicate unkeyed-row regressions pass.
+  - Batched create+insert commits now avoid duplicate initial row versions.
+    Lazy-table repeatable-read, duplicate unkeyed-row, and same-schema
+    drop/recreate stale-reader regressions pass. Broader DDL-generation and
+    schema concurrency coverage remains incomplete.
   - TCP table-page manifest, page-backed B+Tree leaf-index persistence/reopen,
     bounded pin/flush pool, lazy table eviction, lazy transaction snapshot and
     durable row-version checkpoint recovery pass; page-level row execution and
