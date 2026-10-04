@@ -11,6 +11,14 @@
              "row" {"tenant" "a" "email" "same@example.test"}})
 (execute-ast {"type" "insert" "table" "compound_users"
              "row" {"tenant" "b" "email" "same@example.test"}})
+(let [query (execute-ast
+              (parse-sql
+                "SELECT * FROM compound_users WHERE tenant = 'a' AND email = 'same@example.test'"))]
+  (if (and (= (get query "plan") "index-scan")
+           (= (count (get query "rows")) 1)
+           (= (get (first (get query "rows")) "tenant") "a"))
+    (println "afj-db95 compound index lookup PASS")
+    (throw "compound index lookup failed")))
 (let [duplicate (try
                   (do
                     (execute-ast {"type" "insert" "table" "compound_users"

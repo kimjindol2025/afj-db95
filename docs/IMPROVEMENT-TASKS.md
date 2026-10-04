@@ -397,8 +397,10 @@
     다중 인덱스·복합 predicate는 남아 있다.
   - 추가 AFJ-013 증거: SQL DDL의 `UNIQUE (tenant,email)`을 구조화된
     `unique-groups`로 보존하고, 엔진이 pair 전체를 기준으로 중복을 거부하며
-    composite bucket과 page-index leaf를 재구성한다. `tests/compound-index.fls`가
-    동일 pair 거부와 서로 다른 tenant의 동일 email 허용을 `PASS`로 검증했다.
+    composite bucket과 page-index leaf를 재구성하고, 두 equality predicate의
+    `AND` 조회에 `index-scan` 계획을 사용한다. `tests/compound-index.fls`가
+    composite lookup, 동일 pair 거부와 서로 다른 tenant의 동일 email 허용을
+    `PASS`로 검증했다.
   - 추가 range 증거: 내부 B+Tree node의 최소·최대 키로 불필요한 child를
     건너뛰는 bounded range traversal을 연결했다. `tests/btree-range.fls`가
     `>`, `<=`, `<>` 결과와 경계 key를 재귀 tree fixture에서 검증한다.
@@ -438,7 +440,7 @@
     그러나 MariaDB production hardening, 완전한 row-version MVCC,
     index-range granular validation, executor lazy catalog eviction을
     명시적으로 감지해 release status를 `BLOCKED`로 유지한다.
-  - 최신 실행 기록: `2026-10-04T01:00:51Z`, 자동 케이스 `54 PASS, 0 FAIL`.
+  - 최신 실행 기록: `2026-10-04T01:35:57Z`, 자동 케이스 `54 PASS, 0 FAIL`.
     범위 predicate conflict와 durable row-version checkpoint 회귀도 통과했지만, 위 구조적 차단 항목 때문에
     exit status 2와 `Release status: BLOCKED`를 유지했다.
 

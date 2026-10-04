@@ -121,6 +121,22 @@
             value (sql-value (token-at tokens 7))]
         {"type" "select" "columns" ["*"] "table" table
          "where" {"column" column "operator" operator "value" value}})
+    (if (and (= (count tokens) 12)
+             (= (token-at tokens 1) "*")
+             (keyword? (token-at tokens 2) "FROM")
+             (keyword? (token-at tokens 4) "WHERE")
+             (keyword? (token-at tokens 8) "AND")
+             (= (token-at tokens 6) "=")
+             (= (token-at tokens 10) "="))
+      (let [table (token-at tokens 3)
+            left-column (sql-clean-token (token-at tokens 5))
+            left-value (sql-value (token-at tokens 7))
+            right-column (sql-clean-token (token-at tokens 9))
+            right-value (sql-value (token-at tokens 11))]
+        {"type" "select" "columns" ["*"] "table" table
+         "where" {"and"
+                   [{"column" left-column "equals" left-value}
+                    {"column" right-column "equals" right-value}]}})
     (if (and (= (count tokens) 7)
              (= (token-at tokens 1) "*")
              (keyword? (token-at tokens 2) "FROM")
@@ -200,7 +216,7 @@
                   right (token-at tokens 9)]
               {"type" "select" "columns" ["*"] "table" table
                "join" {"table" join-table "left" left "right" right}})
-            (throw "unsupported SELECT form"))))))))))))
+            (throw "unsupported SELECT form")))))))))))))
 
 ;; MariaDB corpus compatibility: grouped COUNT with aliases and LEFT JOIN.
 (defn parse-select [tokens]

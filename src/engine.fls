@@ -41,12 +41,16 @@
 (defn engine-build-composite-index [rows columns row-id index]
   (if (>= row-id (count rows))
     index
-    (let [key-token (engine-composite-key-token (get rows row-id) columns)
+    (let [total (count rows)
+          key-token (engine-composite-key-token (get rows row-id) columns)
           existing-bucket (get index key-token)
-          bucket (if (nil? existing-bucket) [] existing-bucket)]
-      (engine-build-composite-index
-        rows columns (+ row-id 1)
-        (assoc index key-token (conj bucket row-id))))))
+          bucket (if (nil? existing-bucket) [] existing-bucket)
+          next-index (assoc index key-token (conj bucket row-id))]
+      (if (= row-id (- total 1))
+        next-index
+        (engine-build-composite-index
+          rows columns (+ row-id 1)
+          next-index)))))
 
 (defn engine-btree-node-first-key [node]
   (if (get node "leaf")
@@ -423,7 +427,7 @@
                 (assoc (deref qualified) (str alias "." column) (get row column))))
       (deref qualified))))
 
-(defn engine-match? [row where]
+(defn engine-match-basic? [row where]
   (if (nil? where)
     true
     (if (has-key? where "is-null")
@@ -450,6 +454,17 @@
                 (if (= operator "<") (< left-number right-number)
                   (if (= operator "<=") (<= left-number right-number)
                     false))))))))))
+
+(defn engine-all-predicates-match? [row predicates index]
+  (if (>= index (count predicates))
+    true
+    (and (engine-match? row (get predicates index))
+         (engine-all-predicates-match? row predicates (+ index 1)))))
+
+(defn engine-match? [row where]
+  (if (and (not (nil? where)) (has-key? where "and"))
+    (engine-all-predicates-match? row (get where "and") 0)
+    (engine-match-basic? row where)))
 
 (defn engine-join [left right left-key right-key]
   (arr_flatten
@@ -556,6 +571,20 @@
           true
           (throw (str "FOREIGN_KEY_VIOLATION: " (get constraint "column"))))))))
 
+(defn engine-row-matches-columns? [left right columns index]
+  (if (>= index (count columns))
+    true
+    (and (= (get left (get columns index))
+            (get right (get columns index)))
+         (engine-row-matches-columns? left right columns (+ index 1)))))
+
+(defn engine-any-row-matches-columns? [rows row columns index]
+  (if (= (count rows) 0)
+    false
+    (if (engine-row-matches-columns? (first rows) row columns 0)
+      true
+      (engine-any-row-matches-columns? (rest rows) row columns index))))
+
 (defn engine-validate-row [schema row existing]
   (doseq [column (get schema "columns" [])]
     (let [name (get column "name")
@@ -578,11 +607,8 @@
         (throw (str "UNIQUE_VIOLATION: " column))
         nil)))
   (doseq [columns (get schema "unique-groups" [])]
-    (let [duplicate (any? (fn [old]
-                            (every? (fn [column]
-                                      (= (get old column) (get row column)))
-                                    columns))
-                          existing)]
+    (let [duplicate (engine-any-row-matches-columns?
+                      existing row columns 0)]
       (if duplicate
         (throw (str "UNIQUE_VIOLATION: "
                     (engine-index-group-name columns)))
@@ -672,11 +698,39 @@
 
 ;; Keep the index lookup helper adjacent to the executor so the bootstrap
 ;; loader registers it before any self-test query invokes the planner.
+(defn engine-index-and-rows [name table where]
+  (let [predicates (get where "and")
+        first-predicate (first predicates)
+        second-predicate (last predicates)
+        columns [(get first-predicate "column")
+                 (get second-predicate "column")]
+        index-name (engine-index-group-name columns)
+        index (get (deref engine-indexes) (str name "." index-name))]
+    (if (or (nil? index)
+            (not (= (count predicates) 2))
+            (not (has-key? first-predicate "equals"))
+            (not (has-key? second-predicate "equals")))
+      (get table "rows")
+      (let [values-row (atom {})]
+        (doseq [predicate predicates]
+          (reset! values-row
+                  (assoc (deref values-row)
+                         (get predicate "column")
+                         (get predicate "equals"))))
+        (let [token (engine-composite-key-token
+                      (deref values-row) columns)
+              row-ids (if (not (nil? (get index "btree")))
+                        (engine-btree-root-get (get index "btree") token)
+                        (get (get index "buckets") token []))]
+          (map (fn [row-id] (get (get table "rows") row-id)) row-ids))))))
+
 (defn engine-index-rows-safe [name table where]
   (let [column (get where "column")
         index (get (deref engine-indexes) (str name "." column))
         operator (get where "operator")]
-    (if (nil? index)
+    (if (has-key? where "and")
+      (engine-index-and-rows name table where)
+      (if (nil? index)
       (get table "rows")
       (if (has-key? where "equals")
         (map (fn [row-id] (get (get table "rows") row-id))
@@ -693,11 +747,19 @@
                 (= operator "!=") (= operator "<>"))
           (engine-index-range-rows table index where
                                    (keys (get index "buckets")))
-          (get table "rows"))))))
+          (get table "rows")))))))
 
 (defn execute-select [ast]
   (let [table (engine-table (get ast "table"))
         where (get ast "where")
+        index-key (if (nil? where)
+                    nil
+                    (if (has-key? where "and")
+                      (str (get ast "table") "."
+                         (engine-index-group-name
+                           [(get (first (get where "and")) "column")
+                            (get (last (get where "and")) "column")]))
+                      (str (get ast "table") "." (get where "column"))))
         source-rows (if (nil? where)
                       (get table "rows")
                       (engine-index-rows-safe (get ast "table") table where))
@@ -739,10 +801,10 @@
         {"ok" true "type" "select"
          "plan" (if (and (not (nil? where))
                          (not (nil? (get (deref engine-indexes)
-                                        (str (get ast "table") "."
-                                             (get where "column")))))
+                                        index-key)))
                     )
-                    (if (has-key? where "equals")
+                    (if (or (has-key? where "equals")
+                            (has-key? where "and"))
                       "index-scan"
                       "index-range-scan")
                     "full-scan")
