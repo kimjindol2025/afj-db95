@@ -1,6 +1,6 @@
 # AFJ-016 Release Gate Report
 
-- Generated: 2026-10-04T23:18:23Z
+- Generated: 2026-10-04T23:32:26Z
 - Repository: afj-db95
 - FreeLang runtime revision: c783288e
 - MariaDB CLI version: 10.11.14
@@ -26,7 +26,7 @@
 | bounded B+Tree range | PASS | |
 | compound unique index | PASS | |
 | compound predicate range | PASS | |
-| TCP service entrypoint, concurrency and WAL restart | PASS | |
+| TCP entrypoint concurrency, DDL MVCC and WAL restart | PASS | |
 | TCP 5m performance envelope | PASS | |
 | backup smoke | PASS | |
 | backup restore soak | PASS | |

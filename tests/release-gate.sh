@@ -69,7 +69,7 @@ run_case "persistent recursive B+Tree" node "$bootstrap" run "$repo_root/tests/p
 run_case "bounded B+Tree range" node "$bootstrap" run "$repo_root/tests/btree-range.fls"
 run_case "compound unique index" node "$bootstrap" run "$repo_root/tests/compound-index.fls"
 run_case "compound predicate range" node "$bootstrap" run "$repo_root/tests/compound-range.fls"
-run_case "TCP service entrypoint, concurrency and WAL restart" node "$repo_root/tests/tcp-concurrency-smoke.js"
+run_case "TCP entrypoint concurrency, DDL MVCC and WAL restart" node "$repo_root/tests/tcp-concurrency-smoke.js"
 if [ "${AFJ_RELEASE_GATE_SKIP_LONG_SOAK:-0}" = "1" ]; then
   run_blocked_case "TCP 5m performance envelope" "deferred by AFJ_RELEASE_GATE_SKIP_LONG_SOAK=1"
 else

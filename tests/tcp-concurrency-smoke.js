@@ -127,6 +127,68 @@ async function main() {
       client.token = login.token;
       clients.push(client);
     }
+    const assertQueryOk = async (client, statement) => {
+      const response = await client.request({ type: "query", token: client.token, statement });
+      assert.strictEqual(response.ok, true, `${statement}: ${JSON.stringify(response)}`);
+      return response;
+    };
+    await assertQueryOk(clients[0],
+      "CREATE TABLE ddl_generation_guard (id INT PRIMARY KEY, note TEXT)");
+    await assertQueryOk(clients[0],
+      "INSERT INTO ddl_generation_guard (id,note) VALUES (1,'old')");
+    await assertQueryOk(clients[0], "CREATE TABLE ddl_generation_sink (id INT PRIMARY KEY)");
+    await assertQueryOk(clients[0], "START TRANSACTION ISOLATION LEVEL REPEATABLE READ");
+    const generationRead = await clients[0].request({ type: "query", token: clients[0].token,
+      statement: "SELECT * FROM ddl_generation_guard WHERE id=1" });
+    assert.strictEqual(generationRead.ok, true);
+    await assertQueryOk(clients[1], "START TRANSACTION");
+    await assertQueryOk(clients[1], "DROP TABLE ddl_generation_guard");
+    await assertQueryOk(clients[1],
+      "CREATE TABLE ddl_generation_guard (id INT PRIMARY KEY, note TEXT)");
+    await assertQueryOk(clients[1],
+      "INSERT INTO ddl_generation_guard (id,note) VALUES (1,'new')");
+    const generationWriterCommit = await clients[1].request({ type: "query",
+      token: clients[1].token, statement: "COMMIT" });
+    assert.strictEqual(generationWriterCommit.ok, true,
+      JSON.stringify(generationWriterCommit));
+    await assertQueryOk(clients[0],
+      "INSERT INTO ddl_generation_sink (id) VALUES (10)");
+    const staleGenerationCommit = await clients[0].request({ type: "query",
+      token: clients[0].token, statement: "COMMIT" });
+    assert.strictEqual(staleGenerationCommit.ok, false,
+      JSON.stringify(staleGenerationCommit));
+    assert.strictEqual(staleGenerationCommit.error, "TX_CONFLICT");
+    const sinkRows = await clients[0].request({ type: "query", token: clients[0].token,
+      statement: "SELECT * FROM ddl_generation_sink" });
+    assert.strictEqual(sinkRows.ok, true);
+    assert.deepStrictEqual(sinkRows.result.rows, [],
+      "a stale reader's unrelated staged write must roll back after table recreation");
+
+    await assertQueryOk(clients[0],
+      "CREATE TABLE ddl_alter_guard (id INT PRIMARY KEY)");
+    await assertQueryOk(clients[0], "INSERT INTO ddl_alter_guard (id) VALUES (1)");
+    await assertQueryOk(clients[0],
+      "CREATE TABLE ddl_alter_sink (id INT PRIMARY KEY)");
+    await assertQueryOk(clients[0], "START TRANSACTION ISOLATION LEVEL REPEATABLE READ");
+    const alterRead = await clients[0].request({ type: "query", token: clients[0].token,
+      statement: "SELECT * FROM ddl_alter_guard WHERE id=1" });
+    assert.strictEqual(alterRead.ok, true);
+    await assertQueryOk(clients[1], "START TRANSACTION");
+    await assertQueryOk(clients[1], "ALTER TABLE ddl_alter_guard ADD COLUMN note TEXT");
+    const alterWriterCommit = await clients[1].request({ type: "query",
+      token: clients[1].token, statement: "COMMIT" });
+    assert.strictEqual(alterWriterCommit.ok, true, JSON.stringify(alterWriterCommit));
+    await assertQueryOk(clients[0], "INSERT INTO ddl_alter_sink (id) VALUES (11)");
+    const staleAlterCommit = await clients[0].request({ type: "query",
+      token: clients[0].token, statement: "COMMIT" });
+    assert.strictEqual(staleAlterCommit.ok, false, JSON.stringify(staleAlterCommit));
+    assert.strictEqual(staleAlterCommit.error, "TX_CONFLICT");
+    const alterSinkRows = await clients[0].request({ type: "query", token: clients[0].token,
+      statement: "SELECT * FROM ddl_alter_sink" });
+    assert.strictEqual(alterSinkRows.ok, true);
+    assert.deepStrictEqual(alterSinkRows.result.rows, [],
+      "a stale reader's unrelated write must roll back after schema alteration");
+
     const create = await clients[0].request({
       type: "query", token: clients[0].token,
       statement: "CREATE TABLE concurrent_users (id INT PRIMARY KEY, name TEXT)",
@@ -175,7 +237,7 @@ async function main() {
     });
     assert.strictEqual(restartShutdown.ok, true);
     await waitForExit(restartedDaemon, 5000, restartOutput);
-    console.log("afj-db95 TCP concurrency PASS");
+    console.log("afj-db95 TCP concurrency and DDL MVCC PASS");
   } finally {
     for (const client of clients) client.socket.destroy();
     if (restartedClient) restartedClient.socket.destroy();
