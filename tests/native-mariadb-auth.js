@@ -2,7 +2,9 @@
 
 const assert = require("assert");
 const crypto = require("crypto");
+const fs = require("fs");
 const net = require("net");
+const os = require("os");
 const path = require("path");
 const { spawn } = require("child_process");
 
@@ -83,18 +85,28 @@ function loginPayload(user, token) {
 }
 
 async function main() {
-  const port = await freePort();
+  const tcpPort = await freePort();
+  let port = await freePort();
+  while (port === tcpPort) port = await freePort();
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), "afj-db95-native-auth-"));
+  const password = "mariadb-auth-test-password";
   const child = spawn(process.execPath,
-    [require("./runtime-bootstrap"), "run", "tests/native-mariadb-daemon.fls"],
-    { cwd: path.join(__dirname, ".."), env: { ...process.env, AFJ_NATIVE_MARIADB_PORT: String(port) },
+    [require("./runtime-bootstrap"), "run", "src/server.fls"],
+    { cwd: path.join(__dirname, ".."), env: { ...process.env,
+      AFJ_DB_MODE: "development", AFJ_DB_PORT: String(tcpPort),
+      AFJ_DB_BIND_HOST: "127.0.0.1", AFJ_DB_WAL: path.join(temp, "auth.wal"),
+      AFJ_DB_ROOT_PASSWORD: password, AFJ_DB_MARIADB_PORT: String(port) },
       stdio: ["ignore", "pipe", "pipe"] });
   let output = "";
   child.stdout.on("data", (chunk) => { output += chunk.toString(); });
   child.stderr.on("data", (chunk) => { output += chunk.toString(); });
   try {
     await new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error(`auth daemon timeout: ${output}`)), 30000);
-      const onData = () => { if (output.includes("afj-db95 native MariaDB STARTED")) { clearTimeout(timer); resolve(); } };
+      const timer = setTimeout(() => reject(new Error(`auth server timeout: ${output}`)), 15000);
+      const onData = () => {
+        if (output.includes("afj-db95 MariaDB wire READY")) { clearTimeout(timer); resolve(); }
+        else if (child.exitCode !== null) { clearTimeout(timer); reject(new Error(`auth server exited: ${output}`)); }
+      };
       child.stdout.on("data", onData); child.stderr.on("data", onData);
     });
     await waitForPort(port);
@@ -112,13 +124,19 @@ async function main() {
     await new Promise((resolve, reject) => { valid.once("connect", resolve); valid.once("error", reject); });
     const validHandshake = await readPacket(valid);
     const validScramble = scrambleFromHandshake(validHandshake);
-    valid.write(packet(loginPayload("root", nativeToken("development-only", validScramble)), 1));
+    valid.write(packet(loginPayload("root", nativeToken(password, validScramble)), 1));
     const accepted = await readPacket(valid);
     assert.strictEqual(accepted[0], 0);
     valid.destroy();
-    console.log("afj-db95 native MariaDB auth rejection PASS");
+    console.log("afj-db95 integrated MariaDB auth rejection PASS");
   } finally {
-    child.kill("SIGTERM");
+    if (child.exitCode === null && child.signalCode === null) {
+      await new Promise((resolve) => {
+        child.once("close", resolve);
+        child.kill("SIGTERM");
+      });
+    }
+    fs.rmSync(temp, { recursive: true, force: true });
   }
 }
 

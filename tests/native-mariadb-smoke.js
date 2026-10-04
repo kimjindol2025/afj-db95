@@ -1,7 +1,10 @@
 "use strict";
 
 const assert = require("assert");
+const fs = require("fs");
 const net = require("net");
+const os = require("os");
+const path = require("path");
 const { spawn } = require("child_process");
 
 function freePort() {
@@ -37,10 +40,10 @@ function waitForOutput(child, expected) {
   });
 }
 
-function runMaria(port, statement) {
+function runMaria(port, statement, password) {
   return new Promise((resolve, reject) => {
-    const child = spawn("mariadb", ["--protocol=tcp", "--host=127.0.0.1", `--port=${port}`,
-      "--connect-timeout=5", "--skip-ssl", "--user=root", "--password=development-only",
+    const child = spawn(process.env.MARIADB_CLI || "mariadb", ["--protocol=tcp", "--host=127.0.0.1", `--port=${port}`,
+      "--connect-timeout=5", "--skip-ssl", "--user=root", `--password=${password}`,
       "--batch", "--skip-column-names", "--raw", "--execute", statement],
     { stdio: ["ignore", "pipe", "pipe"] });
     let out = "";
@@ -69,28 +72,37 @@ function waitForPort(port) {
 }
 
 async function main() {
-  const port = await freePort();
+  const tcpPort = await freePort();
+  let port = await freePort();
+  while (port === tcpPort) port = await freePort();
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), "afj-db95-native-smoke-"));
+  const password = "mariadb-smoke-test-password";
   const child = spawn(process.execPath,
-    [require("./runtime-bootstrap"), "run", "tests/native-mariadb-daemon.fls"],
-    { cwd: require("path").join(__dirname, ".."), env: { ...process.env,
-      AFJ_NATIVE_MARIADB_PORT: String(port) },
+    [require("./runtime-bootstrap"), "run", "src/server.fls"],
+    { cwd: path.join(__dirname, ".."), env: { ...process.env,
+      AFJ_DB_MODE: "development", AFJ_DB_PORT: String(tcpPort),
+      AFJ_DB_BIND_HOST: "127.0.0.1", AFJ_DB_WAL: path.join(temp, "smoke.wal"),
+      AFJ_DB_ROOT_PASSWORD: password, AFJ_DB_MARIADB_PORT: String(port) },
       stdio: ["ignore", "pipe", "pipe"] });
   let daemonOutput = "";
   child.stdout.on("data", (chunk) => { daemonOutput += chunk.toString(); });
   child.stderr.on("data", (chunk) => { daemonOutput += chunk.toString(); });
   try {
-    await waitForOutput(child, "afj-db95 native MariaDB STARTED");
+    await waitForOutput(child, "afj-db95 MariaDB wire READY");
     await waitForPort(port);
     try {
-      await runMaria(port, "CREATE TABLE native_wire_users (id INT PRIMARY KEY, name TEXT)");
-      await runMaria(port, "INSERT INTO native_wire_users (id,name) VALUES (1,'Kim')");
-      assert.strictEqual(await runMaria(port, "SELECT * FROM native_wire_users"), "1\tKim\n");
+      await runMaria(port, "CREATE TABLE native_wire_users (id INT PRIMARY KEY, name TEXT)", password);
+      await runMaria(port, "INSERT INTO native_wire_users (id,name) VALUES (1,'Kim')", password);
+      assert.strictEqual(await runMaria(port, "SELECT * FROM native_wire_users", password), "1\tKim\n");
     } catch (error) {
       throw new Error(`${error.message}\nFreeLang daemon:\n${daemonOutput}`);
     }
-    console.log("afj-db95 native MariaDB wire PASS");
+    console.log("afj-db95 integrated MariaDB standard-client PASS");
   } finally {
-    child.kill("SIGTERM");
+    if (child.exitCode === null && child.signalCode === null) {
+      await new Promise((resolve) => { child.once("close", resolve); child.kill("SIGTERM"); });
+    }
+    fs.rmSync(temp, { recursive: true, force: true });
   }
 }
 

@@ -56,6 +56,8 @@ run_blocked_case() {
 
 run_case "static check: tcp-server" node "$bootstrap" check "$repo_root/src/tcp-server.fls"
 run_case "static check: afj-db95" node "$bootstrap" check "$repo_root/src/afj-db95.fls"
+run_case "static check: server entrypoint" node "$bootstrap" check "$repo_root/src/server.fls"
+run_case "MariaDB listener configuration fails closed" node "$repo_root/tests/mariadb-server-config.js"
 run_case "raw binary boundary" node "$bootstrap" run "$repo_root/tests/binary-raw.fls"
 run_case "MariaDB packet codec" node "$bootstrap" run "$repo_root/tests/mariadb-wire-codec.fls"
 run_case "page/WAL smoke" env AFJ_DB_PAGE_CACHE_PAGES=2 node "$bootstrap" run "$repo_root/src/afj-db95.fls"
@@ -106,7 +108,7 @@ run_case "native TLS listener" node "$repo_root/tests/native-tls-smoke.js"
 run_case "native TLS mTLS/reload" node "$repo_root/tests/native-tls-policy-smoke.js"
 run_case "production native TLS integration" node "$repo_root/tests/production-native-tls.js"
 run_case "TLS adapter handshake/reload" node "$repo_root/tests/tls-proxy-smoke.js"
-if command -v mariadb >/dev/null 2>&1; then
+if command -v mariadb >/dev/null 2>&1 || [ -x "${MARIADB_CLI:-}" ]; then
   run_case "MariaDB wire packet unit (CLI client)" node "$repo_root/tests/mariadb-wire-unit.js"
   run_case "MariaDB standard-client adapter smoke" node "$repo_root/tests/mariadb-wire-smoke.js"
 else
@@ -115,8 +117,10 @@ else
 fi
 run_case "MariaDB mysql_native_password SHA-1" node "$bootstrap" run "$repo_root/tests/mariadb-sha1.fls"
 run_case "MariaDB wire prepared" node "$repo_root/tests/mariadb-wire-prepared.js"
-run_case "native MariaDB independent wire client" node "$repo_root/tests/native-mariadb-client.js"
-run_case "native MariaDB auth rejection" node "$repo_root/tests/native-mariadb-auth.js"
+run_case "integrated MariaDB independent wire client/auth/prepared/WAL" node "$repo_root/tests/native-mariadb-client.js"
+run_case "integrated MariaDB auth rejection" node "$repo_root/tests/native-mariadb-auth.js"
+run_case "integrated MariaDB standard client" node "$repo_root/tests/native-mariadb-smoke.js"
+run_case "integrated MariaDB prepared protocol and standard client" node "$repo_root/tests/native-mariadb-prepared.js"
 run_case "native MariaDB decoder" node "$bootstrap" run "$repo_root/tests/native-mariadb-decoder.fls"
 run_case "native MariaDB prepared protocol" node "$repo_root/tests/native-mariadb-client.js"
 
@@ -141,13 +145,14 @@ remain release blockers until separately implemented and verified:
 
 - DDL/schema-level MVCC granularity and complete composite-key type-order and
   collation compatibility.
-- The native MariaDB wire listener is still a standalone test harness and is
-  not started by src/server.fls; existing MariaDB-client checks do not prove
-  that the main durable/authenticated service supports that protocol.
-- MariaDB TLS and authentication-plugin variants beyond mysql_native_password;
-  the standard MariaDB CLI checks are BLOCKED when the CLI is unavailable.
-- The bounded 5-minute performance envelope. If explicitly skipped for a quick
-  preflight, it is recorded as BLOCKED, not PASS.
+- The native MariaDB listener is now an explicit, loopback-only option on
+  src/server.fls with AFJ_DB_MARIADB_PORT. Actual-service standard-client and
+  independent wire-client tests cover auth, queries, prepared statements and
+  WAL restart. TLS negotiation and authentication plugins beyond
+  mysql_native_password remain unsupported; do not expose this listener remotely.
+- Standard-client cases are recorded BLOCKED if the MariaDB CLI is unavailable.
+  The 5-minute development-host soak above passed; it is not a production-scale
+  capacity claim.
 
 The report must remain **BLOCKED** until each item has implementation evidence and a
 corresponding reproducible test. A nonzero automated failure also keeps the gate

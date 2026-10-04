@@ -1776,6 +1776,30 @@
           (afj-tcp-query {"token" token "statement" statement})))))
   )
 
+(defn afj-tcp-register-authenticated-session [connection requested-user]
+  (if (not (afj-tcp-connection-auth-available? connection))
+    {"ok" false "error" "SESSION_ALREADY_AUTHENTICATED"}
+    (if (>= (count (keys (deref afj-tcp-sessions))) afj-tcp-session-limit)
+      {"ok" false "error" "SESSION_LIMIT"}
+      (let [login (server-login requested-user)
+            token (get login "token")]
+        (audit-event "login" requested-user "success")
+        (swap! afj-tcp-sessions assoc token requested-user)
+        (swap! afj-tcp-connection-tokens assoc connection token)
+        (swap! afj-tcp-session-expiries assoc token
+               (+ (now_ms) afj-tcp-session-ttl-ms))
+        {"ok" true "token" token "user" requested-user}))))
+
+(defn afj-tcp-login [connection requested-user password]
+  (if (not (afj-tcp-connection-auth-available? connection))
+    {"ok" false "error" "SESSION_ALREADY_AUTHENTICATED"}
+    (let [auth (authenticate requested-user password)]
+      (if (get auth "ok")
+        (afj-tcp-register-authenticated-session connection requested-user)
+        (do
+          (audit-event "login" requested-user "failure")
+          {"ok" false "error" "AUTH_FAILED"})))))
+
 (defn afj-tcp-line [conn line]
   (if (not (afj-tcp-rate-allowed? conn))
     (afj-tcp-send conn {"ok" false "error" "RATE_LIMITED"})
@@ -1787,26 +1811,8 @@
       (if (nil? request)
         (afj-tcp-send conn {"ok" false "error" "INVALID_JSON"})
       (if (= (get request "type") "login")
-        (if (not (afj-tcp-connection-auth-available? conn))
-            (afj-tcp-send conn {"ok" false "error" "SESSION_ALREADY_AUTHENTICATED"})
-            (let [requested-user (get request "user")
-                  auth (authenticate requested-user
-                                     (get request "password"))]
-              (if (>= (count (keys (deref afj-tcp-sessions))) afj-tcp-session-limit)
-                (afj-tcp-send conn {"ok" false "error" "SESSION_LIMIT"})
-                (if (get auth "ok")
-                  (let [login (server-login (get request "user"))
-                        token (get login "token")]
-                    (audit-event "login" requested-user "success")
-                (swap! afj-tcp-sessions assoc token (get request "user"))
-                (swap! afj-tcp-connection-tokens assoc conn token)
-                (swap! afj-tcp-session-expiries assoc token
-                       (+ (now_ms) afj-tcp-session-ttl-ms))
-                    (afj-tcp-send conn {"ok" true "token" token
-                                         "user" (get request "user")}))
-                  (do
-                    (audit-event "login" requested-user "failure")
-                    (afj-tcp-send conn {"ok" false "error" "AUTH_FAILED"}))))))
+        (afj-tcp-send conn
+          (afj-tcp-login conn (get request "user") (get request "password")))
         (if (= (get request "type") "prepare")
           (try
             (afj-tcp-send conn (afj-tcp-prepare request))

@@ -2,7 +2,9 @@
 
 const assert = require("assert");
 const crypto = require("crypto");
+const fs = require("fs");
 const net = require("net");
+const os = require("os");
 const path = require("path");
 const { spawn } = require("child_process");
 
@@ -30,15 +32,30 @@ function waitForOutput(child, expected) {
     let output = "";
     const timer = setTimeout(() => reject(new Error(`native prepared timeout: ${output}`)), 60000);
     const onData = (chunk) => { output += chunk.toString(); if (output.includes(expected)) { clearTimeout(timer); resolve(); } };
-    child.stdout.on("data", (chunk) => { output += chunk.toString(); process.stderr.write(chunk); if (output.includes(expected)) { clearTimeout(timer); resolve(); } });
-    child.stderr.on("data", (chunk) => { output += chunk.toString(); process.stderr.write(chunk); });
+    child.stdout.on("data", (chunk) => { output += chunk.toString(); if (output.includes(expected)) { clearTimeout(timer); resolve(); } });
+    child.stderr.on("data", (chunk) => { output += chunk.toString(); });
     child.once("exit", (code) => { if (code !== null) reject(new Error(`daemon exited ${code}: ${output}`)); });
   });
 }
-function runMaria(port, statement) {
+function waitForPort(port) {
   return new Promise((resolve, reject) => {
-    const child = spawn("mariadb", ["--protocol=tcp", "--host=127.0.0.1", `--port=${port}`,
-      "--connect-timeout=5", "--skip-ssl", "--user=root", "--password=development-only",
+    const deadline = Date.now() + 15000;
+    const probe = () => {
+      const socket = net.connect(port, "127.0.0.1");
+      socket.once("connect", () => { socket.destroy(); resolve(); });
+      socket.once("error", (error) => {
+        socket.destroy();
+        if (Date.now() >= deadline) reject(error);
+        else setTimeout(probe, 25);
+      });
+    };
+    probe();
+  });
+}
+function runMaria(port, statement, password) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.env.MARIADB_CLI || "mariadb", ["--protocol=tcp", "--host=127.0.0.1", `--port=${port}`,
+      "--connect-timeout=5", "--skip-ssl", "--user=root", `--password=${password}`,
       "--batch", "--skip-column-names", "--raw", "--execute", statement], { stdio: ["ignore", "pipe", "pipe"] });
     let out = ""; let err = "";
     child.stdout.on("data", (x) => { out += x.toString(); }); child.stderr.on("data", (x) => { err += x.toString(); });
@@ -87,17 +104,25 @@ function scrambleFromHandshake(payload) {
   const second = payload.subarray(offset, offset + 12); return Buffer.concat([first, second]);
 }
 async function main() {
-  const port = await freePort();
-  const child = spawn(process.execPath, [require("./runtime-bootstrap"), "run", "tests/native-mariadb-daemon.fls"],
-    { cwd: path.join(__dirname, ".."), env: { ...process.env, AFJ_NATIVE_MARIADB_PORT: String(port) }, stdio: ["ignore", "pipe", "pipe"] });
+  const tcpPort = await freePort();
+  let port = await freePort();
+  while (port === tcpPort) port = await freePort();
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), "afj-db95-native-prepared-"));
+  const password = "mariadb-prepared-test-password";
+  const child = spawn(process.execPath, [require("./runtime-bootstrap"), "run", "src/server.fls"],
+    { cwd: path.join(__dirname, ".."), env: { ...process.env,
+      AFJ_DB_MODE: "development", AFJ_DB_PORT: String(tcpPort),
+      AFJ_DB_BIND_HOST: "127.0.0.1", AFJ_DB_WAL: path.join(temp, "prepared.wal"),
+      AFJ_DB_ROOT_PASSWORD: password, AFJ_DB_MARIADB_PORT: String(port) }, stdio: ["ignore", "pipe", "pipe"] });
   try {
-    await waitForOutput(child, "afj-db95 native MariaDB STARTED");
-    await runMaria(port, "CREATE TABLE native_prepared (id INT PRIMARY KEY, name TEXT)");
-    await runMaria(port, "INSERT INTO native_prepared (id,name) VALUES (7,'prepared')");
+    await waitForOutput(child, "afj-db95 MariaDB wire READY");
+    await waitForPort(port);
+    await runMaria(port, "CREATE TABLE native_prepared (id INT PRIMARY KEY, name TEXT)", password);
+    await runMaria(port, "INSERT INTO native_prepared (id,name) VALUES (7,'prepared')", password);
     const socket = net.connect(port, "127.0.0.1"); const reader = new Reader(socket);
     const handshake = await reader.read(); const scramble = scrambleFromHandshake(handshake);
     const login = Buffer.alloc(4 + 4 + 1 + 23); login.writeUInt32LE(CAP, 0); login[8] = 0x21;
-    socket.write(packet(Buffer.concat([login, Buffer.from("root\0"), Buffer.from([20]), nativeToken("development-only", scramble)]), 1));
+    socket.write(packet(Buffer.concat([login, Buffer.from("root\0"), Buffer.from([20]), nativeToken(password, scramble)]), 1));
     assert.strictEqual((await reader.read())[0], 0);
     socket.write(packet(Buffer.concat([Buffer.from([0x16]), Buffer.from("SELECT * FROM native_prepared WHERE id=?")]), 0));
     const prepare = await reader.read(); assert.strictEqual(prepare[0], 0); const statementId = prepare.readUInt32LE(1);
@@ -115,13 +140,13 @@ async function main() {
     assert.strictEqual(multiPrepare.readUInt16LE(7), 2);
     socket.write(packet(executePayload(multiId, [3, 253], [9, "multi"]), 0));
     assert.strictEqual((await reader.read())[0], 0);
-    assert.ok((await runMaria(port, "SELECT * FROM native_prepared WHERE name='multi'")).includes("multi"));
+    assert.ok((await runMaria(port, "SELECT * FROM native_prepared WHERE name='multi'", password)).includes("multi"));
 
     socket.write(packet(Buffer.concat([Buffer.from([0x16]), Buffer.from("INSERT INTO native_prepared (id,name) VALUES (?,?)")]), 0));
     const nullPrepare = await reader.read(); assert.strictEqual(nullPrepare[0], 0); const nullId = nullPrepare.readUInt32LE(1);
     socket.write(packet(executePayload(nullId, [3, 253], [10, null], 2), 0));
     assert.strictEqual((await reader.read())[0], 0);
-    const nullRows = await runMaria(port, "SELECT * FROM native_prepared WHERE name IS NULL");
+    const nullRows = await runMaria(port, "SELECT * FROM native_prepared WHERE name IS NULL", password);
     assert.ok(nullRows.includes("10"));
 
     socket.write(packet(Buffer.concat([Buffer.from([0x16]), Buffer.from("SELECT * FROM native_prepared WHERE name=?")]), 0));
@@ -133,7 +158,12 @@ async function main() {
     socket.write(packet(executePayload(stringId, [253], ["multi"], 0, 0), 0));
     const cachedPackets = []; for (let i = 0; i < 6; i += 1) cachedPackets.push(await reader.read());
     assert.ok(cachedPackets.some((p) => p.toString("utf8").includes("multi")));
-    socket.destroy(); console.log("afj-db95 native MariaDB prepared PASS");
-  } finally { child.kill("SIGTERM"); }
+    socket.destroy(); console.log("afj-db95 integrated MariaDB prepared/standard-client PASS");
+  } finally {
+    if (child.exitCode === null && child.signalCode === null) {
+      await new Promise((resolve) => { child.once("close", resolve); child.kill("SIGTERM"); });
+    }
+    fs.rmSync(temp, { recursive: true, force: true });
+  }
 }
 main().catch((error) => { console.error(error.stack || error.message); process.exitCode = 1; });

@@ -100,7 +100,7 @@ function mysqlNativeToken(password, challenge) {
   return Buffer.from(first.map((value, index) => value ^ third[index]));
 }
 
-async function connectMaria(port) {
+async function connectMaria(port, password) {
   const deadline = Date.now() + 15000;
   let socket;
   while (Date.now() < deadline) {
@@ -123,7 +123,7 @@ async function connectMaria(port) {
   const handshake = parseHandshake(greeting.payload);
   const wanted = 1 | 512 | 8192 | 32768;
   const capabilities = wanted & handshake.capabilities;
-  const token = mysqlNativeToken("development-only", handshake.challenge);
+  const token = mysqlNativeToken(password, handshake.challenge);
   const login = Buffer.alloc(4 + 4 + 1 + 23);
   login.writeUInt32LE(capabilities, 0);
   login.writeUInt32LE(1024 * 1024, 4);
@@ -199,40 +199,86 @@ function freePort() {
   });
 }
 
-async function main() {
-  const port = await freePort();
-  const temp = fs.mkdtempSync(path.join(os.tmpdir(), "afj-db95-native-client-"));
-  const bootstrap = require("./runtime-bootstrap");
-  const child = spawn(process.execPath, [bootstrap, "run", "tests/native-mariadb-daemon.fls"], {
+function waitForPort(port) {
+  return new Promise((resolve, reject) => {
+    const deadline = Date.now() + 15000;
+    const probe = () => {
+      const socket = net.connect(port, "127.0.0.1");
+      socket.once("connect", () => { socket.destroy(); resolve(); });
+      socket.once("error", () => {
+        socket.destroy();
+        if (Date.now() >= deadline) reject(new Error(`server port ${port} did not open`));
+        else setTimeout(probe, 25);
+      });
+    };
+    probe();
+  });
+}
+
+async function startService(bootstrap, tcpPort, mariaPort, walPath, password) {
+  const child = spawn(process.execPath, [bootstrap, "run", "src/server.fls"], {
     cwd: path.join(__dirname, ".."),
-    env: { ...process.env, AFJ_NATIVE_MARIADB_PORT: String(port), AFJ_DB_WAL: path.join(temp, "native.wal") },
+    env: { ...process.env, AFJ_DB_MODE: "development", AFJ_DB_PORT: String(tcpPort),
+      AFJ_DB_BIND_HOST: "127.0.0.1", AFJ_DB_WAL: walPath,
+      AFJ_DB_ROOT_PASSWORD: password, AFJ_DB_MARIADB_PORT: String(mariaPort) },
     stdio: ["ignore", "pipe", "pipe"],
   });
   let output = "";
   child.stdout.on("data", (chunk) => { output += chunk.toString(); });
   child.stderr.on("data", (chunk) => { output += chunk.toString(); });
+  const deadline = Date.now() + 15000;
+  while (!output.includes("afj-db95 MariaDB wire READY")) {
+    if (child.exitCode !== null) throw new Error(`server exited ${child.exitCode}: ${output}`);
+    if (Date.now() >= deadline) {
+      await stopService(child);
+      throw new Error(`server startup timeout: ${output}`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  await waitForPort(mariaPort);
+  return child;
+}
+
+function stopService(child) {
+  if (!child || child.exitCode !== null || child.signalCode !== null) return Promise.resolve();
+  return new Promise((resolve) => {
+    child.once("close", resolve);
+    child.kill("SIGTERM");
+  });
+}
+
+async function main() {
+  const tcpPort = await freePort();
+  let mariaPort = await freePort();
+  while (mariaPort === tcpPort) mariaPort = await freePort();
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), "afj-db95-native-client-"));
+  const bootstrap = require("./runtime-bootstrap");
+  const password = "mariadb-service-test-password";
+  const walPath = path.join(temp, "native.wal");
+  let child = null;
   let wire;
   try {
-    const deadline = Date.now() + 15000;
-    while (!output.includes("afj-db95 native MariaDB STARTED")) {
-      if (child.exitCode !== null) throw new Error(`daemon exited ${child.exitCode}: ${output}`);
-      if (Date.now() >= deadline) throw new Error(`daemon startup timeout: ${output}`);
-      await new Promise((resolve) => setTimeout(resolve, 25));
-    }
-    wire = await connectMaria(port);
+    child = await startService(bootstrap, tcpPort, mariaPort, walPath, password);
+    wire = await connectMaria(mariaPort, password);
     await query(wire, "CREATE TABLE independent_client (id INT PRIMARY KEY, name TEXT, note TEXT)");
     await query(wire, "INSERT INTO independent_client (id,name,note) VALUES (1,'FreeLang','한글🙂'),(2,'AFJ',NULL)");
     const selected = await query(wire, "SELECT * FROM independent_client");
     assert.deepStrictEqual(selected.rows, [["1", "FreeLang", "한글🙂"], ["2", "AFJ", null]]);
     const prepared = await preparedSelect(wire, 1, "FreeLang");
     assert.deepStrictEqual(prepared.rows, [["1", "FreeLang", "한글🙂"]]);
-    console.log("afj-db95 independent MariaDB protocol client PASS");
+    wire.socket.destroy();
+    wire = null;
+    await stopService(child);
+    child = await startService(bootstrap, tcpPort, mariaPort, walPath, password);
+    wire = await connectMaria(mariaPort, password);
+    const recovered = await query(wire, "SELECT * FROM independent_client");
+    assert.deepStrictEqual(recovered.rows, [["1", "FreeLang", "한글🙂"], ["2", "AFJ", null]]);
+    console.log("afj-db95 integrated MariaDB client/auth/prepared/WAL restart PASS");
   } catch (error) {
-    throw new Error(`${error.stack || error.message}\nFreeLang daemon:\n${output}`);
+    throw new Error(`${error.stack || error.message}`);
   } finally {
     if (wire) wire.socket.destroy();
-    child.kill("SIGTERM");
-    await new Promise((resolve) => child.once("close", resolve));
+    await stopService(child);
     fs.rmSync(temp, { recursive: true, force: true });
   }
 }

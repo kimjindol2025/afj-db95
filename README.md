@@ -12,9 +12,11 @@ fd_fsync 기반 durable transaction 복구 기준선을 제공합니다. 실제 
 `src/server.fls`이며, `src/afj-db95.fls`는 엔진 smoke 테스트입니다. 아직 공식
 1.0 DB는 아닙니다.
 
-MariaDB binary-wire 구현과 표준 MariaDB client 검증은 현재 독립 테스트 서버에서
-수행됩니다. 해당 wire listener는 `src/server.fls`에 아직 통합되지 않았으므로,
-위 TCP JSON 서버 실행만으로 MariaDB client 접속을 지원한다고 간주하면 안 됩니다.
+MariaDB wire listener는 `AFJ_DB_MARIADB_PORT`를 명시했을 때만 메인
+`src/server.fls`에서 loopback(`127.0.0.1`)으로 시작합니다. MariaDB 10.11 CLI의
+일반 쿼리 smoke와 prepared statement, 독립 wire client, 인증 거부 및 WAL 재시작을
+실제 서비스 진입점에서 검증합니다. 현재 `mysql_native_password`만 지원하고
+MariaDB TLS negotiation은 없으므로 이 포트를 원격에 노출하면 안 됩니다.
 
 - 테이블 생성
 - 행 삽입
@@ -40,6 +42,14 @@ AFJ_DB_BIND_HOST=127.0.0.1 \
 AFJ_DB_PORT=43995 \
 AFJ_DB_WAL=/tmp/afj-db95-dev.wal \
 node "$FREELANG_BOOTSTRAP" run src/server.fls
+```
+
+MariaDB client 호환을 로컬에서 시험하려면 별도의 loopback 포트를 opt-in으로
+지정합니다. 이는 개발·상호운용 시험용이며 외부 접속용 설정이 아닙니다.
+
+```text
+AFJ_DB_MARIADB_PORT=34095
+AFJ_DB_ROOT_PASSWORD=<development-test-password>
 ```
 
 이 명령은 TCP JSON 데이터베이스 서버를 실제로 시작하고, 인증된

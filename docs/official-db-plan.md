@@ -116,11 +116,14 @@ TCP 프로토콜, 연결 수명, 인증, 사용자·역할·권한, prepared sta
 현재 사용자·역할·권한·비밀번호 해시와 HTTP adapter·transport-independent 요청 처리,
 줄 단위 JSON TCP server를 둔다. `tcp-server.fls`는 독립 프로세스 client로
 로그인·token·SQL·권한 거부·listener 종료를 검증한다. 종료 조건은 외부
-클라이언트 smoke test와 권한 우회 테스트 통과다. TLS, wire-level MariaDB
-client protocol은 아직 후속 게이트다. JSON TCP adapter에는 세션 소유권을
+클라이언트 smoke test와 권한 우회 테스트 통과다. `src/server.fls`는 별도
+`AFJ_DB_MARIADB_PORT` 설정 시 loopback-only native MariaDB wire listener도
+시작하며, MariaDB 10.11 CLI의 query/prepared 및 독립 packet-client/WAL 복구
+smoke를 실제 메인 서비스에 연결해 검증했다. 현재 root + `mysql_native_password`
+범위이며 wire TLS와 다른 auth plugin은 미지원이다. JSON TCP adapter에는 세션 소유권을
 검증하는 `prepare`/`execute`와 parameter binding 기준선을 추가했으며,
-다중 세션의 저장 엔진 공유, slow-client timeout의 실제 socket event-loop
-검증과 표준 MariaDB client smoke는 후속 게이트다.
+slow-client timeout의 실제 socket event-loop 검증과 protocol security/error
+matrix 확장은 후속 게이트다.
 
 ### P6 — 운영 기능 (진행 중)
 
@@ -153,7 +156,7 @@ scorecard는 88%이며, 완전한 MVCC·write skew·페이지 기반 B+Tree와 w
 | 대규모 데이터·고동시성 서비스 | 페이지 기반 저장소, buffer pool, 인덱스 플랜, connection/session 분리, 장시간 soak를 구현 | 대형 corpus·동시 접속·장시간 soak에서 데이터 손실과 교착 없음 |
 | 외부 인터넷 직접 노출 | 기본 bind를 안전한 로컬 주소로 고정하고 peer-IP rate limit, 요청 크기 제한, timeout, audit log, 운영 설정 검사를 추가 | 외부 노출 보안 점검과 비인가 요청 차단 회귀 통과 |
 | TLS가 필요한 환경 | FreeLang runtime TLS capability 또는 최소 외부 어댑터를 정의하고 인증서 교체·검증 실패 처리를 추가 | 평문 listener 차단, TLS handshake·만료·잘못된 인증서 테스트 통과 |
-| 기존 MariaDB 클라이언트 연결 | wire-level MariaDB protocol 또는 공식 client adapter를 구현하고 prepared statement·error mapping을 검증 | 표준 MariaDB client smoke와 prepared statement 회귀 통과 |
+| 기존 MariaDB 클라이언트 연결 | main-service wire listener를 auth/WAL/MVCC 경로에 연결하고 capability·prepared·error mapping 범위를 확대 | 표준 MariaDB client smoke·prepared 회귀 통과; 현재 loopback-only `mysql_native_password` 경계와 TLS/plugin 미지원은 유지 |
 | 복잡한 SQL·대규모 JOIN·서브쿼리 | 정식 lexer/parser/AST, planner, JOIN 알고리즘, 서브쿼리·NULL·자료형 변환을 단계적으로 구현 | MariaDB corpus 문법·실행·오류 회귀 95% 이상 |
 | 금융·결제 수준의 MVCC·격리 | transaction manager, snapshot, lock manager, deadlock detection, READ COMMITTED·REPEATABLE READ·SERIALIZABLE을 완성 | dirty read·lost update·phantom·write skew·강제 종료 회귀 전부 통과 |
 

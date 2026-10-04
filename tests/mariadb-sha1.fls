@@ -11,7 +11,13 @@
     (println "afj-db95 SHA-1 vectors PASS")
     (throw "SHA-1 vector mismatch")))
 
-(let [token (sha1-mysql-native-token "development-only" mariadb-wire-scramble)]
-  (if (mariadb-wire-auth-valid? {"auth-response" token})
-    (println "afj-db95 MariaDB native token PASS")
-    (throw "MariaDB native token mismatch")))
+(let [scramble (mariadb-wire-new-scramble)
+      other-scramble (mariadb-wire-new-scramble)
+      token (sha1-mysql-native-token "development-only" scramble)
+      wrong-token (sha1-mysql-native-token "wrong-password" scramble)]
+  (if (and (= (buf-len scramble) 20)
+           (not (= scramble other-scramble))
+           (mariadb-wire-auth-valid? {"auth-response" token} scramble)
+           (not (mariadb-wire-auth-valid? {"auth-response" wrong-token} scramble)))
+    (println "afj-db95 MariaDB native token and random challenge PASS")
+    (throw "MariaDB native token or random challenge mismatch")))

@@ -247,6 +247,12 @@
     파싱해 `root` 이외 사용자와 빈 auth response를 native listener에서
     `ACCESS_DENIED`로 거부하며, `tests/native-mariadb-auth.js`가 실제 packet
     회귀를 통과한다.
+  - 실제 서비스 통합: `src/server.fls`는 `AFJ_DB_MARIADB_PORT`가 지정된 경우에만
+    MariaDB wire listener를 `127.0.0.1`에 시작한다. JSON TCP 포트와 달라야 하며,
+    메인 `afj-tcp-query` 인증·WAL·MVCC 실행 경로에 연결된다. MariaDB 10.11.14 CLI의
+    일반 쿼리/prepared 테스트와 독립 packet client가 실제 서버 진입점에 접속하고,
+    같은 WAL 재시작 복구와 잘못된 비밀번호 거부도 확인했다. TLS와
+    `mysql_native_password` 이외 plugin은 미지원이므로 원격 노출은 금지한다.
 
 - [ ] `AFJ-011` 호환성 점수 자동화
   - SQL 30%, 저장/복구 25%, 트랜잭션 20%, 서버/권한 15%, 운영 10%를 자동 계산한다.
@@ -494,15 +500,9 @@
     `Release status: BLOCKED`가 정확하다. FreeLang native TLS/peer-address runtime
     patch는 별도 공식 Forgejo feature branch에 게시했고 해당 브랜치의 전체 fast
     suite 및 AFJ-DB loopback 상호운용 검증을 통과했다.
-  - 최신 실행 기록: 2026-10-04 21:30 UTC, FreeLang runtime checker fix
+  - 최신 이전 실행 기록: 2026-10-04 21:57 UTC, FreeLang runtime checker fix
     `c783288e`를 적용한 전체 loopback gate에서 `56 PASS, 0 FAIL, 0 BLOCKED`.
-    정적 검사 두 대상도 PASS했고, TCP/TLS, MariaDB 표준 CLI·독립 wire client,
-    인증/prepared, 복구 및 300초 성능 soak가 모두 통과했다. MariaDB CLI는
-    `/tmp`에만 추출했고 시스템 패키지 설치는 하지 않았다. 이전 보고의 두
-    checker BLOCKED는 literal-symbol 매개변수를 0개로 세던 FreeLang 정적 검사기
-    오탐이었다. runtime 수정은 FreeLang 공식 Forgejo feature branch에 푸시했다.
-    전체 자동 회귀가 통과해도 제품 릴리스는 BLOCKED: DDL/schema MVCC 세분화,
-    composite-key type-order/collation 및 MariaDB TLS/auth-plugin 확장이 미완료다.
+    당시 MariaDB CLI는 `/tmp`에 추출했고 시스템 패키지는 설치하지 않았다.
   - 진입점 실검증: `src/server.fls`를 추가해 `start-afj-tcp`를 실제 장기 실행
     서버로 노출했다. 기존 TCP 동시성 smoke가 test-only daemon 대신 이 진입점을
     실행하고, 8개 독립 클라이언트의 인증·동시 쓰기 후 인증된 shutdown, 재기동,
@@ -512,10 +512,19 @@
     수정했다. 전체 게이트 2026-10-04 21:57 UTC `56 PASS, 0 FAIL, 0 BLOCKED`,
     후속 독립 TCP E2E(21:59 UTC)도 PASS했다. 검증 종료 시 task-owned 서버와
     loopback listener가 남지 않았다.
-  - 범위 재확인: 현재 `src/server.fls`는 TCP JSON 서버이며 native MariaDB wire
-    listener는 별도 test harness다. 표준 MariaDB client smoke는 wire test path의
-    증거이지 주 서비스의 MariaDB 호환 증거가 아니므로 release gate에 별도 blocker로
-    기록했다. `AFJ-016`은 계속 BLOCKED다.
+  - 범위 진전: native MariaDB listener를 메인 durable/authenticated 서비스의
+    opt-in loopback listener로 연결했다. 독립 packet client의 인증·쿼리·prepared·
+    동일 WAL 재시작 복구, 잘못된 인증 거부, 실제 MariaDB CLI의 쿼리 및 prepared
+    경로를 검증했다. 첫 통합 gate 2026-10-04 22:21 UTC는 `54 PASS, 0 FAIL,
+    2 BLOCKED`였다. `/tmp`에만 있던 MariaDB 10.11.14 CLI 실행 파일을 찾아
+    `MARIADB_CLI` 경로 지원을 추가했고, 메인 서비스에서 표준 CLI smoke와 prepared
+    테스트를 통과시켰다. 최신 전체 gate 2026-10-04 22:49 UTC는 `60 PASS, 0 FAIL,
+    0 BLOCKED`; fail-closed 포트/bind 검사와 5분 soak도 PASS다. MariaDB CLI는 기존
+    `/tmp` 추출본을 사용했고 시스템 패키지는 설치하지 않았다. gate 종료 코드 2는
+    의도된 릴리스 차단 상태다.
+    AFJ-016은 계속 BLOCKED:
+    DDL/schema MVCC 세분화, composite-key type-order/collation, MariaDB TLS 및
+    추가 인증 plugin 미완료.
 
 ### P3 — 문서와 릴리스 추적
 

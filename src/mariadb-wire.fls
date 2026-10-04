@@ -70,7 +70,6 @@
 ;; Minimal native protocol session state. The query engine remains the
 ;; FreeLang executor; this module only translates MariaDB packets.
 (define mariadb-wire-sessions (atom {}))
-(define mariadb-wire-scramble (afj-utf8-encode "afjdb95-native-key12"))
 (define mariadb-client-protocol-41 512)
 (define mariadb-server-capabilities 172545)
 (define mariadb-wire-root-password
@@ -79,8 +78,26 @@
     (if (nil? configured)
       (if (= mode "production")
         (throw "AFJ_DB_ROOT_PASSWORD_REQUIRED")
-        "development-only")
+      "development-only")
       configured)))
+
+(defn mariadb-wire-scramble-from-hex [hex index result]
+  (if (>= index (count hex))
+    (afj-utf8-encode result)
+    (let [digits "0123456789abcdef"
+          alphabet "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz._"
+          high (str-index-of digits (str_lower (str_slice hex index (+ index 1))))
+          low (str-index-of digits (str_lower (str_slice hex (+ index 1) (+ index 2))))]
+      (if (or (< high 0) (< low 0))
+        (throw "MARIADB_RANDOM_HEX_INVALID")
+        (let [byte (+ (* high 16) low)
+              char (str_slice alphabet (rem byte 64) (+ (rem byte 64) 1))]
+          (mariadb-wire-scramble-from-hex hex (+ index 2) (str result char)))))))
+
+(defn mariadb-wire-new-scramble []
+  ;; Use 20 independently random bytes, map each unbiased 6-bit slice to a
+  ;; printable protocol-safe character, and avoid embedded NUL salt bytes.
+  (mariadb-wire-scramble-from-hex (random_bytes 20) 0 ""))
 
 (defn mariadb-wire-login-capabilities [bytes]
   (if (< (buf-len bytes) 4)
@@ -139,22 +156,24 @@
   (if (not (= (buf-len left) (buf-len right)))
     false
     (if (>= index (buf-len left))
-      true
-      (if (= (buf-read-u8 left index) (buf-read-u8 right index))
-        (mariadb-wire-bytes-equal? left right (+ index 1) difference)
-        false))))
+      (= difference 0)
+      (mariadb-wire-bytes-equal?
+        left right (+ index 1)
+        (bit_or difference
+                (bit_xor (buf-read-u8 left index)
+                         (buf-read-u8 right index)))))))
 
-(defn mariadb-wire-auth-valid? [login]
+(defn mariadb-wire-auth-valid? [login scramble]
   (let [expected (sha1-mysql-native-token mariadb-wire-root-password
-                                           mariadb-wire-scramble)
+                                           scramble)
         actual (get login "auth-response")]
     (mariadb-wire-bytes-equal? expected actual 0 0)))
 
-(defn mariadb-handshake-payload []
+(defn mariadb-handshake-payload [scramble]
   (buf-concat [(buf-u8 10)
                (afj-utf8-encode "afj-db95-0.1") (buf-u8 0)
                (mariadb-u32le 1)
-               (buf-slice mariadb-wire-scramble 0 8)
+               (buf-slice scramble 0 8)
                (buf-u8 0)
                ;; CLIENT_LONG_PASSWORD | PROTOCOL_41 | TRANSACTIONS |
                ;; SECURE_CONNECTION | MULTI_RESULTS = 0x0002a201.
@@ -166,7 +185,7 @@
                (buf-u8 0) (buf-u8 0) (buf-u8 0) (buf-u8 0)
                (buf-u8 0) (buf-u8 0) (buf-u8 0) (buf-u8 0)
                (buf-u8 0) (buf-u8 0)
-               (buf-slice mariadb-wire-scramble 8 12) (buf-u8 0)]))
+               (buf-slice scramble 8 12) (buf-u8 0)]))
 
 (defn mariadb-wire-column [name]
   (buf-concat [(mariadb-lenenc-string "def")
@@ -364,16 +383,60 @@
 
 (defn mariadb-wire-query [conn query]
   (try
-    (let [result (execute-ast (parse-sql query))
-          rows (get result "rows")]
-      (if (nil? rows)
-        (tcp-write conn (afj-b64-to-raw (mariadb-packet 1 (mariadb-ok-payload 0 0))))
-        (mariadb-wire-result conn 1 rows)))
+    (let [state (get (deref mariadb-wire-sessions) conn)
+          response (afj-tcp-query {"token" (get state "afj-token")
+                                   "statement" query})]
+      (if (not (get response "ok"))
+        (tcp-write conn
+          (afj-b64-to-raw
+            (mariadb-packet 1
+              (mariadb-error-payload 1064 (get response "error" "SQL_ERROR")))))
+        (let [result (get response "result")
+              rows (get result "rows")]
+          (if (nil? rows)
+            (tcp-write conn
+              (afj-b64-to-raw
+                (mariadb-packet 1
+                  (mariadb-ok-payload (get result "affected" 0) 0))))
+            (mariadb-wire-result conn 1 rows)))))
     (catch [error]
       (tcp-write conn (afj-b64-to-raw
                         (mariadb-packet 1
                                         (mariadb-error-payload 1064
                                                                (error_message error))))))))
+
+(defn mariadb-wire-login [conn state login]
+  (let [username (get login "username")
+        scramble (get state "scramble")
+        credential-valid (and (= username "root")
+                              (> (get login "auth-response-length") 0)
+                              (mariadb-wire-auth-valid? login scramble))
+        supplied-password (if credential-valid
+                            mariadb-wire-root-password
+                            (str mariadb-wire-root-password "-invalid"))
+        authenticated (authenticate username supplied-password)]
+    (if (not (get authenticated "ok"))
+      (tcp-write conn
+        (afj-b64-to-raw
+          (mariadb-packet 2 (mariadb-error-payload 1045 "ACCESS_DENIED"))))
+      (let [session (afj-tcp-register-authenticated-session conn username)]
+        (if (not (get session "ok"))
+          (tcp-write conn
+            (afj-b64-to-raw
+              (mariadb-packet 2
+                (mariadb-error-payload 1040 (get session "error" "SESSION_LIMIT")))))
+          (do
+            (swap! mariadb-wire-sessions assoc conn
+              (assoc (assoc state "phase" "ready")
+                     "afj-token" (get session "token")
+                     "client-capabilities" (get login "client-capabilities")
+                     "negotiated-capabilities" (get login "negotiated-capabilities")
+                     "max-packet-size" (get login "max-packet-size")
+                     "charset" (get login "charset")
+                     "username" username
+                     "auth-response-length" (get login "auth-response-length")))
+            (tcp-write conn
+              (afj-b64-to-raw (mariadb-packet 2 (mariadb-ok-payload 0 0))))))))))
 
 (defn mariadb-wire-frame [conn frame]
   (let [state (get (deref mariadb-wire-sessions) conn)
@@ -387,25 +450,7 @@
                             (mariadb-packet 2
                                             (mariadb-error-payload 1043
                                                                    "CLIENT_PROTOCOL_UNSUPPORTED"))))
-          (if (or (not (= (get login "username") "root"))
-                  (= (get login "auth-response-length") 0)
-                  (not (mariadb-wire-auth-valid? login)))
-            (tcp-write conn (afj-b64-to-raw
-                              (mariadb-packet 2
-                                              (mariadb-error-payload 1045
-                                                                     "ACCESS_DENIED"))))
-            (do
-            (swap! mariadb-wire-sessions assoc conn
-                   (assoc (assoc state "phase" "ready")
-                          "client-capabilities" capabilities
-                          "negotiated-capabilities"
-                          (get login "negotiated-capabilities")
-                          "max-packet-size" (get login "max-packet-size")
-                          "charset" (get login "charset")
-                          "username" (get login "username")
-                          "auth-response-length"
-                          (get login "auth-response-length")))
-            (tcp-write conn (afj-b64-to-raw (mariadb-packet 2 (mariadb-ok-payload 0 0))))))))
+          (mariadb-wire-login conn state login)))
         (let [command (buf-read-u8 payload 0)]
         (if (= command 3)
           (mariadb-wire-query conn
@@ -441,11 +486,13 @@
 
 (defn mariadb-wire-handler [event conn payload peer]
   (if (or (= event "accept") (= event "connect"))
-    (do
+    (let [scramble (mariadb-wire-new-scramble)]
       (swap! mariadb-wire-sessions assoc conn
              {"phase" "handshake" "buffer" "" "prepared" {}
-              "next-statement-id" 1})
-      (tcp-write conn (afj-b64-to-raw (mariadb-packet 0 (mariadb-handshake-payload)))))
+              "next-statement-id" 1 "scramble" scramble})
+      (tcp-write conn
+        (afj-b64-to-raw
+          (mariadb-packet 0 (mariadb-handshake-payload scramble)))))
     (if (= event "data")
       (let [state (get (deref mariadb-wire-sessions) conn)
             bytes (buf-concat [(get state "buffer") (afj-raw-to-b64 payload)])
@@ -455,5 +502,7 @@
           (swap! mariadb-wire-sessions assoc conn
                  (assoc current "buffer" remaining))))
       (if (= event "close")
-        (swap! mariadb-wire-sessions dissoc conn)
+        (do
+          (afj-tcp-close-connection conn)
+          (swap! mariadb-wire-sessions dissoc conn))
         nil))))

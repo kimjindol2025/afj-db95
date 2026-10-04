@@ -1,16 +1,20 @@
 # AFJ-016 Release Gate Report
 
-- Generated: 2026-10-04T21:57:56Z
+- Generated: 2026-10-04T22:49:40Z
 - Repository: afj-db95
-- Automated cases: 56 PASS, 0 FAIL, 0 BLOCKED
+- FreeLang runtime: c783288e (pinned bootstrap used for this run)
+- MariaDB client: 10.11.14 (existing temporary extraction; no system package installed)
+- Automated cases: 60 PASS, 0 FAIL, 0 BLOCKED
 - Release status: **BLOCKED**
 
 ## Automated evidence
 
 | Case | Status | Evidence / reason |
 |---|---|---|
-| static check: tcp-server | PASS | FreeLang runtime c783288e |
-| static check: afj-db95 | PASS | FreeLang runtime c783288e |
+| static check: tcp-server | PASS | |
+| static check: afj-db95 | PASS | |
+| static check: server entrypoint | PASS | |
+| MariaDB listener configuration fails closed | PASS | |
 | raw binary boundary | PASS | |
 | MariaDB packet codec | PASS | |
 | page/WAL smoke | PASS | |
@@ -21,7 +25,7 @@
 | bounded B+Tree range | PASS | |
 | compound unique index | PASS | |
 | compound predicate range | PASS | |
-| TCP service entrypoint, concurrency and WAL restart | PASS | Main entrypoint, 8 clients, graceful shutdown, restart and WAL recovery |
+| TCP service entrypoint, concurrency and WAL restart | PASS | |
 | TCP 5m performance envelope | PASS | |
 | backup smoke | PASS | |
 | backup restore soak | PASS | |
@@ -61,8 +65,10 @@
 | MariaDB standard-client adapter smoke | PASS | |
 | MariaDB mysql_native_password SHA-1 | PASS | |
 | MariaDB wire prepared | PASS | |
-| native MariaDB independent wire client | PASS | |
-| native MariaDB auth rejection | PASS | |
+| integrated MariaDB independent wire client/auth/prepared/WAL | PASS | |
+| integrated MariaDB auth rejection | PASS | |
+| integrated MariaDB standard client | PASS | |
+| integrated MariaDB prepared protocol and standard client | PASS | |
 | native MariaDB decoder | PASS | |
 | native MariaDB prepared protocol | PASS | |
 
@@ -74,13 +80,14 @@ remain release blockers until separately implemented and verified:
 
 - DDL/schema-level MVCC granularity and complete composite-key type-order and
   collation compatibility.
-- The native MariaDB wire listener is still a standalone test harness and is
-  not started by src/server.fls; existing MariaDB-client checks do not prove
-  that the main durable/authenticated service supports that protocol.
-- MariaDB TLS and authentication-plugin variants beyond mysql_native_password;
-  the standard MariaDB CLI checks are BLOCKED when the CLI is unavailable.
-- The 5-minute performance envelope passed in this run. If explicitly skipped
-  for a quick preflight, it is recorded as BLOCKED, not PASS.
+- The native MariaDB listener is now an explicit, loopback-only option on
+  src/server.fls with AFJ_DB_MARIADB_PORT. Actual-service standard-client and
+  independent wire-client tests cover auth, queries, prepared statements and
+  WAL restart. TLS negotiation and authentication plugins beyond
+  mysql_native_password remain unsupported; do not expose this listener remotely.
+- Standard-client cases are recorded BLOCKED if the MariaDB CLI is unavailable.
+  The 5-minute development-host soak above passed; it is not a production-scale
+  capacity claim.
 
 The report must remain **BLOCKED** until each item has implementation evidence and a
 corresponding reproducible test. A nonzero automated failure also keeps the gate

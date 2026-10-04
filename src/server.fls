@@ -1,12 +1,44 @@
 ;; AFJ-DB95 long-running TCP server entrypoint.
 ;; Run from the repository root with the FreeLang AFJ bootstrap.
 (load "tcp-server.fls")
+(load "mariadb-wire.fls")
+
+(define afj-mariadb-port
+  (let [raw (env-get "AFJ_DB_MARIADB_PORT")]
+    (if (nil? raw)
+      nil
+      (let [parsed (str-to-num raw)]
+        (if (and (number? parsed) (> parsed 0) (< parsed 65536))
+          parsed
+          (throw "AFJ_DB_MARIADB_PORT_INVALID"))))))
+
+;; Validate the opt-in plaintext protocol before opening the primary listener.
+;; A bad MariaDB config must never briefly expose the JSON service remotely.
+(if (and (not (nil? afj-mariadb-port))
+         (or (= afj-mariadb-port afj-tcp-port)
+             (not (or (= afj-tcp-host "127.0.0.1")
+                      (= afj-tcp-host "::1")
+                      (= afj-tcp-host "localhost")))))
+  (throw "AFJ_DB_MARIADB_REQUIRES_DISTINCT_LOOPBACK_PORT")
+  nil)
 
 (let [started (start-afj-tcp)]
   (if (get started "ok")
-    ;; start-afj-tcp schedules the IO-ring drain loop on the host event loop.
-    ;; Do not poll fl-yield synchronously here: it blocks Node's event loop and
-    ;; starves timers used for graceful shutdown and session cleanup.
-    (println (str "afj-db95 server READY "
-                  (get started "host") ":" (get started "port")))
+    (do
+      ;; The native MariaDB protocol currently supports mysql_native_password
+      ;; only and has no TLS negotiation. Keep it explicitly opt-in and
+      ;; loopback-only until those protocol/security gaps are implemented.
+      (if (not (nil? afj-mariadb-port))
+        (let [maria-started
+              (tcp-server-raw afj-mariadb-port "mariadb-wire-handler" "127.0.0.1")]
+          (if (= maria-started "ok")
+            (println (str "afj-db95 MariaDB wire READY 127.0.0.1:" afj-mariadb-port))
+            (do
+              (stop-afj-tcp)
+              (throw (str "AFJ_DB_MARIADB_START_FAILED: " maria-started)))))
+        nil)
+      ;; start-afj-tcp schedules the IO-ring drain loop on the host event loop.
+      ;; Do not poll fl-yield synchronously here: it blocks Node's event loop.
+      (println (str "afj-db95 server READY "
+                    (get started "host") ":" (get started "port"))))
     (throw (str "AFJ_DB_SERVER_START_FAILED: " (json_str started)))))

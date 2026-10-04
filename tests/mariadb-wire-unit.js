@@ -18,7 +18,7 @@ function close(server) {
 
 function runMaria(port) {
   return new Promise((resolve, reject) => {
-    const child = spawn("mariadb", [
+    const child = spawn(process.env.MARIADB_CLI || "mariadb", [
       "--protocol=tcp", "--host=127.0.0.1", `--port=${port}`,
       "--connect-timeout=3", "--skip-ssl", "--user=root", "--password=development-only",
       "--batch", "--skip-column-names", "--raw", "--execute", "SELECT 1",
