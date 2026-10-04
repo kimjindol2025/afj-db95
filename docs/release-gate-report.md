@@ -1,6 +1,6 @@
 # AFJ-016 Release Gate Report
 
-- Generated: 2026-10-04T15:37:28Z
+- Generated: 2026-10-04T16:31:04Z
 - Repository: afj-db95
 - FreeLang runtime bootstrap: /tmp/gh-passfix.Uf7hVz/freelang-afj-runtime-candidate/bootstrap.js
 - Runtime native TCP/TLS patch: isolated test source; not yet committed to the original runtime worktree
@@ -75,18 +75,24 @@ The following are the remaining release-gate conditions; passing regression case
 do not waive an incomplete architectural condition:
 
 - Native raw TCP callbacks now provide peerAddress as a backward-compatible fourth argument. Native TLS/mTLS and certificate reload are exercised by the loopback cases above.
-- MariaDB 10.11 standard-client interoperability passed using an extracted temporary client package; no system package was installed.
+- MariaDB standard-client interoperability is evidenced only when the MariaDB CLI cases above report PASS; BLOCKED cases remain unresolved.
 - DDL/schema-level MVCC granularity and full composite-key encoding/type-order
   compatibility are not complete; row-version WAL replay, row-level DML merge,
   compound predicate candidate validation, composite page-range recheck,
   multi-index intersection, range predicate conflict, and TCP transaction
   process-kill recovery cases are covered above.
+  - Batched commits now record the final row set once per touched table, so a
+    create-plus-insert batch cannot duplicate its initial MVCC version. Lazy
+    table repeatable-read and duplicate unkeyed-row regressions pass.
   - TCP table-page manifest, page-backed B+Tree leaf-index persistence/reopen,
     bounded pin/flush pool, lazy table eviction, lazy transaction snapshot and
     durable row-version checkpoint recovery pass; page-level row execution and
     multi-index/compound range validation pass; DDL/schema MVCC granularity
     remains incomplete.
-- Large-corpus and concurrency regressions pass. A standalone 300-second TCP soak passed with `writes=1408`, `throughput=4.69/s`, `p95=1962ms`, and `max=2415ms` (limits: p95 15000ms, max 20000ms). This report's matrix soak duration is listed above and may be shortened only for the rest of the matrix.
+- Large-corpus and concurrency regressions pass. A standalone 300-second TCP
+  soak passed with `writes=1384`, `throughput=4.61/s`, `p95=2005ms`, and
+  `max=2431ms` (limits: p95 15000ms, max 20000ms). The release matrix used a
+  1000ms soak; the full-duration result above is the separate soak run.
 
 The report must remain **BLOCKED** until each item has implementation evidence and a
 corresponding reproducible test. A nonzero automated failure or any BLOCKED case

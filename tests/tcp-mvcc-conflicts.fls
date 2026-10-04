@@ -174,3 +174,32 @@
            (= (get reader-commit "error") "TX_CONFLICT"))
     (println "afj-db95 MVCC ALTER schema conflict PASS")
     (throw "ALTER TABLE did not invalidate stale predicate reader")))
+
+;; `id` is not inherently unique in SQL. MVCC history must preserve repeated
+;; identifiers and physically duplicate rows when no PRIMARY KEY is declared.
+(afj-tcp-commit-ast
+  {"type" "create-table" "table" "versioned_unkeyed"
+   "schema" {"columns" [{"name" "id" "type" "INTEGER" "nullable" true}
+                           {"name" "note" "type" "TEXT" "nullable" true}]
+              "primary-key" nil "unique-columns" []}})
+(afj-tcp-commit-ast
+  {"type" "insert" "table" "versioned_unkeyed"
+   "rows" [{"id" "1" "note" "first"}
+           {"id" "1" "note" "second"}
+           {"id" "1" "note" "second"}]})
+(let [snapshot (deref afj-tcp-commit-revision)
+      before (afj-tcp-versioned-rows "versioned_unkeyed" [] snapshot)]
+  (afj-tcp-commit-ast
+    {"type" "update" "table" "versioned_unkeyed"
+     "where" {"column" "note" "equals" "first"}
+     "changes" {"note" "updated"}})
+  (let [after (afj-tcp-versioned-rows
+                "versioned_unkeyed" [] (deref afj-tcp-commit-revision))
+        historical (afj-tcp-versioned-rows "versioned_unkeyed" [] snapshot)]
+    (if (and (= (count before) 3)
+             (= (count after) 3)
+             (= (count historical) 3)
+             (any? (fn [row] (= (get row "note") "first")) historical)
+             (any? (fn [row] (= (get row "note") "updated")) after))
+      (println "afj-db95 MVCC duplicate unkeyed rows PASS")
+      (throw "MVCC collapsed rows without a declared unique key"))))

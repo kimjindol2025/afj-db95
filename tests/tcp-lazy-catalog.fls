@@ -11,6 +11,9 @@
 (if (file_exists (afj-tcp-table-page-path "lazy_beta"))
   (file_delete (afj-tcp-table-page-path "lazy_beta"))
   nil)
+(if (file_exists (afj-tcp-table-page-path "lazy_snapshot"))
+  (file_delete (afj-tcp-table-page-path "lazy_snapshot"))
+  nil)
 
 (reset! engine-catalog {})
 (reset! engine-indexes {})
