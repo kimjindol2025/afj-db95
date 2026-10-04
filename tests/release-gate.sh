@@ -39,6 +39,7 @@ run_case "TCP lazy catalog eviction" env AFJ_DB_WAL=/tmp/afj-db95-lazy-catalog-g
 run_case "persistent recursive B+Tree" node "$bootstrap" run "$repo_root/tests/persistent-btree.fls"
 run_case "bounded B+Tree range" node "$bootstrap" run "$repo_root/tests/btree-range.fls"
 run_case "compound unique index" node "$bootstrap" run "$repo_root/tests/compound-index.fls"
+run_case "compound predicate range" node "$bootstrap" run "$repo_root/tests/compound-range.fls"
 run_case "TCP concurrency" node "$repo_root/tests/tcp-concurrency-smoke.js"
 run_case "TCP 5m performance envelope" env AFJ_SOAK_MS=300000 AFJ_SOAK_P95_LATENCY_MS=15000 AFJ_SOAK_MAX_LATENCY_MS=20000 node "$repo_root/tests/tcp-long-soak.js"
 run_case "backup smoke" node "$bootstrap" run "$repo_root/src/backup.fls"
@@ -104,7 +105,7 @@ do not waive an incomplete architectural condition:
 
 - Native TLS listener, external bind policy, CA/mTLS, certificate rotation and failure-injection regressions pass; no blocker remains in this area.
 - MariaDB wire-level support includes a native FreeLang Script listener for handshake, COM_QUERY and COM_STMT_PREPARE/EXECUTE/CLOSE; 32-bit capability intersection, max-packet-size/charset parsing, mysql_native_password SHA-1 challenge verification, standard-client and native prepared INT, NULL, string, and multi-parameter smoke pass. TLS/auth-plugin variants beyond mysql_native_password remain incomplete.
-- Complete row-version MVCC and index-range granular validation are not complete; row-version WAL replay, range predicate conflict, and TCP transaction process-kill recovery cases are covered above.
+- Complete row-version MVCC and multi-index/page-level composite range validation are not complete; row-version WAL replay, compound predicate candidate validation, range predicate conflict, and TCP transaction process-kill recovery cases are covered above.
   - TCP table-page manifest, page-backed B+Tree leaf-index persistence/reopen,
     bounded pin/flush pool, lazy table eviction, lazy transaction snapshot and
     durable row-version checkpoint recovery pass; page-level row execution and

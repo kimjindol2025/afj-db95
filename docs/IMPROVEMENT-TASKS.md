@@ -406,6 +406,13 @@
   - 추가 range 증거: 내부 B+Tree node의 최소·최대 키로 불필요한 child를
     건너뛰는 bounded range traversal을 연결했다. `tests/btree-range.fls`가
     `>`, `<=`, `<>` 결과와 경계 key를 재귀 tree fixture에서 검증한다.
+  - 추가 복합 predicate 증거: SQL parser가 두 개의 `AND` predicate에서
+    equality와 range 연산자를 함께 보존하고, executor가 사용 가능한 단일
+    인덱스 후보를 먼저 좁힌 뒤 전체 predicate를 재검증한다. `tests/compound-range.fls`
+    에서 `id > 1 AND tenant = 'a'`와 역순 조건의 `index-range-scan`, 결과 행,
+    경계 조건을 검증한다. 서로 다른 두 단일 인덱스 후보의 row-id 교집합도
+    같은 회귀에서 검증한다. page-level composite B+Tree range traversal은
+    여전히 남는다.
   - 추가 durable 증거: catalog page checkpoint의 table page에 immutable
     `row-version-history`와 manifest의 `commit-revision`·`table-revisions`를
     함께 저장하고, recovery가 WAL tail 없이도 이전 snapshot과 최신 snapshot을

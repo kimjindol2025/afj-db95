@@ -1,0 +1,41 @@
+;; AFJ-013 compound predicate range planning contract.
+(load "/root/kilo-freelang/projects/afj-db95/src/engine.fls")
+(load "/root/kilo-freelang/projects/afj-db95/src/sql-core.fls")
+
+(reset! engine-catalog {})
+(reset! engine-indexes {})
+(execute-ast (parse-sql
+               "CREATE TABLE compound_range (id INTEGER PRIMARY KEY, tenant TEXT, email TEXT UNIQUE)"))
+(execute-ast {"type" "insert" "table" "compound_range"
+              "rows" [{"id" 1 "tenant" "a"}
+                      {"id" 2 "tenant" "b" "email" "a@example.test"}
+                      {"id" 3 "tenant" "a" "email" "b@example.test"}
+                      {"id" 4 "tenant" "a" "email" "c@example.test"}]})
+
+(let [query (execute-ast
+              (parse-sql
+                "SELECT * FROM compound_range WHERE id > 1 AND tenant = 'a'"))
+      rows (get query "rows")]
+  (if (and (= (get query "plan") "index-range-scan")
+           (= (count rows) 2)
+           (= (get (first rows) "id") 3)
+           (= (get (last rows) "id") 4))
+    (println "afj-db95 compound range predicate PASS")
+    (throw "compound range predicate failed")))
+
+(let [query (execute-ast
+              (parse-sql
+                "SELECT * FROM compound_range WHERE tenant = 'a' AND id >= 3"))]
+  (if (and (= (get query "plan") "index-range-scan")
+           (= (count (get query "rows")) 2))
+    (println "afj-db95 compound range reverse predicate PASS")
+    (throw "compound reverse range predicate failed")))
+
+(let [query (execute-ast
+              (parse-sql
+                "SELECT * FROM compound_range WHERE id > 1 AND email = 'c@example.test'"))]
+  (if (and (= (get query "plan") "index-range-scan")
+           (= (count (get query "rows")) 1)
+           (= (get (first (get query "rows")) "id") 4))
+    (println "afj-db95 multi-index intersection PASS")
+    (throw "multi-index intersection failed")))

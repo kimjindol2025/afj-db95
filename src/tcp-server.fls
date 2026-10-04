@@ -707,19 +707,20 @@
         indexes (json-parse (json_str (deref engine-indexes)))
         databases (json-parse (json_str (deref engine-databases)))]
     (try
-      (doseq [ast asts] (execute-ast ast))
+      (doseq [ast asts]
+        (reset! result (execute-ast ast)))
       (catch [error]
         (do
           (reset! engine-catalog catalog)
           (reset! engine-indexes indexes)
           (reset! engine-databases databases)
           (throw error))))
-    (reset! engine-catalog catalog)
-    (reset! engine-indexes indexes)
-    (reset! engine-databases databases)
+    ;; The successful validation execution already published the AST into the
+    ;; live in-memory state. Replaying it after restoring the snapshots doubles
+    ;; catalog/index work for every autocommit write and makes long concurrent
+    ;; soak latency grow unnecessarily. Keep the validated result and persist
+    ;; that state once; the catch path above still restores all snapshots.
     (afj-tcp-record-asts asts)
-    (doseq [ast asts]
-      (reset! result (execute-ast ast)))
     (swap! afj-tcp-commit-revision (fn [revision] (+ revision 1)))
     (afj-tcp-mark-table-revisions asts (deref afj-tcp-commit-revision))
     (afj-tcp-record-row-versions-for-asts
