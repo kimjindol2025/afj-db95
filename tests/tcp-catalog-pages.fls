@@ -67,6 +67,13 @@
            (= (count (get indexed-restore "rows")) 1))
     (println "afj-db95 catalog page index rebuild PASS")
     (throw "catalog page index was not rebuilt")))
+(let [range-restore (execute-ast
+                      {"type" "select" "table" "checkpoint_users"
+                       "where" {"column" "id" "operator" ">" "value" 0}})]
+  (if (and (= (get range-restore "plan") "index-range-scan")
+           (= (count (get range-restore "rows")) 1))
+    (println "afj-db95 catalog page B+Tree range PASS")
+    (throw "catalog page B+Tree range failed")))
 
 ;; A mutation invalidates the persisted root in memory, then the next
 ;; checkpoint writes a fresh page-backed root for reopen.

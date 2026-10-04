@@ -219,7 +219,8 @@ scorecard는 88%이며, 완전한 MVCC·write skew·페이지 기반 B+Tree와 w
    recursive split은 별도 persistent B+Tree 회귀로 검증했고, durable
    row-version checkpoint history도 catalog page recovery 회귀로 검증했다.
    복합 UNIQUE key parsing·중복 검증·composite bucket 재구성은 통합됐지만,
-   page-level row execution과 다중 인덱스·복합 range predicate는 남아 있다.
+   bounded B+Tree range traversal은 연결됐지만, page-level row execution과
+   다중 인덱스·복합 range predicate는 남아 있다.
 4. native TLS 외부 bind, hostname/CA/mTLS 운영 정책, 인증서 교체와 실패 주입은
    통과했다.
 5. MariaDB wire-level protocol의 capability negotiation과 production hardening을

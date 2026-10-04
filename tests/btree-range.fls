@@ -1,0 +1,31 @@
+;; AFJ-013 bounded B+Tree range traversal contract.
+(load "/root/kilo-freelang/projects/afj-db95/src/engine.fls")
+
+(let [tree {"leaf" false
+            "separators" [8 16]
+            "children"
+            [{"leaf" true "entries"
+              [{"key" 0 "row-id" 0} {"key" 1 "row-id" 1}
+               {"key" 2 "row-id" 2} {"key" 3 "row-id" 3}
+               {"key" 4 "row-id" 4} {"key" 5 "row-id" 5}
+               {"key" 6 "row-id" 6} {"key" 7 "row-id" 7}]}
+             {"leaf" true "entries"
+              [{"key" 8 "row-id" 8} {"key" 9 "row-id" 9}
+               {"key" 10 "row-id" 10} {"key" 11 "row-id" 11}
+               {"key" 12 "row-id" 12} {"key" 13 "row-id" 13}
+               {"key" 14 "row-id" 14} {"key" 15 "row-id" 15}]}
+             {"leaf" true "entries"
+              [{"key" 16 "row-id" 16} {"key" 17 "row-id" 17}
+               {"key" 18 "row-id" 18} {"key" 19 "row-id" 19}
+               {"key" 20 "row-id" 20} {"key" 21 "row-id" 21}
+               {"key" 22 "row-id" 22} {"key" 23 "row-id" 23}]}]}
+      above (engine-btree-range-entries tree ">" 20)
+      at-or-below (engine-btree-range-entries tree "<=" 3)
+      not-equal (engine-btree-range-entries tree "<>" 12)]
+  (if (and (= (count above) 3)
+           (= (count at-or-below) 4)
+           (= (count not-equal) 23)
+           (= (get (first above) "key") 21)
+           (= (get (last above) "key") 23))
+    (println "afj-db95 bounded B+Tree range PASS")
+    (throw "bounded B+Tree range traversal failed")))

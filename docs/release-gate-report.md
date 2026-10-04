@@ -1,8 +1,8 @@
 # AFJ-016 Release Gate Report
 
-- Generated: 2026-10-04T00:30:23Z
+- Generated: 2026-10-04T01:00:51Z
 - Repository: afj-db95
-- Automated cases: 53 PASS, 0 FAIL
+- Automated cases: 54 PASS, 0 FAIL
 - Release status: **BLOCKED**
 
 ## Automated evidence
@@ -18,6 +18,7 @@
 | TCP catalog pages | PASS |
 | TCP lazy catalog eviction | PASS |
 | persistent recursive B+Tree | PASS |
+| bounded B+Tree range | PASS |
 | compound unique index | PASS |
 | TCP concurrency | PASS |
 | TCP 5m performance envelope | PASS |

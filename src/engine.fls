@@ -172,6 +172,46 @@
     (get node "entries" [])
     (arr_flatten (map engine-btree-entries (get node "children" [])))))
 
+(defn engine-btree-node-last-key [node]
+  (if (get node "leaf")
+    (get (last (get node "entries" [])) "key")
+    (engine-btree-node-last-key (last (get node "children" [])))))
+
+(defn engine-btree-child-may-match? [child operator value]
+  (if (or (= operator "!=") (= operator "<>"))
+    true
+    (let [first-key (engine-btree-node-first-key child)
+          last-key (engine-btree-node-last-key child)]
+      (if (= operator ">")
+        (> last-key value)
+        (if (= operator ">=")
+          (>= last-key value)
+          (if (= operator "<")
+            (< first-key value)
+            (if (= operator "<=")
+              (<= first-key value)
+              true)))))))
+
+(defn engine-btree-range-entries [node operator value]
+  (if (get node "leaf")
+    (filter (fn [entry]
+              (if (= operator ">")
+                (> (get entry "key") value)
+                (if (= operator ">=")
+                  (>= (get entry "key") value)
+                  (if (= operator "<")
+                    (< (get entry "key") value)
+                    (if (= operator "<=")
+                      (<= (get entry "key") value)
+                      (not (= (get entry "key") value)))))))
+            (get node "entries" []))
+    (arr_flatten
+      (map (fn [child]
+             (if (engine-btree-child-may-match? child operator value)
+               (engine-btree-range-entries child operator value)
+               []))
+           (get node "children" [])))))
+
 (defn engine-build-btree [rows column row-id root]
   (if (>= row-id (count rows))
     root
@@ -292,7 +332,10 @@
                    (engine-match?
                      (assoc {} (get where "column") (get entry "key"))
                      where))
-                 (engine-btree-entries (get index "btree"))))
+                 (engine-btree-range-entries
+                   (get index "btree")
+                   (get where "operator")
+                   (get where "value"))))
     (if (= (count keys-to-scan) 0)
       []
       (let [key-token (first keys-to-scan)
