@@ -494,19 +494,15 @@
     `Release status: BLOCKED`가 정확하다. FreeLang native TLS/peer-address runtime
     patch는 별도 공식 Forgejo feature branch에 게시했고 해당 브랜치의 전체 fast
     suite 및 AFJ-DB loopback 상호운용 검증을 통과했다.
-  - 최신 실행 기록: 2026-10-04 21:07 UTC, `docs/release-gate-report.md`에서
-    `54 PASS, 0 FAIL, 2 BLOCKED`. Ubuntu 저장소의 MariaDB 10.11.14 client-core를
-    `/tmp`에만 내려받아 추출했고 시스템에는 설치하지 않았다. 표준 MariaDB CLI
-    wire unit 및 FreeLang 서버 loopback 검증이 PASS했다. 300초 TCP soak도 PASS했고,
-    동일 후보의 별도 계측 실행은 `writes=752`, `2.51/s`, p95 `4055ms`, max
-    `5225ms`였다. 현재 BLOCKED는 FreeLang 정적 검사기의 literal-symbol 매개변수
-    arity 오탐 2건이다. 독립 Node wire client와 표준 MariaDB client 양쪽에서
-    handshake/query/prepared/auth 검증을 했다. clean checkout에서 표준 CLI를
-    포함한 quick gate도 `53 PASS, 0 FAIL, 3 BLOCKED`로 재현했다(5분 soak 제외).
-    clean-checkout 재현성과 MariaDB CLI 상호운용성은 확인됐고, 남은 정적
-    BLOCKED는 literal-symbol 매개변수에 대한 FreeLang checker arity 오탐이다.
-    릴리스의 설계 차단 항목은 DDL/schema MVCC
-    세분화, composite-key type-order/collation 및 MariaDB TLS/auth-plugin 범위다.
+  - 최신 실행 기록: 2026-10-04 21:30 UTC, FreeLang runtime checker fix
+    `c783288e`를 적용한 전체 loopback gate에서 `56 PASS, 0 FAIL, 0 BLOCKED`.
+    정적 검사 두 대상도 PASS했고, TCP/TLS, MariaDB 표준 CLI·독립 wire client,
+    인증/prepared, 복구 및 300초 성능 soak가 모두 통과했다. MariaDB CLI는
+    `/tmp`에만 추출했고 시스템 패키지 설치는 하지 않았다. 이전 보고의 두
+    checker BLOCKED는 literal-symbol 매개변수를 0개로 세던 FreeLang 정적 검사기
+    오탐이었다. runtime 수정은 FreeLang 공식 Forgejo feature branch에 푸시했다.
+    전체 자동 회귀가 통과해도 제품 릴리스는 BLOCKED: DDL/schema MVCC 세분화,
+    composite-key type-order/collation 및 MariaDB TLS/auth-plugin 확장이 미완료다.
 
 ### P3 — 문서와 릴리스 추적
 

@@ -54,8 +54,8 @@ run_blocked_case() {
   results+="$label | BLOCKED | $reason |"
 }
 
-run_blocked_case "static check: tcp-server" "runtime checker reports false zero-arity for literal-symbol parameters; execution tests cover loading"
-run_blocked_case "static check: afj-db95" "runtime checker reports false zero-arity for literal-symbol parameters; execution tests cover loading"
+run_case "static check: tcp-server" node "$bootstrap" check "$repo_root/src/tcp-server.fls"
+run_case "static check: afj-db95" node "$bootstrap" check "$repo_root/src/afj-db95.fls"
 run_case "raw binary boundary" node "$bootstrap" run "$repo_root/tests/binary-raw.fls"
 run_case "MariaDB packet codec" node "$bootstrap" run "$repo_root/tests/mariadb-wire-codec.fls"
 run_case "page/WAL smoke" env AFJ_DB_PAGE_CACHE_PAGES=2 node "$bootstrap" run "$repo_root/src/afj-db95.fls"

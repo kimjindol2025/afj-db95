@@ -1,16 +1,16 @@
 # AFJ-016 Release Gate Report
 
-- Generated: 2026-10-04T21:07:14Z
+- Generated: 2026-10-04T21:30:06Z
 - Repository: afj-db95
-- Automated cases: 54 PASS, 0 FAIL, 2 BLOCKED
+- Automated cases: 56 PASS, 0 FAIL, 0 BLOCKED
 - Release status: **BLOCKED**
 
 ## Automated evidence
 
 | Case | Status | Evidence / reason |
 |---|---|---|
-| static check: tcp-server | BLOCKED | runtime checker reports false zero-arity for literal-symbol parameters; execution tests cover loading |
-| static check: afj-db95 | BLOCKED | runtime checker reports false zero-arity for literal-symbol parameters; execution tests cover loading |
+| static check: tcp-server | PASS | FreeLang runtime c783288e |
+| static check: afj-db95 | PASS | FreeLang runtime c783288e |
 | raw binary boundary | PASS | |
 | MariaDB packet codec | PASS | |
 | page/WAL smoke | PASS | |
@@ -76,8 +76,8 @@ remain release blockers until separately implemented and verified:
   collation compatibility.
 - MariaDB TLS and authentication-plugin variants beyond mysql_native_password;
   the standard MariaDB CLI checks are BLOCKED when the CLI is unavailable.
-- The bounded 5-minute performance envelope. If explicitly skipped for a quick
-  preflight, it is recorded as BLOCKED, not PASS.
+- The 5-minute performance envelope passed in this run. If explicitly skipped
+  for a quick preflight, it is recorded as BLOCKED, not PASS.
 
 The report must remain **BLOCKED** until each item has implementation evidence and a
 corresponding reproducible test. A nonzero automated failure also keeps the gate
