@@ -1,8 +1,8 @@
 # AFJ-016 Release Gate Report
 
-- Generated: 2026-10-03T23:47:14Z
+- Generated: 2026-10-03T23:59:58Z
 - Repository: afj-db95
-- Automated cases: 51 PASS, 0 FAIL
+- Automated cases: 52 PASS, 0 FAIL
 - Release status: **BLOCKED**
 
 ## Automated evidence
@@ -31,6 +31,7 @@
 | range predicate conflict | PASS |
 | row-version MVCC core | PASS |
 | row-version WAL recovery | PASS |
+| row-version catalog checkpoint | PASS |
 | savepoint | PASS |
 | deadlock | PASS |
 | lock timeout | PASS |
@@ -70,9 +71,9 @@ do not waive an incomplete architectural condition:
 - MariaDB wire-level support includes a native FreeLang Script listener for handshake, COM_QUERY and COM_STMT_PREPARE/EXECUTE/CLOSE; 32-bit capability intersection, max-packet-size/charset parsing, mysql_native_password SHA-1 challenge verification, standard-client and native prepared INT, NULL, string, and multi-parameter smoke pass. TLS/auth-plugin variants beyond mysql_native_password remain incomplete.
 - Complete row-version MVCC and index-range granular validation are not complete; row-version WAL replay, range predicate conflict, and TCP transaction process-kill recovery cases are covered above.
   - TCP table-page manifest, page-backed B+Tree leaf-index persistence/reopen,
-    bounded pin/flush pool, lazy table eviction and lazy transaction snapshot pass;
-    page-level row execution, multi-index/compound range validation and durable
-    row-version history remain incomplete.
+    bounded pin/flush pool, lazy table eviction, lazy transaction snapshot and
+    durable row-version checkpoint recovery pass; page-level row execution and
+    multi-index/compound range validation remain incomplete.
 - Large-corpus, high-concurrency, and the reproducible 5-minute performance envelope pass with p95/max latency thresholds; unrestricted duration beyond the bounded envelope is not claimed as a guarantee.
 
 The report must remain **BLOCKED** until each item has implementation evidence and a

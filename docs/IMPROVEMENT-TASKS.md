@@ -381,8 +381,9 @@
     `>`, `>=`, `<`, `<=`, `!=`, `<>` 후보를 먼저 좁히고 row-level predicate로
     확정하며 `index-range-scan` 계획을 반환한다. 이는 범위 conflict와 후보
     검증의 통합 증거지만, 페이지 기반 B+Tree range scan 완료를 의미하지
-    않는다. WAL에 row-version history를 별도 압축
-    포맷으로 저장하는 최적화는 남아 있다.
+    않는다. checkpoint table page에 row-version history를 저장·복원하는
+    durable 경로는 별도 회귀로 검증했으며, WAL history 압축은 운영 최적화
+    범위로 남아 있다.
   - 추가 granular 증거: `afj-tcp-row-version-predicate-conflict?`가 snapshot
     이후 생성·tombstone된 row version 중 실제 predicate를 만족하는 변경만
     충돌로 판정한다. `tests/tcp-range-predicate.fls`는 범위 안 삽입의
@@ -393,7 +394,12 @@
     update/delete PASS`로 확인한다. global revision 보수 충돌만 쓰던 경로에서
     row-version 기반 후보 검증으로 확장했지만, 다중 인덱스·복합 predicate와
     page-level B+Tree range scan은 table page recovery 경로에 연결했지만,
-    다중 인덱스·복합 predicate와 durable row-version history 최적화는 남아 있다.
+    다중 인덱스·복합 predicate는 남아 있다.
+  - 추가 durable 증거: catalog page checkpoint의 table page에 immutable
+    `row-version-history`와 manifest의 `commit-revision`·`table-revisions`를
+    함께 저장하고, recovery가 WAL tail 없이도 이전 snapshot과 최신 snapshot을
+    재구성한다. `tests/tcp-row-version-checkpoint.fls`가 checkpoint write/recovery와
+    동일 row의 구버전·신버전 조회를 각각 `PASS`로 검증했다.
 
 - [ ] `AFJ-015` deadlock·복구 정책
   - lock wait timeout, deadlock detection, victim rollback을 추가한다.
@@ -425,8 +431,8 @@
     그러나 MariaDB production hardening, 완전한 row-version MVCC,
     index-range granular validation, executor lazy catalog eviction을
     명시적으로 감지해 release status를 `BLOCKED`로 유지한다.
-  - 최신 실행 기록: `2026-10-03T23:47:14Z`, 자동 케이스 `51 PASS, 0 FAIL`.
-    범위 predicate conflict 회귀도 통과했지만, 위 구조적 차단 항목 때문에
+  - 최신 실행 기록: `2026-10-03T23:59:58Z`, 자동 케이스 `52 PASS, 0 FAIL`.
+    범위 predicate conflict와 durable row-version checkpoint 회귀도 통과했지만, 위 구조적 차단 항목 때문에
     exit status 2와 `Release status: BLOCKED`를 유지했다.
 
 ### P3 — 문서와 릴리스 추적

@@ -281,6 +281,11 @@
           (throw "CATALOG_PAGE_MISSING")
           (do
             (swap! engine-catalog assoc table loaded)
+            (let [history (get loaded "row-version-history")]
+              (if (nil? history)
+                (afj-tcp-record-table-row-versions
+                  table (get loaded "rows" []) (deref afj-tcp-commit-revision))
+                (swap! afj-tcp-row-versions assoc table history)))
             (engine-rebuild-table-indexes table loaded)
             (afj-tcp-lazy-touch table path)
             true))))))
@@ -515,8 +520,11 @@
               nil
               (afj-tcp-write-page-set
                 path
-                (assoc definition "page-indexes"
-                       (afj-tcp-page-indexes-for-table definition))))
+                (assoc
+                  (assoc definition "page-indexes"
+                         (afj-tcp-page-indexes-for-table definition))
+                  "row-version-history"
+                  (get (deref afj-tcp-row-versions) table {}))))
             (reset! tables
                     (assoc (deref tables) table
                            {"name" table "path" path}))))
@@ -526,6 +534,8 @@
             {"version" 2
              "wal-size" (count raw)
              "wal-prefix" (sha256 raw)
+             "commit-revision" (deref afj-tcp-commit-revision)
+             "table-revisions" (deref afj-tcp-table-revisions)
              "tables" (vals (deref tables))
              "table-index" table-index
              "databases" (deref engine-databases)}))))))
@@ -609,6 +619,16 @@
         nil)))
   true)
 
+(defn afj-tcp-restore-row-version-history [catalog]
+  (reset! afj-tcp-row-versions {})
+  (doseq [table (keys catalog)]
+    (let [definition (get catalog table)
+          history (get definition "row-version-history")]
+      (if (nil? history)
+        nil
+        (swap! afj-tcp-row-versions assoc table history))))
+  true)
+
 (defn afj-tcp-recover []
   (do
     (reset! engine-catalog {})
@@ -635,6 +655,11 @@
         (do
           (reset! engine-catalog (get checkpoint "catalog"))
           (reset! engine-databases (get checkpoint "databases"))
+          (reset! afj-tcp-commit-revision
+                  (get checkpoint "commit-revision" 0))
+          (reset! afj-tcp-table-revisions
+                  (get checkpoint "table-revisions" {}))
+          (afj-tcp-restore-row-version-history (deref engine-catalog))
           (afj-tcp-rebuild-all-indexes)
           (afj-tcp-record-row-versions (deref engine-catalog) 0))
         nil)
@@ -784,7 +809,12 @@
       (if (or (nil? table) (nil? definition))
         nil
         (if (= (get ast "type") "insert")
-          (afj-tcp-append-insert-row-versions table (get ast "rows" []) revision)
+          (afj-tcp-append-insert-row-versions
+            table
+            (if (has-key? ast "rows")
+              (get ast "rows")
+              [(get ast "row")])
+            revision)
           (afj-tcp-record-table-row-versions
             table (get definition "rows" []) revision)))))
   true)

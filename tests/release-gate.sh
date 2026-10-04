@@ -50,6 +50,7 @@ run_case "MVCC conflicts" node "$bootstrap" run "$repo_root/tests/tcp-mvcc-confl
 run_case "range predicate conflict" node "$bootstrap" run "$repo_root/tests/tcp-range-predicate.fls"
 run_case "row-version MVCC core" node "$bootstrap" run "$repo_root/tests/mvcc-row-version.fls"
 run_case "row-version WAL recovery" env AFJ_DB_WAL=/tmp/afj-db95-row-version-recovery.wal node "$bootstrap" run "$repo_root/tests/tcp-row-version-recovery.fls"
+run_case "row-version catalog checkpoint" env AFJ_DB_WAL=/tmp/afj-db95-row-version-checkpoint.wal AFJ_DB_CATALOG_PAGES=/tmp/afj-db95-row-version-checkpoint.pages node "$bootstrap" run "$repo_root/tests/tcp-row-version-checkpoint.fls"
 run_case "savepoint" node "$bootstrap" run "$repo_root/tests/tcp-savepoint.fls"
 run_case "deadlock" node "$bootstrap" run "$repo_root/tests/tcp-deadlock.fls"
 run_case "lock timeout" env AFJ_DB_LOCK_WAIT_TIMEOUT_MS=1000 node "$bootstrap" run "$repo_root/tests/tcp-lock-timeout.fls"
@@ -102,9 +103,9 @@ do not waive an incomplete architectural condition:
 - MariaDB wire-level support includes a native FreeLang Script listener for handshake, COM_QUERY and COM_STMT_PREPARE/EXECUTE/CLOSE; 32-bit capability intersection, max-packet-size/charset parsing, mysql_native_password SHA-1 challenge verification, standard-client and native prepared INT, NULL, string, and multi-parameter smoke pass. TLS/auth-plugin variants beyond mysql_native_password remain incomplete.
 - Complete row-version MVCC and index-range granular validation are not complete; row-version WAL replay, range predicate conflict, and TCP transaction process-kill recovery cases are covered above.
   - TCP table-page manifest, page-backed B+Tree leaf-index persistence/reopen,
-    bounded pin/flush pool, lazy table eviction and lazy transaction snapshot pass;
-    page-level row execution, multi-index/compound range validation and durable
-    row-version history remain incomplete.
+    bounded pin/flush pool, lazy table eviction, lazy transaction snapshot and
+    durable row-version checkpoint recovery pass; page-level row execution and
+    multi-index/compound range validation remain incomplete.
 - Large-corpus, high-concurrency, and the reproducible 5-minute performance envelope pass with p95/max latency thresholds; unrestricted duration beyond the bounded envelope is not claimed as a guarantee.
 
 The report must remain **BLOCKED** until each item has implementation evidence and a
