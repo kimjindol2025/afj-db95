@@ -86,7 +86,7 @@ do not waive an incomplete architectural condition:
     durable row-version checkpoint recovery pass; page-level row execution and
     multi-index/compound range validation pass; DDL/schema MVCC granularity
     remains incomplete.
-- Large-corpus and concurrency regressions pass. The five-minute performance envelope was independently run at the default duration; this report's matrix soak duration is listed above and may be shortened only for the rest of the matrix.
+- Large-corpus and concurrency regressions pass. After the matrix run, a standalone 300-second TCP soak passed with `writes=1408`, `throughput=4.69/s`, `p95=1962ms`, and `max=2415ms` (limits: p95 15000ms, max 20000ms). This report's matrix soak duration is listed above and may be shortened only for the rest of the matrix.
 
 The report must remain **BLOCKED** until each item has implementation evidence and a
 corresponding reproducible test. A nonzero automated failure or any BLOCKED case

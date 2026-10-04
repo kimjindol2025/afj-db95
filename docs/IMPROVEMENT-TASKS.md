@@ -297,6 +297,10 @@
     단일 fsync 경로를 적용한 동일 harness가 300초 동안 `writes=464`,
     `throughput=1.55/s`, `p95=5909ms`, `max=7266ms`를 기록했다. 동일한
     p95/max envelope를 통과했으며, 이전 측정 대비 누적 지연이 줄었다.
+  - 후속 300초 검증: 현재 runtime candidate와 전체 DB 변경 상태에서 같은
+    `tests/tcp-long-soak.js`를 다시 실행해 `writes=1408`, `throughput=4.69/s`,
+    `p95=1962ms`, `max=2415ms`를 기록했다. p95 15000ms/max 20000ms 경계를 통과했고,
+    종료 후 테스트 daemon 프로세스와 포트가 남지 않은 것을 확인했다.
   - 추가 증거: TCP catalog page 경로에 bounded page pool을 연결했다.
     `AFJ_DB_PAGE_POOL_PAGES` 상한, pin된 page 보호, dirty→flushed 전환과
     unpinned LRU eviction을 `tests/tcp-catalog-pages.fls`에서 검증했고,
