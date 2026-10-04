@@ -1,8 +1,8 @@
 # AFJ-016 Release Gate Report
 
-- Generated: 2026-10-04T01:35:57Z
+- Generated: 2026-10-04T02:19:21Z
 - Repository: afj-db95
-- Automated cases: 54 PASS, 0 FAIL
+- Automated cases: 55 PASS, 0 FAIL
 - Release status: **BLOCKED**
 
 ## Automated evidence
@@ -23,6 +23,7 @@
 | TCP concurrency | PASS |
 | TCP 5m performance envelope | PASS |
 | backup smoke | PASS |
+| backup restore soak | PASS |
 | compatibility scorecard | PASS |
 | WAL format | PASS |
 | forced-kill WAL recovery | PASS |

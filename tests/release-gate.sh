@@ -42,6 +42,7 @@ run_case "compound unique index" node "$bootstrap" run "$repo_root/tests/compoun
 run_case "TCP concurrency" node "$repo_root/tests/tcp-concurrency-smoke.js"
 run_case "TCP 5m performance envelope" env AFJ_SOAK_MS=300000 AFJ_SOAK_P95_LATENCY_MS=15000 AFJ_SOAK_MAX_LATENCY_MS=20000 node "$repo_root/tests/tcp-long-soak.js"
 run_case "backup smoke" node "$bootstrap" run "$repo_root/src/backup.fls"
+run_case "backup restore soak" node "$bootstrap" run "$repo_root/tests/backup-soak.fls"
 run_case "compatibility scorecard" node "$bootstrap" run "$repo_root/src/compatibility.fls"
 run_case "WAL format" node "$bootstrap" run "$repo_root/tests/wal-format.fls"
 run_case "forced-kill WAL recovery" bash "$repo_root/tests/fault-injection-restart.sh"

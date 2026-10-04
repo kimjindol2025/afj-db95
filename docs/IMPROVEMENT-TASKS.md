@@ -86,9 +86,11 @@
     일치를 `backup-validate-state-consistency`로 검사한다. 복구 index를 존재하지
     않는 row-id로 변조한 회귀가 `BACKUP_STATE_INCONSISTENT`로 거부되고
     `afj-db95 live backup consistency PASS`가 출력됐다.
-  - 남은 게이트: 복구 후 catalog/WAL/index cross-consistency를 별도 장애
-    주입으로 검증하는 기본 경로는 통과했으며, 장시간 backup/restore soak는
-    아직 남았다.
+  - 추가 soak 증거: `tests/backup-soak.fls`가 동일 checksum manifest로
+    12회 연속 source→backup→restore를 수행하고 매 회 payload 일치를
+    검증하는 `afj-db95 backup restore soak PASS rounds=12`를 기록했다.
+    무제한 장시간 soak와 live source mutation 중 snapshot 일관성은 여전히
+    운영 환경 범위로 남긴다.
 
 ### P1 — 단일 호스트 운영 서비스
 

@@ -1,0 +1,26 @@
+;; AFJ-003 bounded backup/restore repetition contract.
+(load "/root/kilo-freelang/projects/afj-db95/src/backup.fls")
+
+(defn backup-soak-rounds [index total source backup restored manifest]
+  (if (>= index total)
+    true
+    (do
+      (file_write source (str "afj-db95-backup-round-" index))
+      (backup-set
+        [{"source" source "backup" backup "destination" restored}]
+        manifest)
+      (if (and (= (restore-set-verified manifest) 1)
+               (= (file_read source) (file_read restored)))
+        (backup-soak-rounds (+ index 1) total source backup restored manifest)
+        (throw "backup soak restore mismatch")))))
+
+(let [source "/tmp/afj-db95-backup-soak.source"
+      backup "/tmp/afj-db95-backup-soak.backup"
+      restored "/tmp/afj-db95-backup-soak.restored"
+      manifest "/tmp/afj-db95-backup-soak.manifest"]
+  (backup-soak-rounds 0 12 source backup restored manifest)
+  (println "afj-db95 backup restore soak PASS rounds=12")
+  (file_delete source)
+  (file_delete backup)
+  (file_delete restored)
+  (file_delete manifest))
