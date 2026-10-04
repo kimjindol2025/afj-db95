@@ -324,8 +324,12 @@
               (throw "unsupported CHECK expression"))))
         (if (regex_match_i (get tokens 0) "^UNIQUE")
           (let [inside (get (regex_split clean "\\(") 1)]
-            {"kind" "unique" "column"
-             (sql-clean-token (get (regex_split inside "\\)") 0))})
+            (let [columns (map sql-clean-token
+                               (sql-split-delimited
+                                 (get (regex_split inside "\\)") 0) ","))]
+              (if (= (count columns) 1)
+                {"kind" "unique" "column" (first columns)}
+                {"kind" "unique" "columns" columns})))
           (assoc (sql-schema-column group) "kind" "column"))))))
 
 (defn parse-create-sql [sql tokens]
@@ -343,7 +347,14 @@
           uniques (map (fn [column] (get column "name"))
                        (filter (fn [column] (get column "unique")) columns))
           table-uniques (map (fn [definition] (get definition "column"))
-                             (filter (fn [definition] (= (get definition "kind") "unique"))
+                             (filter (fn [definition]
+                                       (and (= (get definition "kind") "unique")
+                                            (has-key? definition "column")))
+                                     definitions))
+          unique-groups (map (fn [definition] (get definition "columns"))
+                             (filter (fn [definition]
+                                       (and (= (get definition "kind") "unique")
+                                            (has-key? definition "columns")))
                                      definitions))
           foreign-keys (filter (fn [definition] (= (get definition "kind") "foreign-key"))
                                definitions)
@@ -357,6 +368,7 @@
                                   columns)
                  "primary-key" primary-key
                  "unique-columns" unique-columns
+                 "unique-groups" unique-groups
                  "foreign-keys" foreign-keys
                  "checks" checks}})))
 

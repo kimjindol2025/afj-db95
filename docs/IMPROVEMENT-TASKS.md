@@ -395,6 +395,10 @@
     row-version 기반 후보 검증으로 확장했지만, 다중 인덱스·복합 predicate와
     page-level B+Tree range scan은 table page recovery 경로에 연결했지만,
     다중 인덱스·복합 predicate는 남아 있다.
+  - 추가 AFJ-013 증거: SQL DDL의 `UNIQUE (tenant,email)`을 구조화된
+    `unique-groups`로 보존하고, 엔진이 pair 전체를 기준으로 중복을 거부하며
+    composite bucket과 page-index leaf를 재구성한다. `tests/compound-index.fls`가
+    동일 pair 거부와 서로 다른 tenant의 동일 email 허용을 `PASS`로 검증했다.
   - 추가 durable 증거: catalog page checkpoint의 table page에 immutable
     `row-version-history`와 manifest의 `commit-revision`·`table-revisions`를
     함께 저장하고, recovery가 WAL tail 없이도 이전 snapshot과 최신 snapshot을
@@ -431,7 +435,7 @@
     그러나 MariaDB production hardening, 완전한 row-version MVCC,
     index-range granular validation, executor lazy catalog eviction을
     명시적으로 감지해 release status를 `BLOCKED`로 유지한다.
-  - 최신 실행 기록: `2026-10-03T23:59:58Z`, 자동 케이스 `52 PASS, 0 FAIL`.
+  - 최신 실행 기록: `2026-10-04T00:30:23Z`, 자동 케이스 `53 PASS, 0 FAIL`.
     범위 predicate conflict와 durable row-version checkpoint 회귀도 통과했지만, 위 구조적 차단 항목 때문에
     exit status 2와 `Release status: BLOCKED`를 유지했다.
 

@@ -37,6 +37,7 @@ run_case "large corpus" node "$bootstrap" run "$repo_root/tests/large-corpus-soa
 run_case "TCP catalog pages" env AFJ_DB_WAL=/tmp/afj-db95-catalog-page-gate.wal AFJ_DB_CATALOG_PAGES=/tmp/afj-db95-catalog-page-gate.pages AFJ_DB_PAGE_POOL_PAGES=2 node "$bootstrap" run "$repo_root/tests/tcp-catalog-pages.fls"
 run_case "TCP lazy catalog eviction" env AFJ_DB_WAL=/tmp/afj-db95-lazy-catalog-gate.wal AFJ_DB_CATALOG_PAGES=/tmp/afj-db95-lazy-catalog-gate.pages AFJ_DB_LAZY_TABLES=true AFJ_DB_LAZY_TABLE_CACHE=1 node "$bootstrap" run "$repo_root/tests/tcp-lazy-catalog.fls"
 run_case "persistent recursive B+Tree" node "$bootstrap" run "$repo_root/tests/persistent-btree.fls"
+run_case "compound unique index" node "$bootstrap" run "$repo_root/tests/compound-index.fls"
 run_case "TCP concurrency" node "$repo_root/tests/tcp-concurrency-smoke.js"
 run_case "TCP 5m performance envelope" env AFJ_SOAK_MS=300000 AFJ_SOAK_P95_LATENCY_MS=15000 AFJ_SOAK_MAX_LATENCY_MS=20000 node "$repo_root/tests/tcp-long-soak.js"
 run_case "backup smoke" node "$bootstrap" run "$repo_root/src/backup.fls"

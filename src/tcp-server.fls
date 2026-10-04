@@ -499,6 +499,18 @@
                        (get index "btree"))]
             (reset! indexes
                     (assoc (deref indexes) column tree))))))
+    (doseq [columns (engine-index-groups table)]
+      (let [index-name (engine-index-group-name columns)
+            index (get (deref engine-indexes)
+                       (str (get table "name") "." index-name))]
+        (if (nil? index)
+          nil
+          (let [tree (if (nil? (get index "btree"))
+                       (engine-build-btree-leaf-columns
+                         (get table "rows") columns 0 [])
+                       (get index "btree"))]
+            (reset! indexes
+                    (assoc (deref indexes) index-name tree))))))
     (deref indexes)))
 
 (defn afj-tcp-write-catalog-pages []

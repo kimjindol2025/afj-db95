@@ -1,0 +1,27 @@
+;; AFJ-013 compound UNIQUE key and index maintenance contract.
+(load "/root/kilo-freelang/projects/afj-db95/src/engine.fls")
+(load "/root/kilo-freelang/projects/afj-db95/src/sql-core.fls")
+
+(reset! engine-catalog {})
+(reset! engine-indexes {})
+(let [create (parse-sql
+               "CREATE TABLE compound_users (tenant TEXT, email TEXT, UNIQUE (tenant,email))")]
+  (execute-ast create))
+(execute-ast {"type" "insert" "table" "compound_users"
+             "row" {"tenant" "a" "email" "same@example.test"}})
+(execute-ast {"type" "insert" "table" "compound_users"
+             "row" {"tenant" "b" "email" "same@example.test"}})
+(let [duplicate (try
+                  (do
+                    (execute-ast {"type" "insert" "table" "compound_users"
+                                  "row" {"tenant" "a" "email" "same@example.test"}})
+                    nil)
+                  (catch [error] error))
+      index (get (deref engine-indexes) "compound_users.tenant|email")
+      bucket (get (get index "buckets") "a|same@example.test")]
+  (if (and (regex_match_i (error_message duplicate) ".*UNIQUE_VIOLATION.*")
+           (= (count bucket) 1)
+           (= (count (get (get (get (deref engine-catalog) "compound_users")
+                                 "schema") "unique-groups")) 1))
+    (println "afj-db95 compound unique index PASS")
+    (throw "compound unique index failure")))

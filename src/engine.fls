@@ -13,6 +13,20 @@
       unique-columns
       (conj unique-columns primary))))
 
+(defn engine-composite-key-token [row columns]
+  (if (= (count columns) 0)
+    ""
+    (if (= (count columns) 1)
+      (str (get row (first columns)))
+      (str (get row (first columns)) "|"
+           (engine-composite-key-token row (rest columns))))))
+
+(defn engine-index-group-name [columns]
+  (str_join columns "|"))
+
+(defn engine-index-groups [table]
+  (get (get table "schema" {}) "unique-groups" []))
+
 (defn engine-build-index [rows column row-id index]
   (if (>= row-id (count rows))
     index
@@ -23,6 +37,16 @@
           bucket (if (nil? existing-bucket) [] existing-bucket)]
       (engine-build-index rows column (+ row-id 1)
                           (assoc index key-token (conj bucket row-id))))))
+
+(defn engine-build-composite-index [rows columns row-id index]
+  (if (>= row-id (count rows))
+    index
+    (let [key-token (engine-composite-key-token (get rows row-id) columns)
+          existing-bucket (get index key-token)
+          bucket (if (nil? existing-bucket) [] existing-bucket)]
+      (engine-build-composite-index
+        rows columns (+ row-id 1)
+        (assoc index key-token (conj bucket row-id))))))
 
 (defn engine-btree-node-first-key [node]
   (if (get node "leaf")
@@ -164,6 +188,15 @@
       (conj entries
             {"key" (get (get rows row-id) column) "row-id" row-id}))))
 
+(defn engine-build-btree-leaf-columns [rows columns row-id entries]
+  (if (>= row-id (count rows))
+    {"leaf" true "entries" entries}
+    (engine-build-btree-leaf-columns
+      rows columns (+ row-id 1)
+      (conj entries
+            {"key" (engine-composite-key-token (get rows row-id) columns)
+             "row-id" row-id}))))
+
 (defn engine-drop-table-indexes [name]
   (doseq [index-key (keys (deref engine-indexes))]
     (if (str_starts_with index-key (str name "."))
@@ -184,6 +217,18 @@
                         "buckets" (engine-build-index (get table "rows")
                                                        column 0 {})
                         "btree" tree}))))
+    (doseq [columns (engine-index-groups table)]
+      (let [index-name (engine-index-group-name columns)
+            persisted (get (get table "page-indexes" {}) index-name)
+            tree persisted]
+        (reset! engine-indexes
+                (assoc (deref engine-indexes) (str name "." index-name)
+                       {"table" name
+                        "column" index-name
+                        "columns" columns
+                        "buckets" (engine-build-composite-index
+                                     (get table "rows") columns 0 {})
+                        "btree" tree}))))
     true))
 
 (defn engine-index-add-row [name table row row-id]
@@ -197,9 +242,22 @@
               existing (get buckets key-token)
               bucket (if (nil? existing) [] existing)]
           (reset! engine-indexes
-                  (assoc (deref engine-indexes) index-key
+              (assoc (deref engine-indexes) index-key
                          (assoc index "buckets"
                                 (assoc buckets key-token (conj bucket row-id))))))))
+  (doseq [columns (engine-index-groups table)]
+    (let [index-key (str name "." (engine-index-group-name columns))
+          index (get (deref engine-indexes) index-key)]
+      (if (nil? index)
+        nil
+        (let [buckets (get index "buckets")
+              key-token (engine-composite-key-token row columns)
+              existing (get buckets key-token)
+              bucket (if (nil? existing) [] existing)]
+          (reset! engine-indexes
+                  (assoc (deref engine-indexes) index-key
+                         (assoc index "buckets"
+                                (assoc buckets key-token (conj bucket row-id)))))))))
   ))
 
 (defn engine-index-add-rows [name table rows row-id]
@@ -475,6 +533,16 @@
       (if (and (not (nil? value))
                (any? (fn [old] (= (get old column) value)) existing))
         (throw (str "UNIQUE_VIOLATION: " column))
+        nil)))
+  (doseq [columns (get schema "unique-groups" [])]
+    (let [duplicate (any? (fn [old]
+                            (every? (fn [column]
+                                      (= (get old column) (get row column)))
+                                    columns))
+                          existing)]
+      (if duplicate
+        (throw (str "UNIQUE_VIOLATION: "
+                    (engine-index-group-name columns)))
         nil)))
   (doseq [constraint (get schema "foreign-keys" [])]
     (engine-validate-foreign-key row constraint))
