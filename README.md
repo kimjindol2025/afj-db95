@@ -17,6 +17,8 @@ MariaDB wire listener는 `AFJ_DB_MARIADB_PORT`를 명시했을 때만 메인
 일반 쿼리 smoke와 prepared statement, 독립 wire client, 인증 거부 및 WAL 재시작을
 실제 서비스 진입점에서 검증합니다. 현재 `mysql_native_password`만 지원하고
 MariaDB TLS negotiation은 없으므로 이 포트를 원격에 노출하면 안 됩니다.
+SQL `CREATE`의 `COLLATE` 절은 아직 지원하지 않으며 조용히 무시하지 않고
+`UNSUPPORTED_COLLATION`으로 거부합니다.
 
 - 테이블 생성
 - 행 삽입

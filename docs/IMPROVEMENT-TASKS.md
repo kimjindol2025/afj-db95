@@ -391,6 +391,11 @@
     100행 numeric 범위의 98개 결과, 구분자 포함 TEXT, 다중 페이지 결과를 검증한다.
     이는 정확성을 보장하는 보수 경로이며 복합 범위 최적화 완료를 뜻하지 않는다.
     타입 태깅·이스케이프·collation 및 composite-key 순서 계약은 후속 차단 항목이다.
+  - collation fail-closed: parser/engine은 collation을 구현하지 않으므로
+    `CREATE TABLE` 열 수준 `COLLATE`와 테이블 기본 `COLLATE=` 절을
+    `UNSUPPORTED_COLLATION`으로 거부한다. `tests/sql-collation-boundary.fls`가
+    지원하지 않는 절을 조용히 무시하지 않는지 확인한다. 이는 collation 호환성
+    완료가 아니다.
   - 추가 증거: `src/mvcc.fls`에 commit revision과 transaction snapshot을
     연결한 immutable row version, update 시 구버전 tombstone·신버전 생성,
     rollback 시 미커밋 version 제거를 구현했다. `tests/mvcc-row-version.fls`에서
@@ -518,8 +523,9 @@
     경로를 검증했다. 첫 통합 gate 2026-10-04 22:21 UTC는 `54 PASS, 0 FAIL,
     2 BLOCKED`였다. `/tmp`에만 있던 MariaDB 10.11.14 CLI 실행 파일을 찾아
     `MARIADB_CLI` 경로 지원을 추가했고, 메인 서비스에서 표준 CLI smoke와 prepared
-    테스트를 통과시켰다. 최신 전체 gate 2026-10-04 22:49 UTC는 `60 PASS, 0 FAIL,
-    0 BLOCKED`; fail-closed 포트/bind 검사와 5분 soak도 PASS다. MariaDB CLI는 기존
+    테스트를 통과시켰다. 최신 전체 gate 2026-10-04 23:07 UTC는 runtime
+    `c783288e` 및 MariaDB CLI `10.11.14`에서 `61 PASS, 0 FAIL, 0 BLOCKED`;
+    fail-closed 포트/bind/collation 검사와 5분 soak도 PASS다. MariaDB CLI는 기존
     `/tmp` 추출본을 사용했고 시스템 패키지는 설치하지 않았다. gate 종료 코드 2는
     의도된 릴리스 차단 상태다.
     AFJ-016은 계속 BLOCKED:

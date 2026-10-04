@@ -545,7 +545,12 @@
     (if (keyword? first-token "SELECT")
       (parse-select tokens)
       (if (keyword? first-token "CREATE")
-        (parse-create-sql normalized tokens)
+        (if (any? (fn [token]
+                    (or (keyword? token "COLLATE")
+                        (regex_match_i token "^COLLATE=.*$")))
+                  tokens)
+          (throw "UNSUPPORTED_COLLATION")
+          (parse-create-sql normalized tokens))
         (if (keyword? first-token "INSERT")
           (parse-insert tokens)
           (if (keyword? first-token "UPDATE")

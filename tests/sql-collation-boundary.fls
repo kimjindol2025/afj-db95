@@ -1,0 +1,19 @@
+;; Collations are not implemented; CREATE must not silently accept and ignore one.
+(load "../src/sql-core.fls")
+
+(defn rejects-unsupported-collation? [sql]
+  (try
+    (do (parse-sql sql) false)
+    (catch [error] (= (error_message error) "UNSUPPORTED_COLLATION"))))
+
+(let [column-collation
+      (rejects-unsupported-collation?
+        "CREATE TABLE collated_column (name TEXT COLLATE utf8mb4_bin)")
+      table-collation
+      (rejects-unsupported-collation?
+        "CREATE TABLE collated_table (name TEXT) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin")
+      ordinary (parse-sql "CREATE TABLE binary_default (name TEXT)")]
+  (if (and column-collation table-collation
+           (= (get ordinary "table") "binary_default"))
+    (println "afj-db95 unsupported collation fail-closed PASS")
+    (throw "CREATE silently accepted an unsupported collation")))

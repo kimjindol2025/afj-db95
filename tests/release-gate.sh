@@ -58,6 +58,7 @@ run_case "static check: tcp-server" node "$bootstrap" check "$repo_root/src/tcp-
 run_case "static check: afj-db95" node "$bootstrap" check "$repo_root/src/afj-db95.fls"
 run_case "static check: server entrypoint" node "$bootstrap" check "$repo_root/src/server.fls"
 run_case "MariaDB listener configuration fails closed" node "$repo_root/tests/mariadb-server-config.js"
+run_case "unsupported SQL collation rejected" node "$bootstrap" run "$repo_root/tests/sql-collation-boundary.fls"
 run_case "raw binary boundary" node "$bootstrap" run "$repo_root/tests/binary-raw.fls"
 run_case "MariaDB packet codec" node "$bootstrap" run "$repo_root/tests/mariadb-wire-codec.fls"
 run_case "page/WAL smoke" env AFJ_DB_PAGE_CACHE_PAGES=2 node "$bootstrap" run "$repo_root/src/afj-db95.fls"
@@ -129,6 +130,8 @@ cat > "$report" <<EOF
 
 - Generated: $(date -u +%Y-%m-%dT%H:%M:%SZ)
 - Repository: afj-db95
+- FreeLang runtime revision: ${AFJ_RUNTIME_COMMIT:-UNRECORDED}
+- MariaDB CLI version: ${MARIADB_CLI_VERSION:-not supplied}
 - Automated cases: $passed PASS, $failed FAIL, $blocked BLOCKED
 - Release status: **BLOCKED**
 

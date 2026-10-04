@@ -901,9 +901,9 @@
                   (first (get index "columns" [])))
                (has-key? first-predicate "operator"))
         (filter (fn [row]
-                  ;; Composite key serialization is not yet type-preserving
-                  ;; or escaped. Recheck the true row values after scanning
-                  ;; index entries instead of pruning by an ambiguous token.
+                  ;; The equality token is collision-free, but it is not a
+                  ;; schema-aware sortable key. Scan all entries and recheck
+                  ;; true row values until typed ordering/collation is defined.
                   (and (engine-match? row first-predicate)
                        (engine-match? row second-predicate)))
                 (map (fn [entry] (get (get table "rows")

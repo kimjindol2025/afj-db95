@@ -1,10 +1,10 @@
 # AFJ-016 Release Gate Report
 
-- Generated: 2026-10-04T22:49:40Z
+- Generated: 2026-10-04T23:07:20Z
 - Repository: afj-db95
-- FreeLang runtime: c783288e (pinned bootstrap used for this run)
-- MariaDB client: 10.11.14 (existing temporary extraction; no system package installed)
-- Automated cases: 60 PASS, 0 FAIL, 0 BLOCKED
+- FreeLang runtime revision: c783288e
+- MariaDB CLI version: 10.11.14 (existing temporary extraction; no system package installed)
+- Automated cases: 61 PASS, 0 FAIL, 0 BLOCKED
 - Release status: **BLOCKED**
 
 ## Automated evidence
@@ -15,6 +15,7 @@
 | static check: afj-db95 | PASS | |
 | static check: server entrypoint | PASS | |
 | MariaDB listener configuration fails closed | PASS | |
+| unsupported SQL collation rejected | PASS | |
 | raw binary boundary | PASS | |
 | MariaDB packet codec | PASS | |
 | page/WAL smoke | PASS | |
