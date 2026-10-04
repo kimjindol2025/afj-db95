@@ -3,7 +3,7 @@
 - Generated: 2026-10-04T17:50:15Z
 - Repository: afj-db95
 - FreeLang runtime bootstrap: /tmp/gh-passfix.Uf7hVz/freelang-afj-runtime-candidate/bootstrap.js
-- Runtime native TCP/TLS patch: isolated feature branch; not published because the runtime fast suite has an unrelated Stage1 parity failure
+- Runtime native TCP/TLS/peer-address patch: published on FreeLang runtime branch `codex/afj-db-tls-peeraddr-20261005` at `c8a2ca13`; runtime fast suite 63/63 suites and 1459/1459 tests PASS; native TLS, mTLS/certificate reload, and peer-IP rate-limit loopback tests PASS
 - TCP soak duration in this run: 300000 ms (default: 300000 ms)
 - Automated cases: 56 PASS, 0 FAIL, 0 BLOCKED
 - Release status: **BLOCKED**
