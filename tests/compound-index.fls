@@ -37,9 +37,8 @@
     (println "afj-db95 compound unique index PASS")
     (throw "compound unique index failure")))
 
-;; Composite tokens are currently delimiter-joined. Distinct component pairs
-;; that serialize to the same token must still pass UNIQUE validation and
-;; equality lookup must recheck the actual row components.
+;; Distinct component pairs that previously collided under delimiter joining
+;; remain distinct after indexing, and equality lookup rechecks row components.
 (execute-ast {"type" "insert" "table" "compound_users"
               "row" {"tenant" "a|b" "email" "c"}})
 (execute-ast {"type" "insert" "table" "compound_users"
