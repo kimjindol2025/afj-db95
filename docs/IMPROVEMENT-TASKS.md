@@ -523,7 +523,9 @@
     경로를 검증했다. 첫 통합 gate 2026-10-04 22:21 UTC는 `54 PASS, 0 FAIL,
     2 BLOCKED`였다. `/tmp`에만 있던 MariaDB 10.11.14 CLI 실행 파일을 찾아
     `MARIADB_CLI` 경로 지원을 추가했고, 메인 서비스에서 표준 CLI smoke와 prepared
-    테스트를 통과시켰다. 최신 전체 gate 2026-10-04 23:07 UTC는 runtime
+    테스트를 통과시켰다. 이후 표준 MariaDB client가 미지원 table COLLATE를
+    ERROR 1064로 받고 뒤이은 정상 SELECT도 성공하는 것을 확인했다.
+    최신 전체 gate 2026-10-04 23:18 UTC는 runtime
     `c783288e` 및 MariaDB CLI `10.11.14`에서 `61 PASS, 0 FAIL, 0 BLOCKED`;
     fail-closed 포트/bind/collation 검사와 5분 soak도 PASS다. MariaDB CLI는 기존
     `/tmp` 추출본을 사용했고 시스템 패키지는 설치하지 않았다. gate 종료 코드 2는

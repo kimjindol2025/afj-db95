@@ -94,6 +94,12 @@ async function main() {
       await runMaria(port, "CREATE TABLE native_wire_users (id INT PRIMARY KEY, name TEXT)", password);
       await runMaria(port, "INSERT INTO native_wire_users (id,name) VALUES (1,'Kim')", password);
       assert.strictEqual(await runMaria(port, "SELECT * FROM native_wire_users", password), "1\tKim\n");
+      await assert.rejects(
+        () => runMaria(port,
+          "CREATE TABLE unsupported_collation (name TEXT) COLLATE=utf8mb4_bin",
+          password),
+        /ERROR 1064/);
+      assert.strictEqual(await runMaria(port, "SELECT * FROM native_wire_users", password), "1\tKim\n");
     } catch (error) {
       throw new Error(`${error.message}\nFreeLang daemon:\n${daemonOutput}`);
     }
