@@ -1,9 +1,9 @@
 # AFJ-016 Release Gate Report
 
-- Generated: 2026-10-04T17:14:31Z
+- Generated: 2026-10-04T17:50:15Z
 - Repository: afj-db95
 - FreeLang runtime bootstrap: /tmp/gh-passfix.Uf7hVz/freelang-afj-runtime-candidate/bootstrap.js
-- Runtime native TCP/TLS patch: isolated test source; not yet committed to the original runtime worktree
+- Runtime native TCP/TLS patch: isolated feature branch; not published because the runtime fast suite has an unrelated Stage1 parity failure
 - TCP soak duration in this run: 300000 ms (default: 300000 ms)
 - Automated cases: 56 PASS, 0 FAIL, 0 BLOCKED
 - Release status: **BLOCKED**
@@ -82,16 +82,13 @@ do not waive an incomplete architectural condition:
   compound predicate candidate validation, composite page-range recheck,
   multi-index intersection, range predicate conflict, and TCP transaction
   process-kill recovery cases are covered above.
-  - Batched create+insert commits avoid duplicate initial row versions.
-    Lazy-table repeatable-read, duplicate unkeyed-row, and same-schema
-    drop/recreate stale-reader regressions pass. Broader DDL-generation and
-    schema concurrency coverage remains incomplete.
-  - A stale row-level writer with a predicate read on an unrelated table could
-    previously merge against a target table after its schema changed. The MVCC
-    conflict check now rejects schema drift before disjoint-row merge;
-    `tests/tcp-mvcc-conflicts.fls` reproduces and verifies the `TX_CONFLICT`.
-    Same-schema table-generation changes and broader DDL batch combinations
-    remain unresolved.
+  - Per-table schema-generation revisions now distinguish identical-schema
+    DROP/CREATE from ordinary row updates. Stale row-level writers and
+    predicate readers conflict after schema or generation changes. The revision
+    map is persisted in the catalog checkpoint and reconstructed from WAL;
+    `tests/tcp-mvcc-conflicts.fls`, `tests/tcp-row-version-checkpoint.fls`, and
+    `tests/tcp-row-version-recovery.fls` cover those paths. Broader DDL batches
+    and schema concurrency combinations remain incomplete.
   - TCP table-page manifest, page-backed B+Tree leaf-index persistence/reopen,
     bounded pin/flush pool, lazy table eviction, lazy transaction snapshot and
     durable row-version checkpoint recovery pass; page-level row execution and

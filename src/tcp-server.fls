@@ -62,6 +62,7 @@
 (define afj-tcp-transactions (atom {}))
 (define afj-tcp-commit-revision (atom 0))
 (define afj-tcp-table-revisions (atom {}))
+(define afj-tcp-schema-revisions (atom {}))
 (define afj-tcp-row-versions (atom {}))
 (define afj-tcp-locks (atom {}))
 (define afj-tcp-wait-for (atom {}))
@@ -552,6 +553,7 @@
              "wal-prefix" (sha256 raw)
              "commit-revision" (deref afj-tcp-commit-revision)
              "table-revisions" (deref afj-tcp-table-revisions)
+             "schema-revisions" (deref afj-tcp-schema-revisions)
              "tables" (vals (deref tables))
              "table-index" table-index
              "databases" (deref engine-databases)}))))))
@@ -652,6 +654,7 @@
     (reset! engine-databases {})
     (reset! afj-tcp-commit-revision 0)
     (reset! afj-tcp-table-revisions {})
+    (reset! afj-tcp-schema-revisions {})
     (reset! afj-tcp-row-versions {})
     (let [checkpoint (if (and (not (nil? afj-tcp-catalog-page-path))
                               (file_exists afj-tcp-catalog-page-path))
@@ -675,6 +678,8 @@
                   (get checkpoint "commit-revision" 0))
           (reset! afj-tcp-table-revisions
                   (get checkpoint "table-revisions" {}))
+          (reset! afj-tcp-schema-revisions
+                  (get checkpoint "schema-revisions" {}))
           (afj-tcp-restore-row-version-history (deref engine-catalog))
           (afj-tcp-rebuild-all-indexes)
           (afj-tcp-record-row-versions (deref engine-catalog) 0))
@@ -776,10 +781,17 @@
 
 (defn afj-tcp-mark-table-revisions [asts revision]
   (doseq [ast asts]
-    (let [table (get ast "table")]
+    (let [table (get ast "table")
+          type (get ast "type")]
       (if (nil? table)
         nil
-        (swap! afj-tcp-table-revisions assoc table revision))))
+        (do
+          (swap! afj-tcp-table-revisions assoc table revision)
+          (if (or (= type "create-table")
+                  (= type "drop-table")
+                  (= type "alter-table"))
+            (swap! afj-tcp-schema-revisions assoc table revision)
+            nil)))))
   true)
 
 (defn afj-tcp-row-base-key [row schema]
@@ -982,6 +994,7 @@
 
 (defn afj-tcp-predicate-conflict? [tx-state]
   (let [snapshot (get tx-state "read-revisions")
+        schema-snapshot (get tx-state "read-schema-revisions")
         snapshot-catalog (get tx-state "snapshot")
         current-catalog (deref engine-catalog)
         conflict (atom false)]
@@ -992,6 +1005,8 @@
             old-definition (get snapshot-catalog table)
             current-definition (get current-catalog table)
             schema-changed (or
+              (not (= (get schema-snapshot table 0)
+                      (get (deref afj-tcp-schema-revisions) table 0)))
               (not (= (nil? old-definition) (nil? current-definition)))
               (and (not (nil? old-definition))
                    (not (nil? current-definition))
@@ -1062,6 +1077,7 @@
         working-catalog (get tx-state "working-catalog")
         current-catalog (deref engine-catalog)
         snapshot-revisions (get tx-state "read-revisions")
+        schema-snapshot (get tx-state "read-schema-revisions")
         conflict (atom false)]
     (doseq [ast (get tx-state "asts")]
       (let [table-name (get ast "table")
@@ -1069,15 +1085,19 @@
             working-table (get working-catalog table-name)
             current-table (get current-catalog table-name)
             stale (not (= (get snapshot-revisions table-name 0)
-                          (get (deref afj-tcp-table-revisions) table-name 0)))]
+                          (get (deref afj-tcp-table-revisions) table-name 0)))
+            schema-generation-changed
+              (not (= (get schema-snapshot table-name 0)
+                      (get (deref afj-tcp-schema-revisions) table-name 0)))]
         (if (not stale)
           nil
           (if (and (afj-tcp-row-write-ast? ast)
                    (not (nil? snapshot-table))
                    (not (nil? working-table))
                    (not (nil? current-table)))
-            (if (not (= (get snapshot-table "schema")
-                        (get current-table "schema")))
+            (if (or schema-generation-changed
+                    (not (= (get snapshot-table "schema")
+                            (get current-table "schema"))))
               (reset! conflict true)
               (if (afj-tcp-row-key-overlap?
                     (afj-tcp-row-diff-keys
@@ -1315,6 +1335,8 @@
                 "working-indexes" (afj-tcp-copy (deref engine-indexes))
                 "base-revision" (deref afj-tcp-commit-revision)
                 "read-revisions" (afj-tcp-copy (deref afj-tcp-table-revisions))
+                "read-schema-revisions"
+                  (afj-tcp-copy (deref afj-tcp-schema-revisions))
                 "read-predicates" []
                 "isolation-level" level
                 "savepoints" {}

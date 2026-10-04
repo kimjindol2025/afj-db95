@@ -5,6 +5,8 @@
 (reset! engine-catalog {})
 (reset! engine-indexes {})
 (reset! afj-tcp-commit-revision 0)
+(reset! afj-tcp-table-revisions {})
+(reset! afj-tcp-schema-revisions {})
 (reset! afj-tcp-sessions {"mvcc-a" "root" "mvcc-b" "root"})
 (reset! afj-tcp-session-expiries {})
 (reset! afj-tcp-transactions {})
@@ -268,4 +270,43 @@
            (= (get stale-commit "error") "TX_CONFLICT"))
     (println "afj-db95 MVCC DDL/DML schema conflict PASS")
     (throw (str "stale DML merged after schema change: "
+                (json_str stale-commit)))))
+
+;; Identical schema text does not mean the same table generation. A stale
+;; writer must not merge rows into a table dropped and recreated meanwhile.
+(afj-tcp-commit-asts
+  [{"type" "create-table" "table" "same_generation_guard"
+    "schema" {"columns" [{"name" "id" "type" "INTEGER" "nullable" false}]
+               "primary-key" "id" "unique-columns" [] "unique-groups" []
+               "foreign-keys" [] "checks" []}}
+   {"type" "insert" "table" "same_generation_guard" "rows" [{"id" "1"}]}])
+(swap! afj-tcp-sessions assoc "mvcc-generation-write-reader" "root")
+(swap! afj-tcp-sessions assoc "mvcc-generation-write-ddl" "root")
+(afj-tcp-begin-level "mvcc-generation-write-reader" "REPEATABLE READ")
+(afj-tcp-query
+  {"token" "mvcc-generation-write-reader"
+   "statement" "SELECT * FROM quota_b WHERE id=99"})
+(afj-tcp-begin-level "mvcc-generation-write-ddl" "REPEATABLE READ")
+(let [drop (afj-tcp-query
+             {"token" "mvcc-generation-write-ddl"
+              "statement" "DROP TABLE same_generation_guard"})
+      recreate (afj-tcp-query
+                 {"token" "mvcc-generation-write-ddl"
+                  "statement" "CREATE TABLE same_generation_guard (id INTEGER PRIMARY KEY)"})
+      seed (afj-tcp-query
+             {"token" "mvcc-generation-write-ddl"
+              "statement" "INSERT INTO same_generation_guard (id) VALUES (1)"})
+      ddl-commit (afj-tcp-commit "mvcc-generation-write-ddl")
+      dml (afj-tcp-query
+            {"token" "mvcc-generation-write-reader"
+             "statement" "INSERT INTO same_generation_guard (id) VALUES (2)"})
+      stale-commit (afj-tcp-commit "mvcc-generation-write-reader")
+      current-rows (get (get (deref engine-catalog) "same_generation_guard") "rows")]
+  (if (and (get drop "ok") (get recreate "ok") (get seed "ok")
+           (get ddl-commit "ok") (get dml "ok")
+           (not (get stale-commit "ok"))
+           (= (get stale-commit "error") "TX_CONFLICT")
+           (= (count current-rows) 1))
+    (println "afj-db95 MVCC same-schema generation write conflict PASS")
+    (throw (str "same-schema generation accepted a stale write: "
                 (json_str stale-commit)))))
