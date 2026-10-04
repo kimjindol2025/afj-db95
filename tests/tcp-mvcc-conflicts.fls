@@ -238,3 +238,34 @@
            (= (get reader-commit "error") "TX_CONFLICT"))
     (println "afj-db95 MVCC recreated schema generation conflict PASS")
     (throw "drop/recreate hid a schema generation change from stale reader")))
+
+;; A read in another table enables row-level merge. That must not permit DML
+;; planned against an old schema to merge into a table altered meanwhile.
+(afj-tcp-commit-ast
+  {"type" "create-table" "table" "schema_write_guard"
+   "schema" {"columns" [{"name" "id" "type" "INTEGER"
+                            "nullable" false "primary" true}]
+              "primary-key" "id" "unique-columns" []}})
+(afj-tcp-commit-ast
+  {"type" "insert" "table" "schema_write_guard" "rows" [{"id" "1"}]})
+(swap! afj-tcp-sessions assoc "mvcc-schema-write-reader" "root")
+(swap! afj-tcp-sessions assoc "mvcc-schema-write-ddl" "root")
+(afj-tcp-begin-level "mvcc-schema-write-reader" "REPEATABLE READ")
+(afj-tcp-begin-level "mvcc-schema-write-ddl" "REPEATABLE READ")
+(let [unrelated-read (afj-tcp-query
+                       {"token" "mvcc-schema-write-reader"
+                        "statement" "SELECT * FROM quota_b WHERE id=99"})
+      alter (afj-tcp-query
+              {"token" "mvcc-schema-write-ddl"
+               "statement" "ALTER TABLE schema_write_guard ADD COLUMN note TEXT"})
+      ddl-commit (afj-tcp-commit "mvcc-schema-write-ddl")
+      dml (afj-tcp-query
+            {"token" "mvcc-schema-write-reader"
+             "statement" "INSERT INTO schema_write_guard (id) VALUES (2)"})
+      stale-commit (afj-tcp-commit "mvcc-schema-write-reader")]
+  (if (and (get unrelated-read "ok") (get alter "ok") (get ddl-commit "ok")
+           (get dml "ok") (not (get stale-commit "ok"))
+           (= (get stale-commit "error") "TX_CONFLICT"))
+    (println "afj-db95 MVCC DDL/DML schema conflict PASS")
+    (throw (str "stale DML merged after schema change: "
+                (json_str stale-commit)))))

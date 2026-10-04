@@ -1076,17 +1076,20 @@
                    (not (nil? snapshot-table))
                    (not (nil? working-table))
                    (not (nil? current-table)))
-            (if (afj-tcp-row-key-overlap?
-                  (afj-tcp-row-diff-keys
-                    (get snapshot-table "rows" [])
-                    (get current-table "rows" [])
-                    (get snapshot-table "schema" {}))
-                  (afj-tcp-row-diff-keys
-                    (get snapshot-table "rows" [])
-                    (get working-table "rows" [])
-                    (get snapshot-table "schema" {})))
+            (if (not (= (get snapshot-table "schema")
+                        (get current-table "schema")))
               (reset! conflict true)
-              nil)
+              (if (afj-tcp-row-key-overlap?
+                    (afj-tcp-row-diff-keys
+                      (get snapshot-table "rows" [])
+                      (get current-table "rows" [])
+                      (get snapshot-table "schema" {}))
+                    (afj-tcp-row-diff-keys
+                      (get snapshot-table "rows" [])
+                      (get working-table "rows" [])
+                      (get snapshot-table "schema" {})))
+                (reset! conflict true)
+                nil))
             (reset! conflict true)))))
     (deref conflict)))
 

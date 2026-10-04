@@ -1,10 +1,10 @@
 # AFJ-016 Release Gate Report
 
-- Generated: 2026-10-04T16:47:19Z
+- Generated: 2026-10-04T17:14:31Z
 - Repository: afj-db95
 - FreeLang runtime bootstrap: /tmp/gh-passfix.Uf7hVz/freelang-afj-runtime-candidate/bootstrap.js
 - Runtime native TCP/TLS patch: isolated test source; not yet committed to the original runtime worktree
-- TCP soak duration in this run: 1000 ms (default: 300000 ms)
+- TCP soak duration in this run: 300000 ms (default: 300000 ms)
 - Automated cases: 56 PASS, 0 FAIL, 0 BLOCKED
 - Release status: **BLOCKED**
 
@@ -75,26 +75,31 @@ The following are the remaining release-gate conditions; passing regression case
 do not waive an incomplete architectural condition:
 
 - Native raw TCP callbacks now provide peerAddress as a backward-compatible fourth argument. Native TLS/mTLS and certificate reload are exercised by the loopback cases above.
-- MariaDB 10.11 standard-client and native-wire cases passed using a temporary
-  extracted CLI package; no system packages were installed.
+- MariaDB 10.11.14 standard-client and native-wire cases passed using a
+  temporary extracted CLI package; no system packages were installed.
 - DDL/schema-level MVCC granularity and full composite-key encoding/type-order
   compatibility are not complete; row-version WAL replay, row-level DML merge,
   compound predicate candidate validation, composite page-range recheck,
   multi-index intersection, range predicate conflict, and TCP transaction
   process-kill recovery cases are covered above.
-  - Batched create+insert commits now avoid duplicate initial row versions.
+  - Batched create+insert commits avoid duplicate initial row versions.
     Lazy-table repeatable-read, duplicate unkeyed-row, and same-schema
     drop/recreate stale-reader regressions pass. Broader DDL-generation and
     schema concurrency coverage remains incomplete.
+  - A stale row-level writer with a predicate read on an unrelated table could
+    previously merge against a target table after its schema changed. The MVCC
+    conflict check now rejects schema drift before disjoint-row merge;
+    `tests/tcp-mvcc-conflicts.fls` reproduces and verifies the `TX_CONFLICT`.
+    Same-schema table-generation changes and broader DDL batch combinations
+    remain unresolved.
   - TCP table-page manifest, page-backed B+Tree leaf-index persistence/reopen,
     bounded pin/flush pool, lazy table eviction, lazy transaction snapshot and
     durable row-version checkpoint recovery pass; page-level row execution and
     multi-index/compound range validation pass; DDL/schema MVCC granularity
     remains incomplete.
-- Large-corpus and concurrency regressions pass. A standalone 300-second TCP
-  soak passed with `writes=1384`, `throughput=4.61/s`, `p95=2005ms`, and
-  `max=2431ms` (limits: p95 15000ms, max 20000ms). The release matrix used a
-  1000ms soak; the full-duration result above is the separate soak run.
+- Large-corpus, concurrency, and the full five-minute TCP performance envelope
+  passed in this run at the documented p95/max limits. This is bounded soak
+  evidence, not an unrestricted-duration guarantee.
 
 The report must remain **BLOCKED** until each item has implementation evidence and a
 corresponding reproducible test. A nonzero automated failure or any BLOCKED case
