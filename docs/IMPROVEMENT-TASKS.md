@@ -500,8 +500,10 @@
     `5225ms`였다. 현재 BLOCKED는 FreeLang 정적 검사기의 literal-symbol 매개변수
     arity 오탐 2건과 MariaDB CLI 부재에 따른 표준 클라이언트 테스트 2건이다.
     독립 Node wire client의 handshake/query/prepared/auth 검증은 PASS했다.
-    DDL/schema MVCC 전체 세분화, composite-key range의 type-order/collation,
-    MariaDB TLS/auth-plugin 범위 및 clean-checkout 재현성은 여전히 release blocker다.
+    새 clean checkout의 quick gate도 `51 PASS, 0 FAIL, 5 BLOCKED`로 재현했다.
+    따라서 clean-checkout 재현성은 확인됐고, 남은 BLOCKED는 정적 검사 오탐,
+    MariaDB CLI 미설치, DDL/schema MVCC 전체 세분화, composite-key range의
+    type-order/collation, MariaDB TLS/auth-plugin 범위다.
 
 ### P3 — 문서와 릴리스 추적
 
