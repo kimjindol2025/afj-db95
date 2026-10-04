@@ -2,15 +2,17 @@
 set -u
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
-bootstrap="/root/freelang-surface-v0-clean-ek3qo2/v11/bootstrap.js"
-log_file="/tmp/afj-db95-production-tls-boundary.log"
-trap 'rm -f "$log_file" /root/afj-db95-production-tls-boundary.wal /root/afj-db95-production-tls-boundary.audit.jsonl /root/afj-db95-production-tls-boundary.state.jsonl' EXIT
+bootstrap="${FREELANG_BOOTSTRAP:-}"
+if [ -z "$bootstrap" ] || [ ! -f "$bootstrap" ]; then echo "Set FREELANG_BOOTSTRAP to the FreeLang runtime bootstrap.js path" >&2; exit 2; fi
+temp_dir="$(mktemp -d /var/tmp/afj-db95-production-tls-boundary.XXXXXX)"
+log_file="$temp_dir/server.log"
+trap 'rm -rf "$temp_dir"' EXIT
 
 if env AFJ_DB_MODE=production \
   AFJ_DB_ROOT_PASSWORD=release-test-password \
-  AFJ_DB_WAL=/root/afj-db95-production-tls-boundary.wal \
-  AFJ_DB_AUDIT_LOG=/root/afj-db95-production-tls-boundary.audit.jsonl \
-  AFJ_DB_AUTH_STATE=/root/afj-db95-production-tls-boundary.state.jsonl \
+  AFJ_DB_WAL="$temp_dir/server.wal" \
+  AFJ_DB_AUDIT_LOG="$temp_dir/server.audit.jsonl" \
+  AFJ_DB_AUTH_STATE="$temp_dir/server.state.jsonl" \
   AFJ_DB_BIND_HOST=0.0.0.0 \
   node "$bootstrap" run "$repo_root/src/tcp-server.fls" >"$log_file" 2>&1; then
   echo "production external bind was accepted without TLS"

@@ -484,7 +484,7 @@
     그러나 MariaDB production hardening, DDL/schema 단위의 완전한 MVCC 세분화,
     executor lazy catalog eviction을
     명시적으로 감지해 release status를 `BLOCKED`로 유지한다.
-  - 최신 실행 기록: `docs/release-gate-report.md`의 2026-10-04 UTC 실행,
+  - 이전 실행 기록: `docs/release-gate-report.md`의 2026-10-04 17:50 UTC 실행,
     자동 케이스 `56 PASS, 0 FAIL, 0 BLOCKED`. MariaDB 10.11 CLI를 임시로 추출해
     wire unit, standard-client, native wire 3개 케이스를 실제 loopback으로 통과시켰다.
     시스템 패키지는 설치하지 않았다. matrix soak는 1초이고, 별도 300초 soak는
@@ -494,6 +494,14 @@
     `Release status: BLOCKED`가 정확하다. FreeLang native TLS/peer-address runtime
     patch는 별도 공식 Forgejo feature branch에 게시했고 해당 브랜치의 전체 fast
     suite 및 AFJ-DB loopback 상호운용 검증을 통과했다.
+  - 최신 실행 기록: 2026-10-04 20:48 UTC, `docs/release-gate-report.md`에서
+    `52 PASS, 0 FAIL, 4 BLOCKED`. 300초 TCP soak도 실제 실행해 PASS했고,
+    동일 후보의 별도 계측 실행은 `writes=752`, `2.51/s`, p95 `4055ms`, max
+    `5225ms`였다. 현재 BLOCKED는 FreeLang 정적 검사기의 literal-symbol 매개변수
+    arity 오탐 2건과 MariaDB CLI 부재에 따른 표준 클라이언트 테스트 2건이다.
+    독립 Node wire client의 handshake/query/prepared/auth 검증은 PASS했다.
+    DDL/schema MVCC 전체 세분화, composite-key range의 type-order/collation,
+    MariaDB TLS/auth-plugin 범위 및 clean-checkout 재현성은 여전히 release blocker다.
 
 ### P3 — 문서와 릴리스 추적
 

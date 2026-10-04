@@ -1,6 +1,6 @@
 ;; AFJ-DB incremental index WAL contract.
 
-(load "/root/kilo-freelang/projects/afj-db95/src/btree.fls")
+(load "../src/btree.fls")
 
 (define indexed-wal-path (atom nil))
 (define indexed-tree (atom []))

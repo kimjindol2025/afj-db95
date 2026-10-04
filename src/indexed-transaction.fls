@@ -1,7 +1,7 @@
 ;; AFJ-DB atomic transaction + engine index integration.
 
-(load "/root/kilo-freelang/projects/afj-db95/src/engine.fls")
-(load "/root/kilo-freelang/projects/afj-db95/src/btree.fls")
+(load "../src/engine.fls")
+(load "../src/btree.fls")
 
 (define indexed-tx-state
   (atom {"status" "idle" "catalog" nil "index" []}))

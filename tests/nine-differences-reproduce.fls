@@ -1,5 +1,5 @@
 ;; Non-destructive reproduction: parser only, no server or stored data access.
-(load "/root/kilo-freelang/projects/afj-db95/src/sql-core.fls")
+(load "../src/sql-core.fls")
 (define reproduction-cases
   [[1 "DROP DATABASE IF EXISTS afj_expanded"]
    [2 "CREATE DATABASE afj_expanded"]

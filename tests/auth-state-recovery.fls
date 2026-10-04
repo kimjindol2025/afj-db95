@@ -1,7 +1,7 @@
 ;; Authentication role/user state recovery contract.
 (define state-path "/tmp/afj-db95-auth-state-test.jsonl")
 (if (file_exists state-path) (file_delete state-path) true)
-(load "/root/kilo-freelang/projects/afj-db95/src/auth.fls")
+(load "../src/auth.fls")
 (defn assert-equal [label expected actual]
   (if (= expected actual)
     true

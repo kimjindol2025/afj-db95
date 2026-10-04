@@ -1,5 +1,5 @@
 ;; TCP transaction deadlock detection contract.
-(load "/root/kilo-freelang/projects/afj-db95/src/tcp-server.fls")
+(load "../src/tcp-server.fls")
 
 (server-start "tcp-deadlock-test")
 (reset! engine-catalog {})

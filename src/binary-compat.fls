@@ -1,0 +1,16 @@
+;; FreeLang-native byte compatibility for runtimes that expose the canonical
+;; base64 buffer API but not UTF-8 convenience builtins.
+(defn afj-utf8-encode [text]
+  (buf-str text))
+
+(defn afj-b64-to-raw [bytes]
+  (buf-to-binary bytes))
+
+(defn afj-raw-to-b64 [bytes]
+  (buf-from-binary bytes))
+
+(defn afj-utf8-decode-strict [bytes]
+  (let [decoded (buf-read-str bytes 0 (buf-len bytes))]
+    (if (= (buf-str decoded) bytes)
+      decoded
+      (throw "INVALID_UTF8"))))

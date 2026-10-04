@@ -1,5 +1,5 @@
 ;; Request and SQL size boundary contract.
-(load "/root/kilo-freelang/projects/afj-db95/src/tcp-server.fls")
+(load "../src/tcp-server.fls")
 
 (defn assert-limit [label expected actual]
   (if (= expected actual)

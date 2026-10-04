@@ -1,6 +1,6 @@
 ;; AFJ-013 page-backed recursive B+Tree snapshot contract.
-(load "/root/kilo-freelang/projects/afj-db95/src/afj-db95.fls")
-(load "/root/kilo-freelang/projects/afj-db95/src/btree.fls")
+(load "../src/afj-db95.fls")
+(load "../src/btree.fls")
 
 (let [path "/tmp/afj-db95-recursive-btree.page"
       tree (loop [index 0 value (btree-root [])]

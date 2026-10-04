@@ -3,10 +3,10 @@
 const assert = require("assert");
 const fs = require("fs");
 const net = require("net");
-const os = require("os");
 const path = require("path");
 const tls = require("tls");
 const { execFileSync, spawn } = require("child_process");
+const { waitForTcpListener } = require("./wait-for-tcp-listener");
 
 function freePort() {
   return new Promise((resolve, reject) => {
@@ -51,7 +51,7 @@ function tlsPing(port, ca) {
 }
 
 async function main() {
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "afj-db95-prod-tls-"));
+  const directory = fs.mkdtempSync(path.join("/var/tmp", "afj-db95-prod-tls-"));
   const cert = path.join(directory, "server.crt");
   const key = path.join(directory, "server.key");
   const wal = path.join(directory, "db.wal");
@@ -63,7 +63,7 @@ async function main() {
     { stdio: "ignore" });
   const port = await freePort();
   const child = spawn(process.execPath,
-    ["/root/freelang-surface-v0-clean-ek3qo2/v11/bootstrap.js", "run", "tests/tcp-daemon.fls"],
+    [require("./runtime-bootstrap"), "run", "tests/tcp-daemon.fls"],
     { cwd: path.join(__dirname, ".."), env: { ...process.env,
       AFJ_DB_MODE: "production", AFJ_DB_PORT: String(port), AFJ_DB_BIND_HOST: "0.0.0.0",
       AFJ_DB_ROOT_PASSWORD: "production-test-password", AFJ_DB_WAL: wal,
@@ -72,6 +72,7 @@ async function main() {
       stdio: ["ignore", "pipe", "pipe"] });
   try {
     await waitForOutput(child, "afj-db95 TCP server STARTED");
+    await waitForTcpListener("127.0.0.1", port);
     assert.strictEqual(await tlsPing(port, fs.readFileSync(cert)), "{\"ok\":true,\"type\":\"pong\"}\n");
     console.log("afj-db95 production native TLS integration PASS");
   } finally {

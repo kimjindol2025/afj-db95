@@ -1,6 +1,7 @@
 ;; AFJ-010 binary boundary: raw TCP bytes must round-trip without UTF-8 loss.
-(define sample (b64-to-raw "AP+AQUI="))
-(define encoded (raw-to-b64 sample))
+(load "../src/binary-compat.fls")
+(define sample (afj-b64-to-raw "AP+AQUI="))
+(define encoded (afj-raw-to-b64 sample))
 (if (= encoded "AP+AQUI=")
   (println "afj-db95 raw binary boundary PASS")
   (throw "RAW_BINARY_ROUNDTRIP_FAILED"))

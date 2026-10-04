@@ -88,7 +88,7 @@ function scrambleFromHandshake(payload) {
 }
 async function main() {
   const port = await freePort();
-  const child = spawn(process.execPath, ["/root/freelang-surface-v0-clean-ek3qo2/v11/bootstrap.js", "run", "tests/native-mariadb-daemon.fls"],
+  const child = spawn(process.execPath, [require("./runtime-bootstrap"), "run", "tests/native-mariadb-daemon.fls"],
     { cwd: path.join(__dirname, ".."), env: { ...process.env, AFJ_NATIVE_MARIADB_PORT: String(port) }, stdio: ["ignore", "pipe", "pipe"] });
   try {
     await waitForOutput(child, "afj-db95 native MariaDB STARTED");

@@ -1,5 +1,5 @@
 ;; Session expiry cleanup contract.
-(load "/root/kilo-freelang/projects/afj-db95/src/tcp-server.fls")
+(load "../src/tcp-server.fls")
 
 (server-start "session-cleanup-test")
 (let [login (server-login "root")

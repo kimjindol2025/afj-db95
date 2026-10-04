@@ -1,6 +1,6 @@
 ;; AFJ-DB durable row/index bundle contract.
 
-(load "/root/kilo-freelang/projects/afj-db95/src/btree.fls")
+(load "../src/btree.fls")
 
 (define bundle-wal "/tmp/afj-db95-bundle.wal")
 (define bundle-catalog (atom {}))

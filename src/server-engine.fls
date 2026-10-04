@@ -1,9 +1,9 @@
 ;; AFJ-DB authenticated protocol + authorization + SQL engine integration.
 
-(load "/root/kilo-freelang/projects/afj-db95/src/engine.fls")
-(load "/root/kilo-freelang/projects/afj-db95/src/sql-core.fls")
-(load "/root/kilo-freelang/projects/afj-db95/src/protocol.fls")
-(load "/root/kilo-freelang/projects/afj-db95/src/auth.fls")
+(load "../src/engine.fls")
+(load "../src/sql-core.fls")
+(load "../src/protocol.fls")
+(load "../src/auth.fls")
 
 (defn server-engine-permission [statement]
   (let [kind (get (parse-sql statement) "type")]

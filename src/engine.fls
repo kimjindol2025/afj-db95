@@ -38,30 +38,38 @@
 (defn engine-index-groups [table]
   (get (get table "schema" {}) "unique-groups" []))
 
+(defn engine-index-row-entries [rows column row-id entries]
+  (map (fn [index]
+         {"key-token" (str (get (get rows index) column))
+          "row-id" index})
+       (range row-id (count rows))))
+
+(defn engine-composite-row-entries [rows columns row-id entries]
+  (map (fn [index]
+         {"key-token" (engine-composite-key-token (get rows index) columns)
+          "row-id" index})
+       (range row-id (count rows))))
+
+(defn engine-index-group-pairs [groups group-keys index pairs]
+  (arr_flatten
+    (map (fn [offset]
+           (let [key-token (get group-keys offset)
+                 entries (get groups key-token)
+                 row-ids (map (fn [entry] (get entry "row-id")) entries)]
+             [key-token row-ids]))
+         (range index (count group-keys)))))
+
 (defn engine-build-index [rows column row-id index]
-  (if (>= row-id (count rows))
-    index
-    (let [row (get rows row-id)
-          key (get row column)
-          key-token (str key)
-          existing-bucket (get index key-token)
-          bucket (if (nil? existing-bucket) [] existing-bucket)]
-      (engine-build-index rows column (+ row-id 1)
-                          (assoc index key-token (conj bucket row-id))))))
+  (let [entries (engine-index-row-entries rows column row-id [])
+        groups (arr_group_by entries "key-token")
+        pairs (engine-index-group-pairs groups (keys groups) 0 [])]
+    (apply assoc index pairs)))
 
 (defn engine-build-composite-index [rows columns row-id index]
-  (if (>= row-id (count rows))
-    index
-    (let [total (count rows)
-          key-token (engine-composite-key-token (get rows row-id) columns)
-          existing-bucket (get index key-token)
-          bucket (if (nil? existing-bucket) [] existing-bucket)
-          next-index (assoc index key-token (conj bucket row-id))]
-      (if (= row-id (- total 1))
-        next-index
-        (engine-build-composite-index
-          rows columns (+ row-id 1)
-          next-index)))))
+  (let [entries (engine-composite-row-entries rows columns row-id [])
+        groups (arr_group_by entries "key-token")
+        pairs (engine-index-group-pairs groups (keys groups) 0 [])]
+    (apply assoc index pairs)))
 
 (defn engine-btree-node-first-key [node]
   (if (get node "leaf")
@@ -622,6 +630,81 @@
       true
       (engine-any-row-matches-columns? (rest rows) row columns index))))
 
+(defn engine-unique-column-entries [row columns index entries]
+  (if (>= index (count columns))
+    entries
+    (let [column (get columns index)
+          value (get row column)]
+      (if (nil? value)
+        (engine-unique-column-entries row columns (+ index 1) entries)
+        (engine-unique-column-entries
+          row columns (+ index 1)
+          (conj entries {"token" (json_str ["column" column value])
+                         "kind" "column" "constraint" column "row" row}))))))
+
+(defn engine-unique-group-entries [row groups index entries]
+  (if (>= index (count groups))
+    entries
+    (let [columns (get groups index)]
+      (if (engine-row-has-null-column? row columns 0)
+        (engine-unique-group-entries row groups (+ index 1) entries)
+        (engine-unique-group-entries
+          row groups (+ index 1)
+                         (conj entries {"token" (json_str
+                                   ["group" columns
+                                    (map (fn [column] (get row column)) columns)])
+                         "kind" "group"
+                         "constraint" (engine-index-group-name columns)
+                         "row" row}))))))
+
+(defn engine-unique-row-entry-list [row schema]
+  (let [primary (get schema "primary-key")
+        primary-value (if (nil? primary) nil (get row primary))
+        primary-entries (if (nil? primary-value)
+                          []
+                          [{"token" (json_str ["primary" primary-value])
+                            "kind" "primary" "row" row}])
+        column-entries (map
+                         (fn [column]
+                           {"token" (json_str ["column" column (get row column)])
+                            "kind" "column" "constraint" column "row" row})
+                         (filter (fn [column] (not (nil? (get row column))))
+                                   (get schema "unique-columns" [])))
+        group-entries (map
+                        (fn [columns]
+                          {"token" (json_str ["group" columns
+                                               (map (fn [column] (get row column)) columns)])
+                           "kind" "group"
+                           "constraint" (engine-index-group-name columns)
+                           "row" row})
+                        (filter (fn [columns]
+                                  (not (engine-row-has-null-column? row columns 0)))
+                                (get schema "unique-groups" [])))]
+    (concat primary-entries (concat column-entries group-entries))))
+
+(defn engine-unique-row-entries [rows schema index entries]
+  (arr_flatten
+    (map (fn [offset]
+           (engine-unique-row-entry-list (get rows offset) schema))
+         (range index (count rows)))))
+
+(defn engine-find-unique-duplicate [groups group-keys index]
+  (if (>= index (count group-keys))
+    nil
+    (let [entries (get groups (get group-keys index))]
+      (if (> (count entries) 1)
+        (first entries)
+        (engine-find-unique-duplicate groups group-keys (+ index 1))))))
+
+(defn engine-validate-unique-entries [entries]
+  (let [groups (arr_group_by entries "token")
+        duplicate (engine-find-unique-duplicate groups (keys groups) 0)]
+    (if (nil? duplicate)
+      true
+      (if (= (get duplicate "kind") "primary")
+        (throw "PRIMARY_KEY_VIOLATION")
+        (throw (str "UNIQUE_VIOLATION: " (get duplicate "constraint")))))))
+
 (defn engine-validate-row [schema row existing]
   (doseq [column (get schema "columns" [])]
     (let [name (get column "name")
@@ -716,6 +799,10 @@
 (defn execute-insert [ast]
   (let [name (get ast "table")
         table (engine-table name)
+        schema (get table "schema" {})
+        validation-schema (dissoc (dissoc (dissoc schema "primary-key")
+                                         "unique-columns")
+                                 "unique-groups")
         new-rows (if (has-key? ast "values")
                    (map (fn [values] (engine-positional-row table values))
                         (get ast "values"))
@@ -724,15 +811,19 @@
                    [(get ast "row")]))
         existing (get table "rows")
         candidate (atom existing)]
+    (engine-validate-unique-entries
+      (engine-unique-row-entries (concat existing new-rows) schema 0 []))
     (doseq [row new-rows]
-      (engine-validate-row (get table "schema" {}) row (deref candidate))
+      (engine-validate-row validation-schema row (deref candidate))
       (reset! candidate (conj (deref candidate) row)))
     (let [rows (deref candidate)
           old-count (count existing)
           updated-table (dissoc (assoc table "rows" rows)
                                 "page-indexes")]
     (reset! engine-catalog (assoc (deref engine-catalog) name updated-table))
-    (engine-index-add-rows name updated-table rows old-count)
+    (if (> (count new-rows) 32)
+      (engine-rebuild-table-indexes name updated-table)
+      (engine-index-add-rows name updated-table rows old-count))
     {"ok" true "type" "insert" "count" (count new-rows)})))
 
 ;; Keep the index lookup helper adjacent to the executor so the bootstrap
@@ -850,6 +941,21 @@
     (and (has-key? (get predicates index) "equals")
          (engine-all-equals? predicates (+ index 1)))))
 
+(defn engine-qualify-rows [rows alias index result]
+  (if (>= index (count rows))
+    result
+    (engine-qualify-rows
+      rows alias (+ index 1)
+      (conj result (engine-qualify-row (get rows index) alias)))))
+
+(defn engine-filter-rows [rows where index result]
+  (if (>= index (count rows))
+    result
+    (let [row (get rows index)]
+      (if (engine-match? row where)
+        (engine-filter-rows rows where (+ index 1) (conj result row))
+        (engine-filter-rows rows where (+ index 1) result)))))
+
 (defn execute-select [ast]
   (let [table (engine-table (get ast "table"))
         where (get ast "where")
@@ -881,12 +987,11 @@
         source-rows (if (nil? where)
                       (get table "rows")
                       (engine-index-rows-safe (get ast "table") table where))
-        rows (map (fn [row]
-                    (engine-qualify-row row (get ast "table-alias")))
-                  source-rows)
+        rows (engine-qualify-rows
+               source-rows (get ast "table-alias") 0 [])
         filtered (if (nil? where)
                    rows
-                   (filter (fn [row] (engine-match? row where)) rows))
+                   (engine-filter-rows rows where 0 []))
         joined (if (nil? (get ast "join"))
                  filtered
                  (let [join (get ast "join")
@@ -1169,12 +1274,12 @@
                           (execute-ast
                             (parse-sql "INSERT INTO constrained_users (id,name,email) VALUES (2,'Park','k@example')"))
                           "NO_ERROR")
-                        (catch [error] (error_message error)))]
+                          (catch [error] (error_message error)))]
   (if (and (= (get created "type") "create-table")
            (= (get valid "count") 1)
-           (= duplicate "[engine-validate-row] PRIMARY_KEY_VIOLATION")
-           (= null-name "[engine-validate-row] NOT_NULL_VIOLATION: name")
-           (= duplicate-email "[engine-validate-row] UNIQUE_VIOLATION: email"))
+           (regex_match_i duplicate ".*PRIMARY_KEY_VIOLATION$")
+           (regex_match_i null-name ".*NOT_NULL_VIOLATION: name$")
+           (regex_match_i duplicate-email ".*UNIQUE_VIOLATION: email$"))
     (println "afj-db95 schema constraints engine PASS")
     (throw "schema constraint engine failure")))
 

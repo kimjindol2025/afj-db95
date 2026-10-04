@@ -1,5 +1,5 @@
 ;; TCP SAVEPOINT contract: partial rollback keeps earlier staged work.
-(load "/root/kilo-freelang/projects/afj-db95/src/tcp-server.fls")
+(load "../src/tcp-server.fls")
 
 (server-start "tcp-savepoint-test")
 (reset! engine-catalog {})

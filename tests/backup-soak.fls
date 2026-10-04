@@ -1,5 +1,5 @@
 ;; AFJ-003 bounded backup/restore repetition contract.
-(load "/root/kilo-freelang/projects/afj-db95/src/backup.fls")
+(load "../src/backup.fls")
 
 (defn backup-soak-rounds [index total source backup restored manifest]
   (if (>= index total)

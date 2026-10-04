@@ -1,5 +1,5 @@
 ;; Bounded daemon harness for the two-process WAL restart contract.
-(load "/root/kilo-freelang/projects/afj-db95/src/tcp-server.fls")
+(load "../src/tcp-server.fls")
 
 (let [started (start-afj-tcp)]
   (if (get started "ok")

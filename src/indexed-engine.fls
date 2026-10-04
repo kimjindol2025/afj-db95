@@ -1,8 +1,8 @@
 ;; AFJ-DB indexed executor integration.
 ;; Builds the ordered index from engine rows and uses row ids for lookup.
 
-(load "/root/kilo-freelang/projects/afj-db95/src/engine.fls")
-(load "/root/kilo-freelang/projects/afj-db95/src/btree.fls")
+(load "../src/engine.fls")
+(load "../src/btree.fls")
 
 (defn indexed-build [rows column index row-id]
   (if (>= row-id (count rows))

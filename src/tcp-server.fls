@@ -291,13 +291,12 @@
             (afj-tcp-lazy-touch table path)
             true))))))
 
-;; tcp-server-raw queues connect/data/close callbacks in the runtime event
-;; queue. A long-lived DB daemon must drain that queue independently of the
-;; caller; otherwise external clients can connect but never receive a reply.
+;; tcp-server-raw transfers callback events through the runtime IO ring. A
+;; long-lived DB daemon must poll the ring or clients never receive replies.
 (defn afj-tcp-event-drain-loop []
   (if (deref afj-tcp-event-loop-active)
     (do
-      (fl-event-drain)
+      (fl-yield 10)
       (set-timeout (fn [] (afj-tcp-event-drain-loop)) 10))
     nil))
 
@@ -623,17 +622,25 @@
                 (if (and (not (nil? body))
                          (afj-tcp-wal-record-valid? pending body)
                          (afj-tcp-wal-record-valid? event body))
-                  (afj-tcp-replay-commit-body body)
+                  (do (afj-tcp-replay-commit-body body))
                   nil))
                 nil))
             (afj-tcp-recover-lines lines (+ index 1) prepared final-newline)))))))
+
+(defn afj-tcp-nonempty-lines [lines index result]
+  (if (>= index (count lines))
+    result
+    (let [line (get lines index)]
+      (if (= (str_trim line) "")
+        (afj-tcp-nonempty-lines lines (+ index 1) result)
+        (afj-tcp-nonempty-lines lines (+ index 1) (conj result line))))))
 
 (defn afj-tcp-rebuild-all-indexes []
   (reset! engine-indexes {})
   (doseq [table (keys (deref engine-catalog))]
     (let [definition (get (deref engine-catalog) table)]
       (if (not (afj-tcp-lazy-placeholder? definition))
-        (engine-rebuild-table-indexes table definition)
+        (do (engine-rebuild-table-indexes table definition))
         nil)))
   true)
 
@@ -687,10 +694,11 @@
       (if (or (> (count raw) replay-start)
               (and (= (count raw) 0) (not prefix-ok)))
         (try
-          (afj-tcp-recover-lines
-            (filter (fn [line] (not (= (str_trim line) "")))
-                    (str_lines (str-slice raw replay-start (count raw))))
-            0 (atom {}) (str_ends_with raw "\n"))
+          (let [lines (afj-tcp-nonempty-lines
+                        (str_lines (str-slice raw replay-start (count raw)))
+                        0 [])]
+            (afj-tcp-recover-lines
+              lines 0 (atom {}) (str_ends_with raw "\n")))
           (catch [error] (throw "WAL_CORRUPT")))
         nil))
     true))
@@ -908,12 +916,14 @@
       (if (or (nil? table) (nil? definition))
         nil
         (if (= (get ast "type") "insert")
-          (afj-tcp-append-insert-row-versions
-            table
-            (if (has-key? ast "rows") (get ast "rows") [(get ast "row")])
-            revision)
-          (afj-tcp-record-table-row-versions
-            table (get definition "rows" []) revision))))
+          (do
+            (afj-tcp-append-insert-row-versions
+              table
+              (if (has-key? ast "rows") (get ast "rows") [(get ast "row")])
+              revision))
+          (do
+            (afj-tcp-record-table-row-versions
+              table (get definition "rows" []) revision)))))
     (let [seen (atom {})]
       (doseq [ast asts]
         (let [table (get ast "table")
@@ -1826,7 +1836,7 @@
                 (afj-tcp-send conn {"ok" false "error" "UNKNOWN_REQUEST"}))))))))))))))
 
 (defn afj-db-tcp-handler [event conn payload peer]
-  (if (= event "connect")
+  (if (or (= event "accept") (= event "connect"))
     (swap! afj-tcp-peer-addresses assoc conn peer)
     (if (= event "data")
     (let [combined (str (get (deref afj-tcp-buffers) conn "") payload)]

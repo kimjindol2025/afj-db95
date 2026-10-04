@@ -85,7 +85,7 @@ function loginPayload(user, token) {
 async function main() {
   const port = await freePort();
   const child = spawn(process.execPath,
-    ["/root/freelang-surface-v0-clean-ek3qo2/v11/bootstrap.js", "run", "tests/native-mariadb-daemon.fls"],
+    [require("./runtime-bootstrap"), "run", "tests/native-mariadb-daemon.fls"],
     { cwd: path.join(__dirname, ".."), env: { ...process.env, AFJ_NATIVE_MARIADB_PORT: String(port) },
       stdio: ["ignore", "pipe", "pipe"] });
   let output = "";

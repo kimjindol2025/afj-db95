@@ -11,12 +11,10 @@
       host (env-or "AFJ_NATIVE_TLS_HOST" "127.0.0.1")
       started (tcp-server-tls port "native-tls-echo-handler" cert key host)]
   (if (= started "ok")
-    (do
-      (println "afj-db95 native TLS STARTED")
-      (set-timeout
-        (fn []
-          (do
-            (tcp-server-stop port)
-            (println "afj-db95 native TLS STOPPED")))
-        30000))
+  (do
+    (println "afj-db95 native TLS STARTED")
+    (loop [running true]
+      (if running
+        (do (fl-yield 10) (recur true))
+        nil)))
     (throw (str "native TLS start failed: " started))))

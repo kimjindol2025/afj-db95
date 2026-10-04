@@ -28,8 +28,13 @@ transaction 복구 기준선을 제공합니다. 아직 공식 1.0 DB는 아닙�
 ## 실행
 
 ```text
-node /root/freelang-surface-v0-clean-ek3qo2/v11/bootstrap.js run src/afj-db95.fls
+export FREELANG_BOOTSTRAP=/path/to/freelang-afj/bootstrap.js
+node "$FREELANG_BOOTSTRAP" run src/afj-db95.fls
 ```
+
+회귀 테스트와 릴리스 gate도 같은 `FREELANG_BOOTSTRAP`을 사용합니다. 런타임
+저장소의 bootstrap을 명시해야 하며, 특정 개발 서버의 절대 경로에는 의존하지
+않습니다.
 
 TCP 운영 인스턴스는 환경변수로 인스턴스별 WAL 위치와 root 비밀번호를 지정할 수
 있습니다. 미설정 시 기존 개발 기본값을 사용합니다.

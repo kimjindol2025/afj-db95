@@ -5,9 +5,11 @@ set -u
 # This wrapper supplies the one capability that the script cannot model by
 # itself: terminating the real runtime process between WAL writes and replay.
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
-bootstrap="/root/freelang-surface-v0-clean-ek3qo2/v11/bootstrap.js"
-wal="/tmp/afj-db95-fault-injection.wal"
-log_file="$(mktemp /tmp/afj-db95-fault-injection.XXXXXX.log)"
+bootstrap="${FREELANG_BOOTSTRAP:-}"
+if [ -z "$bootstrap" ] || [ ! -f "$bootstrap" ]; then echo "Set FREELANG_BOOTSTRAP to the FreeLang runtime bootstrap.js path" >&2; exit 2; fi
+temp_dir="$(mktemp -d /tmp/afj-db95-fault-injection.XXXXXX)"
+wal="$temp_dir/fault-injection.wal"
+log_file="$temp_dir/fault-injection.log"
 writer_pid=""
 
 cleanup() {
@@ -15,7 +17,7 @@ cleanup() {
     kill -KILL "$writer_pid" 2>/dev/null || true
     wait "$writer_pid" 2>/dev/null || true
   fi
-  rm -f "$wal" "$log_file"
+  rm -rf "$temp_dir"
 }
 trap cleanup EXIT
 

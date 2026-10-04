@@ -1,5 +1,5 @@
 ;; Client used after a server restart; it must observe the committed WAL row.
-(load "/root/kilo-freelang/projects/afj-db95/src/tcp-server.fls")
+(load "../src/tcp-server.fls")
 
 (let [login (json-parse
               (tcp-send "127.0.0.1" afj-tcp-port

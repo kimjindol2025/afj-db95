@@ -86,7 +86,7 @@ async function main() {
   const port = await freePort();
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "afj-db95-ip-rate-"));
   const daemon = spawn(process.execPath,
-    ["/root/freelang-surface-v0-clean-ek3qo2/v11/bootstrap.js", "run", "tests/tcp-daemon.fls"],
+    [require("./runtime-bootstrap"), "run", "tests/tcp-daemon.fls"],
     { cwd: path.join(__dirname, ".."), env: { ...process.env,
       AFJ_DB_MODE: "development", AFJ_DB_PORT: String(port),
       AFJ_DB_BIND_HOST: "127.0.0.1", AFJ_DB_WAL: path.join(directory, "tcp.wal"),

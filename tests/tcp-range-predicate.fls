@@ -1,5 +1,5 @@
 ;; AFJ-014 range predicate / phantom validation.
-(load "/root/kilo-freelang/projects/afj-db95/src/tcp-server.fls")
+(load "../src/tcp-server.fls")
 
 (server-start "tcp-range-predicate-test")
 (reset! engine-catalog {})

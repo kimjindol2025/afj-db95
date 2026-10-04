@@ -1,7 +1,7 @@
 ;; AFJ-DB page-backed index snapshot contract.
 
-(load "/root/kilo-freelang/projects/afj-db95/src/afj-db95.fls")
-(load "/root/kilo-freelang/projects/afj-db95/src/btree.fls")
+(load "../src/afj-db95.fls")
+(load "../src/btree.fls")
 
 (defn persistent-index-build [rows column index row-id]
   (if (>= row-id (count rows))

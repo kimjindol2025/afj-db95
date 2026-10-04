@@ -1,21 +1,27 @@
 #!/usr/bin/env bash
 set -u
 
-project="/root/kilo-freelang/projects/afj-db95"
-runtime="/root/freelang-surface-v0-clean-ek3qo2/v11"
+project="$(cd "$(dirname "$0")/.." && pwd)"
+bootstrap="${FREELANG_BOOTSTRAP:-}"
+if [ -z "$bootstrap" ] || [ ! -f "$bootstrap" ]; then
+  echo "Set FREELANG_BOOTSTRAP to the FreeLang runtime bootstrap.js path" >&2
+  exit 2
+fi
+cd "$project"
 corpus="$project/tests/mariadb-compatibility-expanded.sql"
 client="$project/tests/mariadb-afj-differential-client.fls"
 report="$project/docs/mariadb-afj-differential-report.md"
-data_dir="/tmp/afj-db95-differential-mariadb"
-socket="/tmp/afj-db95-differential.sock"
-pid_file="/tmp/afj-db95-differential.pid"
-log_file="/tmp/afj-db95-differential-mariadb.log"
-afj_log="/tmp/afj-db95-differential-afj.log"
-maria_result="/tmp/afj-db95-differential-mariadb.tsv"
-afj_result="/tmp/afj-db95-differential-afj.log"
-tcp_wal="/tmp/afj-db95-tcp-catalog.wal"
-error_result="/tmp/afj-db95-differential-errors.log"
-isolation_result="/tmp/afj-db95-differential-isolation.log"
+temp_dir="$(mktemp -d /tmp/afj-db95-differential.XXXXXX)"
+data_dir="$temp_dir/mariadb"
+socket="$temp_dir/mariadb.sock"
+pid_file="$temp_dir/mariadb.pid"
+log_file="$temp_dir/mariadb.log"
+afj_log="$temp_dir/afj-daemon.log"
+maria_result="$temp_dir/mariadb.tsv"
+afj_result="$temp_dir/afj-result.log"
+tcp_wal="$temp_dir/tcp.wal"
+error_result="$temp_dir/errors.log"
+isolation_result="$temp_dir/isolation.log"
 
 cleanup() {
   mariadb-admin --no-defaults --socket="$socket" -uroot shutdown >/dev/null 2>&1 || true
@@ -23,16 +29,15 @@ cleanup() {
   if [ -n "${afj_pid:-}" ]; then kill "$afj_pid" 2>/dev/null || true; fi
   wait "${maria_pid:-}" 2>/dev/null || true
   wait "${afj_pid:-}" 2>/dev/null || true
-  rm -rf "$data_dir" "$socket" "$pid_file" "$log_file" "$afj_log" "$maria_result" "$afj_result" "$tcp_wal" "$error_result" "$isolation_result"
+  rm -rf "$temp_dir"
 }
 trap cleanup EXIT
 
-rm -rf "$data_dir" "$socket" "$pid_file" "$log_file" "$afj_log" "$maria_result" "$afj_result" "$tcp_wal" "$error_result" "$isolation_result"
 mariadb-install-db --no-defaults --auth-root-authentication-method=normal \
-  --datadir="$data_dir" >/tmp/afj-db95-differential-install.log 2>&1
+  --datadir="$data_dir" >"$temp_dir/install.log" 2>&1
 mariadbd --no-defaults --datadir="$data_dir" --socket="$socket" \
   --pid-file="$pid_file" --log-error="$log_file" --skip-networking --user=root \
-  >/tmp/afj-db95-differential-mariadbd.out 2>&1 &
+  >"$temp_dir/mariadbd.out" 2>&1 &
 maria_pid=$!
 
 ready=0
@@ -48,18 +53,18 @@ if [ "$ready" -ne 1 ]; then
   exit 1
 fi
 
-node "$runtime/bootstrap.js" run "$project/tests/tcp-daemon.fls" >"$afj_log" 2>&1 &
+node "$bootstrap" run "$project/tests/tcp-daemon.fls" >"$afj_log" 2>&1 &
 afj_pid=$!
 sleep 2
 
 mariadb --no-defaults --batch --raw --socket="$socket" -uroot \
   <"$corpus" >"$maria_result" 2>&1
 maria_rc=$?
-timeout 30s node "$runtime/bootstrap.js" run "$client" >"$afj_result" 2>&1
+timeout 30s node "$bootstrap" run "$client" >"$afj_result" 2>&1
 afj_rc=$?
-node "$runtime/bootstrap.js" run "$project/src/engine.fls" >"$error_result" 2>&1
+node "$bootstrap" run "$project/src/engine.fls" >"$error_result" 2>&1
 error_rc=$?
-node "$runtime/bootstrap.js" run "$project/src/transaction-engine.fls" >"$isolation_result" 2>&1
+node "$bootstrap" run "$project/src/transaction-engine.fls" >"$isolation_result" 2>&1
 isolation_rc=$?
 
 statement_count=$(grep -o ';' "$corpus" | wc -l | tr -d ' ')

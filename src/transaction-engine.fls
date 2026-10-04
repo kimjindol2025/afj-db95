@@ -2,7 +2,7 @@
 ;; The transaction boundary owns a catalog snapshot and delegates SQL changes
 ;; to the engine. Rollback restores the exact pre-transaction catalog.
 
-(load "/root/kilo-freelang/projects/afj-db95/src/engine.fls")
+(load "../src/engine.fls")
 
 (define tx-engine-state (atom {"status" "idle" "snapshot" nil "savepoints" {}}))
 

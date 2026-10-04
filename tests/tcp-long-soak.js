@@ -14,7 +14,7 @@ function connectClient(port) { return new Promise((resolve, reject) => { const s
 function percentile(values, fraction) { const sorted = [...values].sort((a, b) => a - b); return sorted[Math.min(sorted.length - 1, Math.floor((sorted.length - 1) * fraction))] || 0; }
 async function main() {
   const port = await freePort(); const directory = fs.mkdtempSync(path.join(os.tmpdir(), "afj-db95-soak-")); const wal = path.join(directory, "tcp.wal");
-  const child = spawn(process.execPath, ["/root/freelang-surface-v0-clean-ek3qo2/v11/bootstrap.js", "run", "tests/tcp-soak-daemon.fls"], { cwd: path.join(__dirname, ".."), env: { ...process.env, AFJ_DB_MODE: "development", AFJ_DB_PORT: String(port), AFJ_DB_BIND_HOST: "127.0.0.1", AFJ_DB_WAL: wal, AFJ_DB_RATE_MAX_REQUESTS: "10000", AFJ_DB_RATE_WINDOW_MS: "60000" }, stdio: ["ignore", "pipe", "pipe"] });
+  const child = spawn(process.execPath, [require("./runtime-bootstrap"), "run", "tests/tcp-soak-daemon.fls"], { cwd: path.join(__dirname, ".."), env: { ...process.env, AFJ_DB_MODE: "development", AFJ_DB_PORT: String(port), AFJ_DB_BIND_HOST: "127.0.0.1", AFJ_DB_WAL: wal, AFJ_DB_RATE_MAX_REQUESTS: "10000", AFJ_DB_RATE_WINDOW_MS: "60000" }, stdio: ["ignore", "pipe", "pipe"] });
   const clients = [];
   try {
     await waitForOutput(child, "TCP soak server STARTED"); await waitForPort(port);

@@ -1,6 +1,6 @@
 ;; AFJ-012/016 large-corpus regression. This is bounded and deterministic;
 ;; long-duration production soak remains a separate gate.
-(load "/root/kilo-freelang/projects/afj-db95/src/engine.fls")
+(load "../src/engine.fls")
 
 (defn make-rows [index total rows]
   (if (>= index total)

@@ -1,5 +1,5 @@
 ;; Stable TCP error-code mapping contract.
-(load "/root/kilo-freelang/projects/afj-db95/src/tcp-server.fls")
+(load "../src/tcp-server.fls")
 
 (let [known (afj-tcp-error-code-message
               "[engine] UNIQUE_VIOLATION: email")

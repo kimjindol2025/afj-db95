@@ -1,5 +1,5 @@
 ;; TCP transaction staging contract: uncommitted writes stay private.
-(load "/root/kilo-freelang/projects/afj-db95/src/tcp-server.fls")
+(load "../src/tcp-server.fls")
 
 (server-start "transaction-isolation-test")
 (reset! engine-catalog {})

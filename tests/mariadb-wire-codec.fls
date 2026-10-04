@@ -1,10 +1,16 @@
 ;; AFJ-010 packet framing and length-encoded string regression.
-(load "/root/kilo-freelang/projects/afj-db95/src/mariadb-wire.fls")
-(define body (utf8-encode "SELECT 1"))
+(load "../src/mariadb-wire.fls")
+(define body (afj-utf8-encode "SELECT 1"))
 (define frame (mariadb-packet 7 body))
-(if (and (mariadb-packet-complete? frame)
+(define utf8-check (= (afj-utf8-decode-strict (afj-utf8-encode "한글🙂")) "한글🙂"))
+(define invalid-utf8-rejected
+  (try
+    (do (afj-utf8-decode-strict (buf-u8 255)) false)
+    (catch [error] (= (error_message error) "INVALID_UTF8"))))
+(if (and utf8-check invalid-utf8-rejected
+         (mariadb-packet-complete? frame)
          (= (mariadb-packet-sequence frame) 7)
-         (= (utf8-decode-strict (mariadb-packet-payload frame)) "SELECT 1")
+         (= (afj-utf8-decode-strict (mariadb-packet-payload frame)) "SELECT 1")
          (= (buf-len (mariadb-lenenc-string "Kim")) 4))
   (println "afj-db95 MariaDB packet codec PASS")
   (throw "MARIADB_PACKET_CODEC_FAILED"))

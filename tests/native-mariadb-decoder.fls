@@ -1,5 +1,5 @@
 ;; AFJ-010 native COM_STMT_EXECUTE decoder unit.
-(load "/root/kilo-freelang/projects/afj-db95/src/mariadb-wire.fls")
+(load "../src/mariadb-wire.fls")
 (define payload
   (buf-concat [(buf-u8 23) (buf_u32le 1) (buf-u8 0)
                (buf-u8 0) (buf-u8 0) (buf-u8 0) (buf-u8 0)
@@ -21,7 +21,7 @@
 (define login-state (mariadb-wire-login-state full-login-payload))
 (define auth-login-payload
   (buf-concat [full-login-payload
-               (utf8-encode "root") (buf-u8 0) (buf-u8 20)
+               (afj-utf8-encode "root") (buf-u8 0) (buf-u8 20)
                (buf-u8 1) (buf-u8 2) (buf-u8 3) (buf-u8 4) (buf-u8 5)
                (buf-u8 6) (buf-u8 7) (buf-u8 8) (buf-u8 9) (buf-u8 10)
                (buf-u8 11) (buf-u8 12) (buf-u8 13) (buf-u8 14) (buf-u8 15)
