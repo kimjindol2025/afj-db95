@@ -424,6 +424,8 @@
     composite lookup, 동일 pair 거부와 서로 다른 tenant의 동일 email 허용을
     `PASS`로 검증했다. 구분자 연결 토큰이 같은 서로 다른 pair도 UNIQUE로
     허용되고 각각의 equality lookup이 원본 컬럼을 재검증하는 회귀를 추가했다.
+    복합키에 NULL 구성요소가 포함된 중복 행은 허용하는 SQL UNIQUE 의미도
+    `tests/compound-index.fls`로 확인한다.
   - 추가 range 증거: 내부 B+Tree node의 최소·최대 키로 불필요한 child를
     건너뛰는 bounded range traversal을 연결했다. `tests/btree-range.fls`가
     `>`, `<=`, `<>` 결과와 경계 key를 재귀 tree fixture에서 검증한다.

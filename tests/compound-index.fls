@@ -53,3 +53,17 @@
            (= (get (first (get right "rows")) "email") "b|c"))
     (println "afj-db95 composite delimiter equality PASS")
     (throw "composite equality confused delimiter-bearing values")))
+
+;; SQL UNIQUE indexes allow multiple rows when any component is NULL.
+(execute-ast {"type" "insert" "table" "compound_users"
+              "row" {"tenant" nil "email" "nullable@example.test"}})
+(execute-ast {"type" "insert" "table" "compound_users"
+              "row" {"tenant" nil "email" "nullable@example.test"}})
+(let [rows (get (get (deref engine-catalog) "compound_users") "rows")
+      nullable (filter (fn [row]
+                         (and (nil? (get row "tenant"))
+                              (= (get row "email") "nullable@example.test")))
+                       rows)]
+  (if (= (count nullable) 2)
+    (println "afj-db95 composite unique NULL semantics PASS")
+    (throw "composite UNIQUE rejected duplicate rows containing NULL")))
