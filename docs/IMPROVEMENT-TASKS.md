@@ -494,16 +494,19 @@
     `Release status: BLOCKED`가 정확하다. FreeLang native TLS/peer-address runtime
     patch는 별도 공식 Forgejo feature branch에 게시했고 해당 브랜치의 전체 fast
     suite 및 AFJ-DB loopback 상호운용 검증을 통과했다.
-  - 최신 실행 기록: 2026-10-04 20:48 UTC, `docs/release-gate-report.md`에서
-    `52 PASS, 0 FAIL, 4 BLOCKED`. 300초 TCP soak도 실제 실행해 PASS했고,
+  - 최신 실행 기록: 2026-10-04 21:07 UTC, `docs/release-gate-report.md`에서
+    `54 PASS, 0 FAIL, 2 BLOCKED`. Ubuntu 저장소의 MariaDB 10.11.14 client-core를
+    `/tmp`에만 내려받아 추출했고 시스템에는 설치하지 않았다. 표준 MariaDB CLI
+    wire unit 및 FreeLang 서버 loopback 검증이 PASS했다. 300초 TCP soak도 PASS했고,
     동일 후보의 별도 계측 실행은 `writes=752`, `2.51/s`, p95 `4055ms`, max
     `5225ms`였다. 현재 BLOCKED는 FreeLang 정적 검사기의 literal-symbol 매개변수
-    arity 오탐 2건과 MariaDB CLI 부재에 따른 표준 클라이언트 테스트 2건이다.
-    독립 Node wire client의 handshake/query/prepared/auth 검증은 PASS했다.
-    새 clean checkout의 quick gate도 `51 PASS, 0 FAIL, 5 BLOCKED`로 재현했다.
-    따라서 clean-checkout 재현성은 확인됐고, 남은 BLOCKED는 정적 검사 오탐,
-    MariaDB CLI 미설치, DDL/schema MVCC 전체 세분화, composite-key range의
-    type-order/collation, MariaDB TLS/auth-plugin 범위다.
+    arity 오탐 2건이다. 독립 Node wire client와 표준 MariaDB client 양쪽에서
+    handshake/query/prepared/auth 검증을 했다. clean checkout에서 표준 CLI를
+    포함한 quick gate도 `53 PASS, 0 FAIL, 3 BLOCKED`로 재현했다(5분 soak 제외).
+    clean-checkout 재현성과 MariaDB CLI 상호운용성은 확인됐고, 남은 정적
+    BLOCKED는 literal-symbol 매개변수에 대한 FreeLang checker arity 오탐이다.
+    릴리스의 설계 차단 항목은 DDL/schema MVCC
+    세분화, composite-key type-order/collation 및 MariaDB TLS/auth-plugin 범위다.
 
 ### P3 — 문서와 릴리스 추적
 

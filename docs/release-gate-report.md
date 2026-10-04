@@ -1,8 +1,8 @@
 # AFJ-016 Release Gate Report
 
-- Generated: 2026-10-04T20:48:00Z
+- Generated: 2026-10-04T21:07:14Z
 - Repository: afj-db95
-- Automated cases: 52 PASS, 0 FAIL, 4 BLOCKED
+- Automated cases: 54 PASS, 0 FAIL, 2 BLOCKED
 - Release status: **BLOCKED**
 
 ## Automated evidence
@@ -57,8 +57,8 @@
 | native TLS mTLS/reload | PASS | |
 | production native TLS integration | PASS | |
 | TLS adapter handshake/reload | PASS | |
-| MariaDB wire packet unit (CLI client) | BLOCKED | mariadb CLI is not installed |
-| MariaDB standard-client adapter smoke | BLOCKED | mariadb CLI is not installed |
+| MariaDB wire packet unit (CLI client) | PASS | |
+| MariaDB standard-client adapter smoke | PASS | |
 | MariaDB mysql_native_password SHA-1 | PASS | |
 | MariaDB wire prepared | PASS | |
 | native MariaDB independent wire client | PASS | |
