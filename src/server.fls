@@ -1,0 +1,12 @@
+;; AFJ-DB95 long-running TCP server entrypoint.
+;; Run from the repository root with the FreeLang AFJ bootstrap.
+(load "tcp-server.fls")
+
+(let [started (start-afj-tcp)]
+  (if (get started "ok")
+    ;; start-afj-tcp schedules the IO-ring drain loop on the host event loop.
+    ;; Do not poll fl-yield synchronously here: it blocks Node's event loop and
+    ;; starves timers used for graceful shutdown and session cleanup.
+    (println (str "afj-db95 server READY "
+                  (get started "host") ":" (get started "port")))
+    (throw (str "AFJ_DB_SERVER_START_FAILED: " (json_str started)))))

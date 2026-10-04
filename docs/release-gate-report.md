@@ -1,6 +1,6 @@
 # AFJ-016 Release Gate Report
 
-- Generated: 2026-10-04T21:30:06Z
+- Generated: 2026-10-04T21:57:56Z
 - Repository: afj-db95
 - Automated cases: 56 PASS, 0 FAIL, 0 BLOCKED
 - Release status: **BLOCKED**
@@ -21,7 +21,7 @@
 | bounded B+Tree range | PASS | |
 | compound unique index | PASS | |
 | compound predicate range | PASS | |
-| TCP concurrency | PASS | |
+| TCP service entrypoint, concurrency and WAL restart | PASS | Main entrypoint, 8 clients, graceful shutdown, restart and WAL recovery |
 | TCP 5m performance envelope | PASS | |
 | backup smoke | PASS | |
 | backup restore soak | PASS | |
@@ -74,6 +74,9 @@ remain release blockers until separately implemented and verified:
 
 - DDL/schema-level MVCC granularity and complete composite-key type-order and
   collation compatibility.
+- The native MariaDB wire listener is still a standalone test harness and is
+  not started by src/server.fls; existing MariaDB-client checks do not prove
+  that the main durable/authenticated service supports that protocol.
 - MariaDB TLS and authentication-plugin variants beyond mysql_native_password;
   the standard MariaDB CLI checks are BLOCKED when the CLI is unavailable.
 - The 5-minute performance envelope passed in this run. If explicitly skipped

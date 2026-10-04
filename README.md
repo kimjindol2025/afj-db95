@@ -7,8 +7,14 @@ FreeLang Script의 공식 관계형 데이터베이스를 목표로 하는 프�
 
 ## 현재 단계
 
-현재는 실행 가능한 관계형 코어, JSON Lines WAL, fd_fsync 기반 durable
-transaction 복구 기준선을 제공합니다. 아직 공식 1.0 DB는 아닙니다.
+현재는 실행 가능한 관계형 코어, 장기 실행 TCP JSON 서버, JSON Lines WAL,
+fd_fsync 기반 durable transaction 복구 기준선을 제공합니다. 실제 서비스 진입점은
+`src/server.fls`이며, `src/afj-db95.fls`는 엔진 smoke 테스트입니다. 아직 공식
+1.0 DB는 아닙니다.
+
+MariaDB binary-wire 구현과 표준 MariaDB client 검증은 현재 독립 테스트 서버에서
+수행됩니다. 해당 wire listener는 `src/server.fls`에 아직 통합되지 않았으므로,
+위 TCP JSON 서버 실행만으로 MariaDB client 접속을 지원한다고 간주하면 안 됩니다.
 
 - 테이블 생성
 - 행 삽입
@@ -29,6 +35,23 @@ transaction 복구 기준선을 제공합니다. 아직 공식 1.0 DB는 아닙�
 
 ```text
 export FREELANG_BOOTSTRAP=/path/to/freelang-afj/bootstrap.js
+AFJ_DB_MODE=development \
+AFJ_DB_BIND_HOST=127.0.0.1 \
+AFJ_DB_PORT=43995 \
+AFJ_DB_WAL=/tmp/afj-db95-dev.wal \
+node "$FREELANG_BOOTSTRAP" run src/server.fls
+```
+
+이 명령은 TCP JSON 데이터베이스 서버를 실제로 시작하고, 인증된
+`{"type":"shutdown","token":"..."}` 요청까지 실행되는 장기 프로세스입니다.
+이 예시는 로컬 개발용입니다. 운영 모드는 아래 필수 경로·비밀번호 정책을
+충족하도록 환경을 먼저 구성해야 하며, 비밀번호를 셸 기록이나 프로세스 목록에
+남기지 말고 승인된 secret 주입 방식을 사용하세요. 외부 공개는 TLS와 접근제어를
+별도 검증하기 전까지 금지합니다.
+
+엔진 자체의 짧은 파일/WAL smoke는 별도로 실행합니다.
+
+```bash
 node "$FREELANG_BOOTSTRAP" run src/afj-db95.fls
 ```
 

@@ -503,6 +503,19 @@
     오탐이었다. runtime 수정은 FreeLang 공식 Forgejo feature branch에 푸시했다.
     전체 자동 회귀가 통과해도 제품 릴리스는 BLOCKED: DDL/schema MVCC 세분화,
     composite-key type-order/collation 및 MariaDB TLS/auth-plugin 확장이 미완료다.
+  - 진입점 실검증: `src/server.fls`를 추가해 `start-afj-tcp`를 실제 장기 실행
+    서버로 노출했다. 기존 TCP 동시성 smoke가 test-only daemon 대신 이 진입점을
+    실행하고, 8개 독립 클라이언트의 인증·동시 쓰기 후 인증된 shutdown, 재기동,
+    동일 WAL에서 8행 복구를 검증한다. 초기 실제 종료 시도에서 메인 스크립트의
+    동기 `fl-yield` 루프가 호스트 타이머를 굶겨 shutdown callback이 실행되지 않는
+    원인을 확인했다. 메인 루프를 제거하고 서버의 예약형 IO-ring drain을 사용해
+    수정했다. 전체 게이트 2026-10-04 21:57 UTC `56 PASS, 0 FAIL, 0 BLOCKED`,
+    후속 독립 TCP E2E(21:59 UTC)도 PASS했다. 검증 종료 시 task-owned 서버와
+    loopback listener가 남지 않았다.
+  - 범위 재확인: 현재 `src/server.fls`는 TCP JSON 서버이며 native MariaDB wire
+    listener는 별도 test harness다. 표준 MariaDB client smoke는 wire test path의
+    증거이지 주 서비스의 MariaDB 호환 증거가 아니므로 release gate에 별도 blocker로
+    기록했다. `AFJ-016`은 계속 BLOCKED다.
 
 ### P3 — 문서와 릴리스 추적
 

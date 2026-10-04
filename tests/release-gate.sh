@@ -66,7 +66,7 @@ run_case "persistent recursive B+Tree" node "$bootstrap" run "$repo_root/tests/p
 run_case "bounded B+Tree range" node "$bootstrap" run "$repo_root/tests/btree-range.fls"
 run_case "compound unique index" node "$bootstrap" run "$repo_root/tests/compound-index.fls"
 run_case "compound predicate range" node "$bootstrap" run "$repo_root/tests/compound-range.fls"
-run_case "TCP concurrency" node "$repo_root/tests/tcp-concurrency-smoke.js"
+run_case "TCP service entrypoint, concurrency and WAL restart" node "$repo_root/tests/tcp-concurrency-smoke.js"
 if [ "${AFJ_RELEASE_GATE_SKIP_LONG_SOAK:-0}" = "1" ]; then
   run_blocked_case "TCP 5m performance envelope" "deferred by AFJ_RELEASE_GATE_SKIP_LONG_SOAK=1"
 else
@@ -141,6 +141,9 @@ remain release blockers until separately implemented and verified:
 
 - DDL/schema-level MVCC granularity and complete composite-key type-order and
   collation compatibility.
+- The native MariaDB wire listener is still a standalone test harness and is
+  not started by src/server.fls; existing MariaDB-client checks do not prove
+  that the main durable/authenticated service supports that protocol.
 - MariaDB TLS and authentication-plugin variants beyond mysql_native_password;
   the standard MariaDB CLI checks are BLOCKED when the CLI is unavailable.
 - The bounded 5-minute performance envelope. If explicitly skipped for a quick

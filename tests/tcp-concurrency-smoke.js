@@ -91,24 +91,38 @@ function waitForPort(port) {
   });
 }
 
+function waitForExit(child, timeoutMs = 5000, diagnostic = "") {
+  if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`server did not exit after shutdown: ${diagnostic}`)), timeoutMs);
+    child.once("exit", () => { clearTimeout(timer); resolve(); });
+  });
+}
+
 async function main() {
   const port = await freePort();
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "afj-db95-concurrency-"));
   const walPath = path.join(directory, "tcp.wal");
   const bootstrap = require("./runtime-bootstrap");
-  const daemon = spawn(process.execPath, [bootstrap, "run", "tests/tcp-daemon.fls"], {
+  const daemon = spawn(process.execPath, [bootstrap, "run", "src/server.fls"], {
     cwd: path.join(__dirname, ".."),
     env: { ...process.env, AFJ_DB_MODE: "development", AFJ_DB_PORT: String(port),
-      AFJ_DB_BIND_HOST: "127.0.0.1", AFJ_DB_WAL: walPath },
+      AFJ_DB_BIND_HOST: "127.0.0.1", AFJ_DB_WAL: walPath,
+      AFJ_DB_ROOT_PASSWORD: "entrypoint-test-password" },
     stdio: ["ignore", "pipe", "pipe"],
   });
   const clients = [];
+  let restartedDaemon = null;
+  let restartedClient = null;
+  let daemonOutput = "";
+  daemon.stdout.on("data", (chunk) => { daemonOutput += chunk.toString(); });
+  daemon.stderr.on("data", (chunk) => { daemonOutput += chunk.toString(); });
   try {
-    await waitForOutput(daemon, "TCP server STARTED");
+    await waitForOutput(daemon, "afj-db95 server READY");
     await waitForPort(port);
     for (let index = 0; index < 8; index += 1) {
       const client = await connectClient(port);
-      const login = await client.request({ type: "login", user: "root", password: "development-only" });
+      const login = await client.request({ type: "login", user: "root", password: "entrypoint-test-password" });
       assert.strictEqual(login.ok, true);
       client.token = login.token;
       clients.push(client);
@@ -128,10 +142,51 @@ async function main() {
     });
     assert.strictEqual(selected.ok, true);
     assert.strictEqual(selected.result.rows.length, 8);
+    const shutdown = await clients[0].request({ type: "shutdown", token: clients[0].token });
+    assert.strictEqual(shutdown.ok, true);
+    assert.strictEqual(shutdown.status, "stopping");
+    await waitForExit(daemon, 5000, daemonOutput);
+
+    let restartOutput = "";
+    restartedDaemon = spawn(process.execPath, [bootstrap, "run", "src/server.fls"], {
+      cwd: path.join(__dirname, ".."),
+      env: { ...process.env, AFJ_DB_MODE: "development", AFJ_DB_PORT: String(port),
+        AFJ_DB_BIND_HOST: "127.0.0.1", AFJ_DB_WAL: walPath,
+        AFJ_DB_ROOT_PASSWORD: "entrypoint-test-password" },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    restartedDaemon.stdout.on("data", (chunk) => { restartOutput += chunk.toString(); });
+    restartedDaemon.stderr.on("data", (chunk) => { restartOutput += chunk.toString(); });
+    await waitForOutput(restartedDaemon, "afj-db95 server READY");
+    await waitForPort(port);
+    restartedClient = await connectClient(port);
+    const restartLogin = await restartedClient.request({
+      type: "login", user: "root", password: "entrypoint-test-password",
+    });
+    assert.strictEqual(restartLogin.ok, true);
+    const recovered = await restartedClient.request({
+      type: "query", token: restartLogin.token,
+      statement: "SELECT * FROM concurrent_users",
+    });
+    assert.strictEqual(recovered.ok, true);
+    assert.strictEqual(recovered.result.rows.length, 8, "WAL rows must survive a real server restart");
+    const restartShutdown = await restartedClient.request({
+      type: "shutdown", token: restartLogin.token,
+    });
+    assert.strictEqual(restartShutdown.ok, true);
+    await waitForExit(restartedDaemon, 5000, restartOutput);
     console.log("afj-db95 TCP concurrency PASS");
   } finally {
     for (const client of clients) client.socket.destroy();
-    daemon.kill("SIGTERM");
+    if (restartedClient) restartedClient.socket.destroy();
+    if (daemon.exitCode === null && daemon.signalCode === null) {
+      daemon.kill("SIGTERM");
+      await waitForExit(daemon);
+    }
+    if (restartedDaemon && restartedDaemon.exitCode === null && restartedDaemon.signalCode === null) {
+      restartedDaemon.kill("SIGTERM");
+      await waitForExit(restartedDaemon);
+    }
     fs.rmSync(directory, { recursive: true, force: true });
   }
 }
