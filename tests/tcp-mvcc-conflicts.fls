@@ -143,3 +143,34 @@
            (= (get reader-commit "error") "TX_CONFLICT"))
     (println "afj-db95 MVCC schema-read conflict PASS")
     (throw "schema change did not invalidate stale predicate reader")))
+
+;; ALTER TABLE changes the schema without a row-version. A transaction whose
+;; predicate read used the old definition must still fail commit validation.
+(afj-tcp-commit-ast
+  {"type" "create-table" "table" "schema_alter_guard"
+   "schema" {"columns" [{"name" "id" "type" "INTEGER"
+                            "nullable" false "primary" true}]
+              "primary-key" "id" "unique-columns" []}})
+(afj-tcp-commit-ast
+  {"type" "insert" "table" "schema_alter_guard" "rows" [{"id" "1"}]})
+(swap! afj-tcp-sessions assoc "mvcc-alter-reader" "root")
+(swap! afj-tcp-sessions assoc "mvcc-alter-writer" "root")
+(afj-tcp-begin-level "mvcc-alter-reader" "REPEATABLE READ")
+(afj-tcp-begin-level "mvcc-alter-writer" "REPEATABLE READ")
+(let [read-before (afj-tcp-query
+                    {"token" "mvcc-alter-reader"
+                     "statement" "SELECT * FROM schema_alter_guard WHERE id=1"})
+      alter (afj-tcp-query
+              {"token" "mvcc-alter-writer"
+               "statement" "ALTER TABLE schema_alter_guard ADD COLUMN note TEXT"})
+      writer-commit (afj-tcp-commit "mvcc-alter-writer")
+      reader-write (afj-tcp-query
+                     {"token" "mvcc-alter-reader"
+                      "statement" "INSERT INTO quota_a (id) VALUES (3)"})
+      reader-commit (afj-tcp-commit "mvcc-alter-reader")]
+  (if (and (get read-before "ok") (get alter "ok")
+           (get writer-commit "ok") (get reader-write "ok")
+           (not (get reader-commit "ok"))
+           (= (get reader-commit "error") "TX_CONFLICT"))
+    (println "afj-db95 MVCC ALTER schema conflict PASS")
+    (throw "ALTER TABLE did not invalidate stale predicate reader")))

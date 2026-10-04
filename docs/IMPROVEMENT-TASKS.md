@@ -367,9 +367,10 @@
     테이블을 다른 트랜잭션이 DROP해도 stale reader의 write가 커밋되는 결함을
     확인했다. `afj-tcp-predicate-conflict?`가 row-version 이력뿐 아니라 snapshot과
     현재 카탈로그의 테이블 존재 여부·schema를 비교하도록 수정했고,
-    `tests/tcp-mvcc-conflicts.fls`의 DROP TABLE 동시성 회귀에서 `TX_CONFLICT`를
-    검증했다. 복합 DDL 배치·테이블 세대 및 더 넓은 스키마 동시성 매트릭스 검증은
-    아직 남아 있어 DDL/schema MVCC 완료로 간주하지 않는다.
+    `tests/tcp-mvcc-conflicts.fls`의 DROP TABLE 및 ALTER TABLE ADD COLUMN 뒤 stale
+    reader commit 동시성 회귀에서 `TX_CONFLICT`를 검증했다. 복합 DDL 배치·테이블
+    세대 및 더 넓은 스키마 동시성 매트릭스 검증은 아직 남아 있어 DDL/schema
+    MVCC 완료로 간주하지 않는다.
   - 복합 인덱스 범위 조회에서 decimal INTEGER 문자열 정렬과 `|` 구분자 충돌로
     행이 누락되는 문제를 재현했다. 복합키 토큰의 타입·이스케이프·정렬 규약이
     확정되기 전에는 안전한 페이지 pruning을 할 수 없어, 복합 범위 조건은 B+Tree
@@ -477,13 +478,14 @@
     그러나 MariaDB production hardening, DDL/schema 단위의 완전한 MVCC 세분화,
     executor lazy catalog eviction을
     명시적으로 감지해 release status를 `BLOCKED`로 유지한다.
-  - 최신 실행 기록: `docs/release-gate-report.md`의 2026-10-04 실행,
-    자동 케이스 `53 PASS, 0 FAIL, 3 BLOCKED`. 이번 matrix soak는 1초이며,
-    300초 성능 soak는 앞서 별도로 통과한 결과를 유지한다. MariaDB CLI 부재로
-    표준 클라이언트 3개 케이스가 BLOCKED다. DROP/schema predicate 충돌 경로는
-    이번 단계에서 보완했지만, DDL/schema MVCC 전체 매트릭스와 전체 composite-key
-    type/order compatibility가 미완성이므로 `Release status: BLOCKED`가 정확하다.
-    native runtime patch의 공유 원격 커밋도 clean-checkout 재현성 조건으로 남아 있다.
+  - 최신 실행 기록: `docs/release-gate-report.md`의 2026-10-04 UTC 실행,
+    자동 케이스 `56 PASS, 0 FAIL, 0 BLOCKED`. MariaDB 10.11 CLI를 임시로 추출해
+    wire unit, standard-client, native wire 3개 케이스를 실제 loopback으로 통과시켰다.
+    시스템 패키지는 설치하지 않았다. matrix soak는 1초이고, 별도 300초 soak는
+    `writes=1408`, `4.69/s`, p95 `1962ms`, max `2415ms`로 통과했다. MariaDB CLI
+    부재 blocker는 해소했지만, DDL/schema MVCC 전체 매트릭스와 composite-key
+    type/order compatibility, 원본 runtime tree에 반영되지 않은 native patch 및
+    clean-checkout 재현성은 남아 `Release status: BLOCKED`가 정확하다.
 
 ### P3 — 문서와 릴리스 추적
 
