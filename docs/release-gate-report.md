@@ -1,6 +1,6 @@
 # AFJ-016 Release Gate Report
 
-- Generated: 2026-10-04T15:08:12Z
+- Generated: 2026-10-04T15:16:58Z
 - Repository: afj-db95
 - FreeLang runtime bootstrap: /tmp/gh-passfix.Uf7hVz/freelang-afj-runtime-candidate/bootstrap.js
 - Runtime native TCP/TLS patch: isolated test source; not yet committed to the original runtime worktree
