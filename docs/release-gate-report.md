@@ -85,10 +85,14 @@ do not waive an incomplete architectural condition:
   - Per-table schema-generation revisions now distinguish identical-schema
     DROP/CREATE from ordinary row updates. Stale row-level writers and
     predicate readers conflict after schema or generation changes. The revision
-    map is persisted in the catalog checkpoint and reconstructed from WAL;
-    `tests/tcp-mvcc-conflicts.fls`, `tests/tcp-row-version-checkpoint.fls`, and
-    `tests/tcp-row-version-recovery.fls` cover those paths. Broader DDL batches
-    and schema concurrency combinations remain incomplete.
+  map is persisted in the catalog checkpoint and reconstructed from WAL;
+  `tests/tcp-mvcc-conflicts.fls`, `tests/tcp-row-version-checkpoint.fls`, and
+  `tests/tcp-row-version-recovery.fls` cover those paths. Broader DDL batches
+  and schema concurrency combinations remain incomplete.
+  - A focused multi-table DDL batch regression now combines same-schema
+    DROP/CREATE on one table with ALTER on another and verifies that an older
+    transaction reading both cannot commit an unrelated write. The broader
+    DDL concurrency matrix is still incomplete.
   - TCP table-page manifest, page-backed B+Tree leaf-index persistence/reopen,
     bounded pin/flush pool, lazy table eviction, lazy transaction snapshot and
     durable row-version checkpoint recovery pass; page-level row execution and

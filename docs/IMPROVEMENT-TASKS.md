@@ -370,7 +370,10 @@
     `tests/tcp-mvcc-conflicts.fls`의 DROP TABLE 및 ALTER TABLE ADD COLUMN 뒤 stale
     reader commit 동시성 회귀에서 `TX_CONFLICT`를 검증했다. 복합 DDL 배치·테이블
     세대 및 더 넓은 스키마 동시성 매트릭스 검증은 아직 남아 있어 DDL/schema
-    MVCC 완료로 간주하지 않는다.
+    MVCC 완료로 간주하지 않는다. `tests/tcp-mvcc-conflicts.fls`에는 다중 테이블
+    트랜잭션에서 한 테이블을 동일 스키마로 재생성하고 다른 테이블을 ALTER한 뒤,
+    두 테이블을 읽은 stale reader의 unrelated write가 `TX_CONFLICT`로 거부되는
+    배치 회귀도 추가했다.
   - 복합 인덱스 범위 조회에서 decimal INTEGER 문자열 정렬과 `|` 구분자 충돌로
     행이 누락되는 문제를 재현했다. 복합 equality/UNIQUE 토큰은 타입 태그와 길이
     접두부를 사용하는 충돌 없는 tuple 인코딩으로 보강했으며,

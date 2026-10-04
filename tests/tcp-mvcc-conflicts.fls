@@ -310,3 +310,49 @@
     (println "afj-db95 MVCC same-schema generation write conflict PASS")
     (throw (str "same-schema generation accepted a stale write: "
                 (json_str stale-commit)))))
+
+;; A transaction may batch schema changes across tables. Every schema read by
+;; an older transaction must be invalidated, even when its own write is elsewhere.
+(afj-tcp-commit-asts
+  [{"type" "create-table" "table" "ddl_batch_recreate"
+    "schema" {"columns" [{"name" "id" "type" "INTEGER"
+                             "nullable" false "primary" true}]
+               "primary-key" "id" "unique-columns" []}}
+   {"type" "insert" "table" "ddl_batch_recreate" "rows" [{"id" "1"}]}
+   {"type" "create-table" "table" "ddl_batch_alter"
+    "schema" {"columns" [{"name" "id" "type" "INTEGER"
+                             "nullable" false "primary" true}]
+               "primary-key" "id" "unique-columns" []}}
+   {"type" "insert" "table" "ddl_batch_alter" "rows" [{"id" "1"}]}])
+(swap! afj-tcp-sessions assoc "mvcc-ddl-batch-reader" "root")
+(swap! afj-tcp-sessions assoc "mvcc-ddl-batch-writer" "root")
+(afj-tcp-begin-level "mvcc-ddl-batch-reader" "REPEATABLE READ")
+(let [read-recreated (afj-tcp-query
+                       {"token" "mvcc-ddl-batch-reader"
+                        "statement" "SELECT * FROM ddl_batch_recreate WHERE id=1"})
+      read-altered (afj-tcp-query
+                     {"token" "mvcc-ddl-batch-reader"
+                      "statement" "SELECT * FROM ddl_batch_alter WHERE id=1"})
+      _ (afj-tcp-begin-level "mvcc-ddl-batch-writer" "REPEATABLE READ")
+      dropped (afj-tcp-query
+                {"token" "mvcc-ddl-batch-writer"
+                 "statement" "DROP TABLE ddl_batch_recreate"})
+      recreated (afj-tcp-query
+                  {"token" "mvcc-ddl-batch-writer"
+                   "statement" "CREATE TABLE ddl_batch_recreate (id INTEGER PRIMARY KEY)"})
+      altered (afj-tcp-query
+                {"token" "mvcc-ddl-batch-writer"
+                 "statement" "ALTER TABLE ddl_batch_alter ADD COLUMN note TEXT"})
+      writer-commit (afj-tcp-commit "mvcc-ddl-batch-writer")
+      unrelated-write (afj-tcp-query
+                        {"token" "mvcc-ddl-batch-reader"
+                         "statement" "INSERT INTO quota_a (id) VALUES (991)"})
+      reader-commit (afj-tcp-commit "mvcc-ddl-batch-reader")]
+  (if (and (get read-recreated "ok") (get read-altered "ok")
+           (get dropped "ok") (get recreated "ok") (get altered "ok")
+           (get writer-commit "ok") (get unrelated-write "ok")
+           (not (get reader-commit "ok"))
+           (= (get reader-commit "error") "TX_CONFLICT"))
+    (println "afj-db95 MVCC multi-table DDL batch conflict PASS")
+    (throw (str "batched schema changes missed a stale reader: "
+                (json_str reader-commit)))))
