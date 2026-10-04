@@ -1,10 +1,10 @@
 ;; AFJ-DB95 line-delimited JSON TCP server.
 ;; The FreeLang runtime owns sockets; this module owns protocol, auth and SQL.
 
-(load "/root/kilo-freelang/projects/afj-db95/src/engine.fls")
-(load "/root/kilo-freelang/projects/afj-db95/src/sql-core.fls")
-(load "/root/kilo-freelang/projects/afj-db95/src/protocol.fls")
-(load "/root/kilo-freelang/projects/afj-db95/src/auth.fls")
+(load "../src/engine.fls")
+(load "../src/sql-core.fls")
+(load "../src/protocol.fls")
+(load "../src/auth.fls")
 
 (define afj-tcp-port
   (let [raw (env-get "AFJ_DB_PORT")]
@@ -939,14 +939,25 @@
 
 (defn afj-tcp-predicate-conflict? [tx-state]
   (let [snapshot (get tx-state "read-revisions")
+        snapshot-catalog (get tx-state "snapshot")
+        current-catalog (deref engine-catalog)
         conflict (atom false)]
     (doseq [ast (get tx-state "read-predicates")]
       (let [table (get ast "table")
             table-snapshot (get snapshot table 0)
-            table-revision (get (deref afj-tcp-table-revisions) table 0)]
+            table-revision (get (deref afj-tcp-table-revisions) table 0)
+            old-definition (get snapshot-catalog table)
+            current-definition (get current-catalog table)
+            schema-changed (or
+              (not (= (nil? old-definition) (nil? current-definition)))
+              (and (not (nil? old-definition))
+                   (not (nil? current-definition))
+                   (not (= (get old-definition "schema")
+                           (get current-definition "schema")))))]
         (if (not (= table-snapshot table-revision))
-          (if (afj-tcp-row-version-predicate-conflict?
-                table (get ast "where") table-snapshot)
+          (if (or schema-changed
+                  (afj-tcp-row-version-predicate-conflict?
+                    table (get ast "where") table-snapshot))
             (reset! conflict true)
             nil)
           nil)))

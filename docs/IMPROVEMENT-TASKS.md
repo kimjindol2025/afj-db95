@@ -359,7 +359,19 @@
     lock, stale second commit 회귀를 `tests/tcp-mvcc-conflicts.fls`에서
     검증했다. DML은 snapshot 대비 변경 row 집합을 비교해 겹치지 않는 동시
     변경을 병합하고, 같은 row는 `TX_CONFLICT`로 거부한다. predicate/index range
-    validation도 별도 회귀로 검증한다. DDL/schema 변경의 세분화는 남은 제한이다.
+    validation도 별도 회귀로 검증한다. 추가 재현에서 predicate reader가 읽은
+    테이블을 다른 트랜잭션이 DROP해도 stale reader의 write가 커밋되는 결함을
+    확인했다. `afj-tcp-predicate-conflict?`가 row-version 이력뿐 아니라 snapshot과
+    현재 카탈로그의 테이블 존재 여부·schema를 비교하도록 수정했고,
+    `tests/tcp-mvcc-conflicts.fls`의 DROP TABLE 동시성 회귀에서 `TX_CONFLICT`를
+    검증했다. 복합 DDL 배치·테이블 세대 및 더 넓은 스키마 동시성 매트릭스 검증은
+    아직 남아 있어 DDL/schema MVCC 완료로 간주하지 않는다.
+  - 복합 인덱스 범위 조회에서도 decimal INTEGER 문자열 정렬 때문에 `id > 2`가
+    `10`을 놓치는 문제를 100행·다중 리프 회귀로 재현했다. `src/engine.fls`는
+    INTEGER component를 숫자로 비교하고 물리 문자열 순서가 안전한 경계가
+    아닐 때 page pruning을 생략한다. `tests/compound-range.fls`에서 98개 기대 행과
+    `100` 포함을 확인했다. 키 토큰의 완전한 타입 태깅·이스케이프 및 collation
+    호환성은 여전히 후속 범위다.
   - 추가 증거: `src/mvcc.fls`에 commit revision과 transaction snapshot을
     연결한 immutable row version, update 시 구버전 tombstone·신버전 생성,
     rollback 시 미커밋 version 제거를 구현했다. `tests/mvcc-row-version.fls`에서
@@ -455,9 +467,13 @@
     그러나 MariaDB production hardening, DDL/schema 단위의 완전한 MVCC 세분화,
     executor lazy catalog eviction을
     명시적으로 감지해 release status를 `BLOCKED`로 유지한다.
-  - 최신 실행 기록: `2026-10-04T01:35:57Z`, 자동 케이스 `54 PASS, 0 FAIL`.
-    범위 predicate conflict와 durable row-version checkpoint 회귀도 통과했지만, 위 구조적 차단 항목 때문에
-    exit status 2와 `Release status: BLOCKED`를 유지했다.
+  - 최신 실행 기록: `docs/release-gate-report.md`의 2026-10-04 실행,
+    자동 케이스 `53 PASS, 0 FAIL, 3 BLOCKED`. 이번 matrix soak는 1초이며,
+    300초 성능 soak는 앞서 별도로 통과한 결과를 유지한다. MariaDB CLI 부재로
+    표준 클라이언트 3개 케이스가 BLOCKED다. DROP/schema predicate 충돌 경로는
+    이번 단계에서 보완했지만, DDL/schema MVCC 전체 매트릭스와 전체 composite-key
+    type/order compatibility가 미완성이므로 `Release status: BLOCKED`가 정확하다.
+    native runtime patch의 공유 원격 커밋도 clean-checkout 재현성 조건으로 남아 있다.
 
 ### P3 — 문서와 릴리스 추적
 

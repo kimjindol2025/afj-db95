@@ -1,5 +1,5 @@
 ;; AFJ-014 phantom and write-skew/lost-update regression.
-(load "/root/kilo-freelang/projects/afj-db95/src/tcp-server.fls")
+(load "../src/tcp-server.fls")
 
 (server-start "tcp-mvcc-conflicts-test")
 (reset! engine-catalog {})
@@ -17,6 +17,14 @@
                 "schema" {"columns" [{"name" "id" "type" "INTEGER"
                                          "nullable" false "primary" true}]
                            "primary-key" "id" "unique-columns" []}}))
+
+(afj-tcp-commit-ast
+  {"type" "create-table" "table" "schema_guard"
+   "schema" {"columns" [{"name" "id" "type" "INTEGER"
+                            "nullable" false "primary" true}]
+              "primary-key" "id" "unique-columns" []}})
+(afj-tcp-commit-ast
+  {"type" "insert" "table" "schema_guard" "rows" [{"id" "1"}]})
 
 (afj-tcp-commit-ast
   {"type" "create-table" "table" "versioned_accounts"
@@ -110,3 +118,28 @@
            (= (count (get (get quota-b "result") "rows")) 0))
     (println "afj-db95 MVCC phantom/write-skew PASS")
     (throw "MVCC conflict validation failed")))
+
+;; A predicate read depends on the table definition as well as its rows.
+;; Schema changes have no row-version record, so the reader must not commit
+;; writes based on a stale schema snapshot.
+(swap! afj-tcp-sessions assoc "mvcc-schema-reader" "root")
+(swap! afj-tcp-sessions assoc "mvcc-schema-writer" "root")
+(afj-tcp-begin-level "mvcc-schema-reader" "REPEATABLE READ")
+(afj-tcp-begin-level "mvcc-schema-writer" "REPEATABLE READ")
+(let [read-before (afj-tcp-query
+                    {"token" "mvcc-schema-reader"
+                     "statement" "SELECT * FROM schema_guard WHERE id=1"})
+      drop (afj-tcp-query
+              {"token" "mvcc-schema-writer"
+               "statement" "DROP TABLE schema_guard"})
+      writer-commit (afj-tcp-commit "mvcc-schema-writer")
+      reader-write (afj-tcp-query
+                     {"token" "mvcc-schema-reader"
+                      "statement" "INSERT INTO quota_a (id) VALUES (2)"})
+      reader-commit (afj-tcp-commit "mvcc-schema-reader")]
+  (if (and (get read-before "ok") (get drop "ok")
+           (get writer-commit "ok") (get reader-write "ok")
+           (not (get reader-commit "ok"))
+           (= (get reader-commit "error") "TX_CONFLICT"))
+    (println "afj-db95 MVCC schema-read conflict PASS")
+    (throw "schema change did not invalidate stale predicate reader")))

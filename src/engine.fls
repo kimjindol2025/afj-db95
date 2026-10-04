@@ -219,24 +219,46 @@
 (defn engine-composite-key-part [key index]
   (get (str_split (str key) "|") index))
 
-(defn engine-btree-composite-child-may-match? [child operator value part]
+(defn engine-schema-column-type [columns name]
+  (if (= (count columns) 0)
+    "TEXT"
+    (if (= (get (first columns) "name") name)
+      (get (first columns) "type" "TEXT")
+      (engine-schema-column-type (rest columns) name))))
+
+(defn engine-composite-component-value [value type]
+  (if (= type "INTEGER")
+    (if (number? value) value (str-to-num (str value)))
+    value))
+
+(defn engine-composite-range-test? [component operator value type]
+  (let [left (engine-composite-component-value component type)
+        right (engine-composite-component-value value type)]
+    (if (= operator ">") (> left right)
+      (if (= operator ">=") (>= left right)
+        (if (= operator "<") (< left right)
+          (if (= operator "<=") (<= left right)
+            (not (= left right))))))))
+
+(defn engine-btree-composite-child-may-match? [child operator value part type]
   (if (or (= operator "!=") (= operator "<>"))
     true
+    (if (= type "INTEGER")
+      ;; Physical composite tokens are string-sorted. That order is not a
+      ;; safe min/max bound for decimal integer components, so visit every
+      ;; child and apply the typed comparison at the leaves.
+      true
     (let [first-key (engine-composite-key-part
                       (engine-btree-node-first-key child) part)
           last-key (engine-composite-key-part
                      (engine-btree-node-last-key child) part)]
-      (if (= operator ">")
-        (> last-key value)
-        (if (= operator ">=")
-          (>= last-key value)
-          (if (= operator "<")
-            (< first-key value)
-            (if (= operator "<=")
-              (<= first-key value)
-              true)))))))
+      (if (or (= operator ">") (= operator ">="))
+        (engine-composite-range-test? last-key operator value type)
+        (if (or (= operator "<") (= operator "<="))
+          (engine-composite-range-test? first-key operator value type)
+          true))))))
 
-(defn engine-btree-composite-range-entries [node operator value part]
+(defn engine-btree-composite-range-entries [node operator value part type]
   ;; Composite page indexes are ordered by the complete token, but a range on
   ;; a leading component can still prune whole child pages using that
   ;; component's min/max key. The executor rechecks the complete predicate
@@ -246,22 +268,14 @@
     (filter (fn [entry]
               (let [component (engine-composite-key-part
                                 (get entry "key") part)]
-                (if (= operator ">")
-                  (> component value)
-                  (if (= operator ">=")
-                    (>= component value)
-                    (if (= operator "<")
-                      (< component value)
-                      (if (= operator "<=")
-                        (<= component value)
-                        (not (= component value))))))))
+                (engine-composite-range-test? component operator value type)))
             (get node "entries" []))
     (arr_flatten
       (map (fn [child]
              (if (engine-btree-composite-child-may-match?
-                   child operator value part)
+                   child operator value part type)
                (engine-btree-composite-range-entries
-                 child operator value part)
+                 child operator value part type)
                []))
            (get node "children" [])))))
 
@@ -850,7 +864,10 @@
                        (get index "btree")
                        (get first-predicate "operator")
                        (get first-predicate "value")
-                       0)))
+                       0
+                       (engine-schema-column-type
+                         (get (get table "schema" {}) "columns" [])
+                         (get first-predicate "column")))))
         (let [first-index (get (deref engine-indexes)
                              (str name "." (get first-predicate "column")))
             second-index (get (deref engine-indexes)
@@ -1116,7 +1133,7 @@
     (throw "ALTER TABLE did not add column")))
 
 ;; Parser-to-engine smoke: literal SQL values must reach the real executor.
-(load "/root/kilo-freelang/projects/afj-db95/src/sql-core.fls")
+(load "../src/sql-core.fls")
 (execute-ast (parse-sql "CREATE TABLE literal_users"))
 (execute-ast (parse-sql "INSERT INTO literal_users (id,name) VALUES (1,'Kim')"))
 (execute-ast (parse-sql "UPDATE literal_users SET name='Lee' WHERE id=1"))

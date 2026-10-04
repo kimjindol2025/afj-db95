@@ -1,6 +1,6 @@
 ;; AFJ-013 compound predicate range planning contract.
-(load "/root/kilo-freelang/projects/afj-db95/src/engine.fls")
-(load "/root/kilo-freelang/projects/afj-db95/src/sql-core.fls")
+(load "../src/engine.fls")
+(load "../src/sql-core.fls")
 
 (reset! engine-catalog {})
 (reset! engine-indexes {})
@@ -39,6 +39,23 @@
            (= (get (first (get query "rows")) "id") 4))
     (println "afj-db95 multi-index intersection PASS")
     (throw "multi-index intersection failed")))
+
+;; Numeric components arrive from the SQL parser as decimal strings. Composite
+;; range candidates must compare them numerically, not lexicographically.
+(execute-ast (parse-sql
+  "CREATE TABLE numeric_compound (id INTEGER, tenant TEXT, UNIQUE (id,tenant))"))
+(execute-ast {"type" "insert" "table" "numeric_compound"
+              "rows" (map (fn [id] {"id" (str id) "tenant" "x"})
+                         (range 1 101))})
+(let [query (execute-ast
+              (parse-sql
+                "SELECT * FROM numeric_compound WHERE id > 2 AND tenant = 'x'"))
+      rows (get query "rows")]
+  (if (and (= (get query "plan") "index-range-scan")
+           (= (count rows) 98)
+           (any? (fn [row] (= (get row "id") "100")) rows))
+    (println "afj-db95 composite numeric range PASS")
+    (throw "composite numeric range lost rows due to string key ordering")))
 
 ;; Use two persisted leaf pages with mixed tenant values. The leading
 ;; component range must visit the second page, then recheck tenant so the
