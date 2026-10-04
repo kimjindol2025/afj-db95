@@ -293,6 +293,10 @@
     기록했다. p95 15000ms, max 20000ms envelope를 통과했으며, release gate는
     `AFJ_SOAK_MS=300000`과 동일한 임계값을 사용한다. 이 수치는 현재 모바일
     런타임에서의 bounded envelope이며 무제한 처리량 보장을 의미하지 않는다.
+  - 최신 성능 증거: 증분 단일·복합 인덱스 maintenance와 WAL prepare/commit
+    단일 fsync 경로를 적용한 동일 harness가 300초 동안 `writes=464`,
+    `throughput=1.55/s`, `p95=5909ms`, `max=7266ms`를 기록했다. 동일한
+    p95/max envelope를 통과했으며, 이전 측정 대비 누적 지연이 줄었다.
   - 추가 증거: TCP catalog page 경로에 bounded page pool을 연결했다.
     `AFJ_DB_PAGE_POOL_PAGES` 상한, pin된 page 보호, dirty→flushed 전환과
     unpinned LRU eviction을 `tests/tcp-catalog-pages.fls`에서 검증했고,
@@ -338,7 +342,8 @@
   - 진행 증거: TCP `BEGIN` transaction은 working catalog/index를 전역 상태와
     분리하고 COMMIT 때만 게시한다. `tests/transaction-isolation.fls`에서 다른
     세션의 dirty read 차단, rollback 제거, commit 게시를 검증했다. 명시적
-    phantom·write skew 검증과 완전한 MVCC는 아직 남아 있다. 또한
+    phantom·write skew 검증과 row-level MVCC 충돌 병합을 추가했다. DDL/schema 변경은
+    안전한 table-level 충돌 판정을 유지한다. 또한
     `SAVEPOINT`, `ROLLBACK TO SAVEPOINT`, `RELEASE SAVEPOINT`를 TCP SQL 경로에
     연결하고, `tests/tcp-savepoint.fls`에서 앞선 staged 변경만 보존하는 부분
     롤백과 커밋 게시를 검증했다.
@@ -352,8 +357,9 @@
     수정해 table lock을 우회하는 write skew/lost update도 `TX_CONFLICT`로
     rollback한다. REPEATABLE READ phantom 비가시성, SERIALIZABLE predicate
     lock, stale second commit 회귀를 `tests/tcp-mvcc-conflicts.fls`에서
-    검증했다. 완전한 row-version MVCC와 predicate/index range validation은
-    아직 남아 있다.
+    검증했다. DML은 snapshot 대비 변경 row 집합을 비교해 겹치지 않는 동시
+    변경을 병합하고, 같은 row는 `TX_CONFLICT`로 거부한다. predicate/index range
+    validation도 별도 회귀로 검증한다. DDL/schema 변경의 세분화는 남은 제한이다.
   - 추가 증거: `src/mvcc.fls`에 commit revision과 transaction snapshot을
     연결한 immutable row version, update 시 구버전 tombstone·신버전 생성,
     rollback 시 미커밋 version 제거를 구현했다. `tests/mvcc-row-version.fls`에서
@@ -410,9 +416,9 @@
     equality와 range 연산자를 함께 보존하고, executor가 사용 가능한 단일
     인덱스 후보를 먼저 좁힌 뒤 전체 predicate를 재검증한다. `tests/compound-range.fls`
     에서 `id > 1 AND tenant = 'a'`와 역순 조건의 `index-range-scan`, 결과 행,
-    경계 조건을 검증한다. 서로 다른 두 단일 인덱스 후보의 row-id 교집합도
-    같은 회귀에서 검증한다. page-level composite B+Tree range traversal은
-    여전히 남는다.
+    경계 조건을 검증한다. 서로 다른 두 단일 인덱스 후보의 row-id 교집합과
+    두 leaf page를 가진 composite B+Tree의 leading-component child pruning도
+    같은 회귀에서 검증한다.
   - 추가 durable 증거: catalog page checkpoint의 table page에 immutable
     `row-version-history`와 manifest의 `commit-revision`·`table-revisions`를
     함께 저장하고, recovery가 WAL tail 없이도 이전 snapshot과 최신 snapshot을
@@ -446,8 +452,8 @@
   - 검증: clean checkout 재현 빌드·전체 회귀·릴리스 후보 smoke.
   - 추가 증거: `tests/release-gate.sh`가 syntax/WAL/backup/auth/TCP/MVCC/TLS
     회귀를 실행해 `docs/release-gate-report.md`에 결과를 기록한다.
-    그러나 MariaDB production hardening, 완전한 row-version MVCC,
-    index-range granular validation, executor lazy catalog eviction을
+    그러나 MariaDB production hardening, DDL/schema 단위의 완전한 MVCC 세분화,
+    executor lazy catalog eviction을
     명시적으로 감지해 release status를 `BLOCKED`로 유지한다.
   - 최신 실행 기록: `2026-10-04T01:35:57Z`, 자동 케이스 `54 PASS, 0 FAIL`.
     범위 predicate conflict와 durable row-version checkpoint 회귀도 통과했지만, 위 구조적 차단 항목 때문에

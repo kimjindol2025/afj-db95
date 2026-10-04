@@ -105,11 +105,11 @@ do not waive an incomplete architectural condition:
 
 - Native TLS listener, external bind policy, CA/mTLS, certificate rotation and failure-injection regressions pass; no blocker remains in this area.
 - MariaDB wire-level support includes a native FreeLang Script listener for handshake, COM_QUERY and COM_STMT_PREPARE/EXECUTE/CLOSE; 32-bit capability intersection, max-packet-size/charset parsing, mysql_native_password SHA-1 challenge verification, standard-client and native prepared INT, NULL, string, and multi-parameter smoke pass. TLS/auth-plugin variants beyond mysql_native_password remain incomplete.
-- Complete row-version MVCC and multi-index/page-level composite range validation are not complete; row-version WAL replay, compound predicate candidate validation, range predicate conflict, and TCP transaction process-kill recovery cases are covered above.
+- Complete row-version MVCC is not complete; row-version WAL replay, compound predicate candidate validation, multi-index intersection, page-level composite range traversal, range predicate conflict, and TCP transaction process-kill recovery cases are covered above.
   - TCP table-page manifest, page-backed B+Tree leaf-index persistence/reopen,
     bounded pin/flush pool, lazy table eviction, lazy transaction snapshot and
     durable row-version checkpoint recovery pass; page-level row execution and
-    multi-index/compound range validation remain incomplete.
+    multi-index/compound range validation pass; complete row-version MVCC remains incomplete.
 - Large-corpus, high-concurrency, and the reproducible 5-minute performance envelope pass with p95/max latency thresholds; unrestricted duration beyond the bounded envelope is not claimed as a guarantee.
 
 The report must remain **BLOCKED** until each item has implementation evidence and a

@@ -39,3 +39,41 @@
            (= (get (first (get query "rows")) "id") 4))
     (println "afj-db95 multi-index intersection PASS")
     (throw "multi-index intersection failed")))
+
+;; Use two persisted leaf pages and verify the leading-component range prunes
+;; the first child instead of falling back to a full table scan.
+(let [rows [{"id" "1" "tenant" "a"}
+            {"id" "2" "tenant" "a"}
+            {"id" "3" "tenant" "a"}
+            {"id" "4" "tenant" "a"}]
+      schema {"columns" [{"name" "id" "type" "TEXT"
+                            "nullable" false}
+                           {"name" "tenant" "type" "TEXT"
+                            "nullable" false}]
+              "primary-key" nil "unique-columns" []
+              "unique-groups" [["id" "tenant"]]}
+      tree {"leaf" false "separators" ["3|a"]
+            "children" [{"leaf" true "entries"
+                          [{"key" "1|a" "row-id" 0}
+                           {"key" "2|a" "row-id" 1}]}
+                         {"leaf" true "entries"
+                          [{"key" "3|a" "row-id" 2}
+                           {"key" "4|a" "row-id" 3}]}]}
+      _catalog (reset! engine-catalog
+                        {"paged_compound" {"name" "paged_compound"
+                                           "rows" rows "columns" ["id" "tenant"]
+                                           "schema" schema}})
+      _set (reset! engine-indexes
+                   {"paged_compound.id|tenant"
+                    {"table" "paged_compound" "column" "id|tenant"
+                     "columns" ["id" "tenant"] "buckets" {}
+                     "btree" tree}})
+      query (execute-ast
+              {"type" "select" "columns" ["*"] "table" "paged_compound"
+               "where" {"and" [{"column" "id" "operator" ">" "value" "2"}
+                                  {"column" "tenant" "equals" "a"}]}})]
+  (if (and (not (get tree "leaf"))
+           (= (get query "plan") "index-range-scan")
+           (= (count (get query "rows")) 2))
+    (println "afj-db95 composite page range PASS")
+    (throw "composite page range failed")))

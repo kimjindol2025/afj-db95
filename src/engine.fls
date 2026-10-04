@@ -216,6 +216,55 @@
                []))
            (get node "children" [])))))
 
+(defn engine-composite-key-part [key index]
+  (get (str_split (str key) "|") index))
+
+(defn engine-btree-composite-child-may-match? [child operator value part]
+  (if (or (= operator "!=") (= operator "<>"))
+    true
+    (let [first-key (engine-composite-key-part
+                      (engine-btree-node-first-key child) part)
+          last-key (engine-composite-key-part
+                     (engine-btree-node-last-key child) part)]
+      (if (= operator ">")
+        (> last-key value)
+        (if (= operator ">=")
+          (>= last-key value)
+          (if (= operator "<")
+            (< first-key value)
+            (if (= operator "<=")
+              (<= first-key value)
+              true)))))))
+
+(defn engine-btree-composite-range-entries [node operator value part]
+  ;; Composite page indexes are ordered by the complete token, but a range on
+  ;; a leading component can still prune whole child pages using that
+  ;; component's min/max key. The executor rechecks the complete predicate
+  ;; after row materialization, so equal-prefix and mixed-type edge cases stay
+  ;; semantically safe.
+  (if (get node "leaf")
+    (filter (fn [entry]
+              (let [component (engine-composite-key-part
+                                (get entry "key") part)]
+                (if (= operator ">")
+                  (> component value)
+                  (if (= operator ">=")
+                    (>= component value)
+                    (if (= operator "<")
+                      (< component value)
+                      (if (= operator "<=")
+                        (<= component value)
+                        (not (= component value))))))))
+            (get node "entries" []))
+    (arr_flatten
+      (map (fn [child]
+             (if (engine-btree-composite-child-may-match?
+                   child operator value part)
+               (engine-btree-composite-range-entries
+                 child operator value part)
+               []))
+           (get node "children" [])))))
+
 (defn engine-build-btree [rows column row-id root]
   (if (>= row-id (count rows))
     root
@@ -223,6 +272,15 @@
       rows column (+ row-id 1)
       (engine-btree-root-insert
         root {"key" (get (get rows row-id) column) "row-id" row-id} 32))))
+
+(defn engine-build-composite-btree [rows columns row-id root]
+  (if (>= row-id (count rows))
+    root
+    (engine-build-composite-btree
+      rows columns (+ row-id 1)
+      (engine-btree-root-insert
+        root {"key" (engine-composite-key-token (get rows row-id) columns)
+              "row-id" row-id} 32))))
 
 (defn engine-build-btree-leaf [rows column row-id entries]
   (if (>= row-id (count rows))
@@ -264,7 +322,11 @@
     (doseq [columns (engine-index-groups table)]
       (let [index-name (engine-index-group-name columns)
             persisted (get (get table "page-indexes" {}) index-name)
-            tree persisted]
+            tree (if (nil? persisted)
+                   (engine-build-composite-btree
+                     (get table "rows") columns 0
+                     {"leaf" true "entries" []})
+                   persisted)]
         (reset! engine-indexes
                 (assoc (deref engine-indexes) (str name "." index-name)
                        {"table" name
@@ -275,34 +337,41 @@
                         "btree" tree}))))
     true))
 
+(defn engine-index-add-row-to-index [index key-token key row-id]
+  (let [buckets (get index "buckets")
+        existing (get buckets key-token)
+        bucket (if (nil? existing) [] existing)
+        tree (get index "btree")
+        updated-tree (if (nil? tree)
+                       nil
+                       (engine-btree-root-insert
+                         tree {"key" key "row-id" row-id} 32))]
+    (assoc (assoc index "buckets"
+                  (assoc buckets key-token (conj bucket row-id)))
+           "btree" updated-tree)))
+
 (defn engine-index-add-row [name table row row-id]
   (doseq [column (engine-index-columns table)]
     (let [index-key (str name "." column)
           index (get (deref engine-indexes) index-key)]
       (if (nil? index)
         nil
-        (let [buckets (get index "buckets")
-              key-token (str (get row column))
-              existing (get buckets key-token)
-              bucket (if (nil? existing) [] existing)]
-          (reset! engine-indexes
-              (assoc (deref engine-indexes) index-key
-                         (assoc index "buckets"
-                                (assoc buckets key-token (conj bucket row-id))))))))
+        (reset! engine-indexes
+                (assoc (deref engine-indexes) index-key
+                       (engine-index-add-row-to-index
+                         index (str (get row column))
+                         (get row column) row-id))))))
   (doseq [columns (engine-index-groups table)]
     (let [index-key (str name "." (engine-index-group-name columns))
           index (get (deref engine-indexes) index-key)]
       (if (nil? index)
         nil
-        (let [buckets (get index "buckets")
-              key-token (engine-composite-key-token row columns)
-              existing (get buckets key-token)
-              bucket (if (nil? existing) [] existing)]
+        (let [key-token (engine-composite-key-token row columns)]
           (reset! engine-indexes
                   (assoc (deref engine-indexes) index-key
-                         (assoc index "buckets"
-                                (assoc buckets key-token (conj bucket row-id)))))))))
-  ))
+                         (engine-index-add-row-to-index
+                           index key-token key-token row-id)))))))
+  true)
 
 (defn engine-index-add-rows [name table rows row-id]
   (if (>= row-id (count rows))
@@ -690,10 +759,11 @@
       (engine-validate-row (get table "schema" {}) row (deref candidate))
       (reset! candidate (conj (deref candidate) row)))
     (let [rows (deref candidate)
+          old-count (count existing)
           updated-table (dissoc (assoc table "rows" rows)
                                 "page-indexes")]
     (reset! engine-catalog (assoc (deref engine-catalog) name updated-table))
-    (engine-rebuild-table-indexes name updated-table)
+    (engine-index-add-rows name updated-table rows old-count)
     {"ok" true "type" "insert" "count" (count new-rows)})))
 
 ;; Keep the index lookup helper adjacent to the executor so the bootstrap
@@ -764,7 +834,18 @@
                         (engine-btree-root-get (get index "btree") token)
                         (get (get index "buckets") token []))]
           (map (fn [row-id] (get (get table "rows") row-id)) row-ids)))
-      (let [first-index (get (deref engine-indexes)
+      (if (and (not (nil? index))
+               (not (nil? (get index "btree")))
+               (= (get first-predicate "column")
+                  (first (get index "columns" [])))
+               (has-key? first-predicate "operator"))
+        (map (fn [entry] (get (get table "rows") (get entry "row-id")))
+             (engine-btree-composite-range-entries
+               (get index "btree")
+               (get first-predicate "operator")
+               (get first-predicate "value")
+               0))
+        (let [first-index (get (deref engine-indexes)
                              (str name "." (get first-predicate "column")))
             second-index (get (deref engine-indexes)
                               (str name "." (get second-predicate "column")))
@@ -783,7 +864,7 @@
         (filter (fn [row]
                   (and (engine-match? row first-predicate)
                        (engine-match? row second-predicate)))
-                candidate)))))
+                candidate))))))
 
 (defn engine-index-rows-safe [name table where]
   (if (has-key? where "and")

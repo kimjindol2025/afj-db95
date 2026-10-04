@@ -357,16 +357,19 @@
 (defn afj-tcp-error-code [error]
   (afj-tcp-error-code-message (error_message error)))
 
-(defn afj-tcp-wal-append [event]
+(defn afj-tcp-wal-append-sync [event sync?]
   (let [encoded (json_str event)]
     (if (> (count encoded) afj-tcp-wal-record-limit)
       (throw "WAL_RECORD_TOO_LARGE")
       nil)
     (let [fd (fd_open afj-tcp-wal "a")]
       (fd_write fd (str encoded "\n"))
-      (fd_fsync fd)
+      (if sync? (fd_fsync fd) nil)
       (fd_close fd))
     event))
+
+(defn afj-tcp-wal-append [event]
+  (afj-tcp-wal-append-sync event true))
 
 (defn afj-tcp-wal-legacy-field? [record field]
   (and (= afj-db-mode "development")
@@ -506,8 +509,9 @@
         (if (nil? index)
           nil
           (let [tree (if (nil? (get index "btree"))
-                       (engine-build-btree-leaf-columns
-                         (get table "rows") columns 0 [])
+                       (engine-build-composite-btree
+                         (get table "rows") columns 0
+                         {"leaf" true "entries" []})
                        (get index "btree"))]
             (reset! indexes
                     (assoc (deref indexes) index-name tree))))))
@@ -691,29 +695,62 @@
         body {"version" 1 "asts" asts}
         length (count (json_str body))
         checksum (sha256 (json_str body))]
-    (afj-tcp-wal-append {"type" "prepare" "tx" tx
-                          "version" 1 "length" length
-                          "body" body "checksum" checksum})
-    (afj-tcp-wal-append {"type" "commit" "tx" tx
-                          "version" 1 "length" length
-                          "checksum" checksum})
+    ;; The prepare record is never published by recovery without a matching
+    ;; commit marker. Flush it before closing, then fsync once on the commit
+    ;; marker; the latter durably flushes the complete append sequence while
+    ;; removing one syscall-heavy fsync from every autocommit write.
+    (afj-tcp-wal-append-sync {"type" "prepare" "tx" tx
+                               "version" 1 "length" length
+                               "body" body "checksum" checksum} false)
+    (afj-tcp-wal-append-sync {"type" "commit" "tx" tx
+                               "version" 1 "length" length
+                               "checksum" checksum} true)
     true))
 
 (defn afj-tcp-commit-asts [asts]
   ;; Rejected SQL must never acquire a committed WAL record. Validate against
   ;; a disposable catalog snapshot before publishing the unchanged WAL format.
   (let [result (atom nil)
-        catalog (json-parse (json_str (deref engine-catalog)))
-        indexes (json-parse (json_str (deref engine-indexes)))
-        databases (json-parse (json_str (deref engine-databases)))]
+        first-ast (first asts)
+        table-name (get first-ast "table")
+        fast-insert? (and (= (count asts) 1)
+                          (= (get first-ast "type") "insert")
+                          (not (nil? table-name)))
+        local-table? (and (= (count asts) 1)
+                          (not (nil? table-name))
+                          (or (= (get first-ast "type") "update")
+                              (= (get first-ast "type") "delete")
+                              (= (get first-ast "type") "alter-table")))
+        catalog (if fast-insert?
+                  nil
+                  (if local-table?
+                  (afj-tcp-copy (get (deref engine-catalog) table-name))
+                  (json-parse (json_str (deref engine-catalog)))))
+        indexes (if (or fast-insert? local-table?)
+                  nil
+                  (json-parse (json_str (deref engine-indexes))))
+        databases (if (or fast-insert? local-table?)
+                    nil
+                    (json-parse (json_str (deref engine-databases))))]
     (try
       (doseq [ast asts]
         (reset! result (execute-ast ast)))
       (catch [error]
         (do
-          (reset! engine-catalog catalog)
-          (reset! engine-indexes indexes)
-          (reset! engine-databases databases)
+          (if fast-insert?
+            ;; execute-insert validates every row before publishing the new
+            ;; table. A validation failure therefore leaves catalog/index state
+            ;; untouched, so the hot path needs no O(table-size) snapshot.
+            nil
+            (if local-table?
+            (do
+              (reset! engine-catalog
+                      (assoc (deref engine-catalog) table-name catalog))
+              (engine-rebuild-table-indexes table-name catalog))
+            (do
+              (reset! engine-catalog catalog)
+              (reset! engine-indexes indexes)
+              (reset! engine-databases databases))))
           (throw error))))
     ;; The successful validation execution already published the AST into the
     ;; live in-memory state. Replaying it after restoring the snapshots doubles
@@ -912,16 +949,117 @@
           nil)))
     (deref conflict)))
 
+(defn afj-tcp-row-map [rows]
+  (let [result (atom {})]
+    (doseq [row rows]
+      (swap! result assoc (afj-tcp-row-version-key row) row))
+    (deref result)))
+
+(defn afj-tcp-row-diff-keys [base rows]
+  (let [base-map (afj-tcp-row-map base)
+        row-map (afj-tcp-row-map rows)
+        changed (atom [])]
+    (doseq [key (keys base-map)]
+      (if (or (nil? (get row-map key))
+              (not (= (json_str (get base-map key))
+                      (json_str (get row-map key)))))
+        (swap! changed conj key)
+        nil))
+    (doseq [key (keys row-map)]
+      (if (nil? (get base-map key))
+        (swap! changed conj key)
+        nil))
+    (deref changed)))
+
+(defn afj-tcp-row-key-overlap? [left right]
+  (let [found (atom false)]
+    (doseq [left-key left]
+      (doseq [right-key right]
+        (if (= left-key right-key) (reset! found true) nil)))
+    (deref found)))
+
+(defn afj-tcp-row-write-ast? [ast]
+  (or (= (get ast "type") "insert")
+      (= (get ast "type") "update")
+      (= (get ast "type") "delete")))
+
 (defn afj-tcp-write-table-conflict? [tx-state]
-  (let [snapshot (get tx-state "read-revisions")
+  ;; Validate writes against row versions.  A transaction may now commit a
+  ;; disjoint row change on a table that advanced since its snapshot; schema
+  ;; changes and overlapping row changes still conflict.
+  (let [snapshot-catalog (get tx-state "snapshot")
+        working-catalog (get tx-state "working-catalog")
+        current-catalog (deref engine-catalog)
+        snapshot-revisions (get tx-state "read-revisions")
         conflict (atom false)]
     (doseq [ast (get tx-state "asts")]
-      (let [table (get ast "table")]
-        (if (not (= (get snapshot table 0)
-                    (get (deref afj-tcp-table-revisions) table 0)))
-          (reset! conflict true)
-          nil)))
+      (let [table-name (get ast "table")
+            snapshot-table (get snapshot-catalog table-name)
+            working-table (get working-catalog table-name)
+            current-table (get current-catalog table-name)
+            stale (not (= (get snapshot-revisions table-name 0)
+                          (get (deref afj-tcp-table-revisions) table-name 0)))]
+        (if (not stale)
+          nil
+          (if (and (afj-tcp-row-write-ast? ast)
+                   (not (nil? snapshot-table))
+                   (not (nil? working-table))
+                   (not (nil? current-table)))
+            (if (afj-tcp-row-key-overlap?
+                  (afj-tcp-row-diff-keys
+                    (get snapshot-table "rows" [])
+                    (get current-table "rows" []))
+                  (afj-tcp-row-diff-keys
+                    (get snapshot-table "rows" [])
+                    (get working-table "rows" [])))
+              (reset! conflict true)
+              nil)
+            (reset! conflict true)))))
     (deref conflict)))
+
+(defn afj-tcp-merge-table-rows [base current working]
+  (let [merged (atom (afj-tcp-row-map current))
+        base-map (afj-tcp-row-map base)
+        working-map (afj-tcp-row-map working)]
+    (doseq [key (keys base-map)]
+      (let [before (get base-map key)
+            after (get working-map key)]
+        (if (or (nil? after)
+                (not (= (json_str before) (json_str after))))
+          (if (nil? after)
+            (swap! merged dissoc key)
+            (swap! merged assoc key after))
+          nil)))
+    (doseq [key (keys working-map)]
+      (if (nil? (get base-map key))
+        (swap! merged assoc key (get working-map key))
+        nil))
+    (map (fn [key] (get (deref merged) key)) (keys (deref merged)))))
+
+(defn afj-tcp-merge-working-catalog [tx-state]
+  (let [snapshot-catalog (get tx-state "snapshot")
+        working-catalog (get tx-state "working-catalog")
+        merged-catalog (atom (afj-tcp-copy (deref engine-catalog)))
+        touched (atom [])]
+    (doseq [ast (get tx-state "asts")]
+      (let [table-name (get ast "table")]
+        (if (and (afj-tcp-row-write-ast? ast)
+                 (not (nil? table-name))
+                 (not (nil? (get snapshot-catalog table-name)))
+                 (not (nil? (get working-catalog table-name)))
+                 (not (nil? (get (deref merged-catalog) table-name))))
+          (let [base (get (get snapshot-catalog table-name) "rows" [])
+                current (get (get (deref merged-catalog) table-name) "rows" [])
+                working (get (get working-catalog table-name) "rows" [])
+                definition (get (deref merged-catalog) table-name)]
+            (swap! merged-catalog assoc table-name
+                   (assoc definition "rows"
+                          (afj-tcp-merge-table-rows base current working)))
+            (if (nil? (get (deref touched) table-name))
+              (swap! touched conj table-name)
+              nil))
+          nil)))
+    {"catalog" (deref merged-catalog) "tables" (deref touched)}))
 
 (defn afj-tcp-lock-table-result [token table]
   (let [owner (get (deref afj-tcp-locks) table)]
@@ -1182,14 +1320,24 @@
           (afj-tcp-rollback token)
           {"ok" false "error" "TX_CONFLICT" "victim" token
            "status" "rolled-back"})
-        (let [asts (get current "asts")]
+        (let [asts (get current "asts")
+              merge-state (if stale
+                           (afj-tcp-merge-working-catalog current)
+                           {"catalog" (get current "working-catalog")
+                            "tables" []})]
           (if (> (count asts) 0)
             (afj-tcp-record-asts asts)
             nil)
           (reset! engine-catalog
-                  (afj-tcp-copy (get current "working-catalog")))
+                  (afj-tcp-copy (get merge-state "catalog")))
           (reset! engine-indexes
-                  (afj-tcp-copy (get current "working-indexes")))
+                  (if stale
+                    (afj-tcp-copy (deref engine-indexes))
+                    (afj-tcp-copy (get current "working-indexes"))))
+          (if stale
+            (doseq [table (get merge-state "tables")]
+              (engine-rebuild-table-indexes table (get (deref engine-catalog) table)))
+            nil)
           (if (> (count asts) 0)
             (do
               (swap! afj-tcp-commit-revision (fn [revision] (+ revision 1)))
