@@ -1,6 +1,6 @@
 ;; AFJ-013 compound UNIQUE key and index maintenance contract.
-(load "/root/kilo-freelang/projects/afj-db95/src/engine.fls")
-(load "/root/kilo-freelang/projects/afj-db95/src/sql-core.fls")
+(load "../src/engine.fls")
+(load "../src/sql-core.fls")
 
 (reset! engine-catalog {})
 (reset! engine-indexes {})
@@ -26,7 +26,10 @@
                     nil)
                   (catch [error] error))
       index (get (deref engine-indexes) "compound_users.tenant|email")
-      bucket (get (get index "buckets") "a|same@example.test")]
+      bucket (get (get index "buckets")
+                  (engine-composite-key-token
+                    {"tenant" "a" "email" "same@example.test"}
+                    ["tenant" "email"]))]
   (if (and (regex_match_i (error_message duplicate) ".*UNIQUE_VIOLATION.*")
            (= (count bucket) 1)
            (= (count (get (get (get (deref engine-catalog) "compound_users")

@@ -77,7 +77,7 @@ do not waive an incomplete architectural condition:
 - Native raw TCP callbacks now provide peerAddress as a backward-compatible fourth argument. Native TLS/mTLS and certificate reload are exercised by the loopback cases above.
 - MariaDB 10.11.14 standard-client and native-wire cases passed using a
   temporary extracted CLI package; no system packages were installed.
-- DDL/schema-level MVCC granularity and full composite-key encoding/type-order
+- DDL/schema-level MVCC granularity and composite-key range type-order/collation
   compatibility are not complete; row-version WAL replay, row-level DML merge,
   compound predicate candidate validation, composite page-range recheck,
   multi-index intersection, range predicate conflict, and TCP transaction

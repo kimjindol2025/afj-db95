@@ -372,7 +372,10 @@
     세대 및 더 넓은 스키마 동시성 매트릭스 검증은 아직 남아 있어 DDL/schema
     MVCC 완료로 간주하지 않는다.
   - 복합 인덱스 범위 조회에서 decimal INTEGER 문자열 정렬과 `|` 구분자 충돌로
-    행이 누락되는 문제를 재현했다. 복합키 토큰의 타입·이스케이프·정렬 규약이
+    행이 누락되는 문제를 재현했다. 복합 equality/UNIQUE 토큰은 타입 태그와 길이
+    접두부를 사용하는 충돌 없는 tuple 인코딩으로 보강했으며,
+    `tests/composite-key-token.fls`가 delimiter·타입·NULL 경계를 검증한다.
+    정렬 가능한 복합키의 type-order/collation 계약이
     확정되기 전에는 안전한 페이지 pruning을 할 수 없어, 복합 범위 조건은 B+Tree
     전체 엔트리를 후보로 삼고 원본 행의 전체 predicate를 재검증하도록 바꿨다.
     실행 계획도 `index-full-scan`으로 표시한다. `tests/compound-range.fls`가
@@ -484,8 +487,10 @@
     시스템 패키지는 설치하지 않았다. matrix soak는 1초이고, 별도 300초 soak는
     `writes=1408`, `4.69/s`, p95 `1962ms`, max `2415ms`로 통과했다. MariaDB CLI
     부재 blocker는 해소했지만, DDL/schema MVCC 전체 매트릭스와 composite-key
-    type/order compatibility, 원본 runtime tree에 반영되지 않은 native patch 및
-    clean-checkout 재현성은 남아 `Release status: BLOCKED`가 정확하다.
+    range type-order/collation compatibility 및 clean-checkout 재현성은 남아
+    `Release status: BLOCKED`가 정확하다. FreeLang native TLS/peer-address runtime
+    patch는 별도 공식 Forgejo feature branch에 게시했고 해당 브랜치의 전체 fast
+    suite 및 AFJ-DB loopback 상호운용 검증을 통과했다.
 
 ### P3 — 문서와 릴리스 추적
 

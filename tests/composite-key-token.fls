@@ -1,0 +1,18 @@
+;; Composite index keys must preserve component boundaries and value types.
+(load "../src/engine.fls")
+
+(let [left (engine-composite-key-token
+             {"first" "a|b" "second" "c"} ["first" "second"])
+      right (engine-composite-key-token
+              {"first" "a" "second" "b|c"} ["first" "second"])
+      numeric (engine-composite-key-token
+                {"first" 1 "second" "x"} ["first" "second"])
+      textual (engine-composite-key-token
+                {"first" "1" "second" "x"} ["first" "second"])
+      nullable (engine-composite-key-token
+                 {"first" nil "second" "x"} ["first" "second"])]
+  (if (and (not (= left right))
+           (not (= numeric textual))
+           (not (= nullable textual)))
+    (println "afj-db95 composite key token PASS")
+    (throw "composite key token collision")))

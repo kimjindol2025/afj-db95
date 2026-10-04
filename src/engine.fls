@@ -13,13 +13,24 @@
       unique-columns
       (conj unique-columns primary))))
 
+(defn engine-composite-value-token [value]
+  (if (nil? value)
+    "n0:"
+    (if (boolean? value)
+      (if value "b1:1" "b1:0")
+      (if (number? value)
+        (let [encoded (str value)]
+          (str "d" (count encoded) ":" encoded))
+        (if (string? value)
+          (str "s" (count value) ":" value)
+          (let [encoded (json_str value)]
+            (str "j" (count encoded) ":" encoded)))))))
+
 (defn engine-composite-key-token [row columns]
   (if (= (count columns) 0)
     ""
-    (if (= (count columns) 1)
-      (str (get row (first columns)))
-      (str (get row (first columns)) "|"
-           (engine-composite-key-token row (rest columns))))))
+    (str (engine-composite-value-token (get row (first columns)))
+         (engine-composite-key-token row (rest columns)))))
 
 (defn engine-index-group-name [columns]
   (str_join columns "|"))
