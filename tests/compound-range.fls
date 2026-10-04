@@ -40,11 +40,12 @@
     (println "afj-db95 multi-index intersection PASS")
     (throw "multi-index intersection failed")))
 
-;; Use two persisted leaf pages and verify the leading-component range prunes
-;; the first child instead of falling back to a full table scan.
+;; Use two persisted leaf pages with mixed tenant values. The leading
+;; component range must visit the second page, then recheck tenant so the
+;; non-matching row is not returned by the page-range branch.
 (let [rows [{"id" "1" "tenant" "a"}
-            {"id" "2" "tenant" "a"}
-            {"id" "3" "tenant" "a"}
+            {"id" "2" "tenant" "b"}
+            {"id" "3" "tenant" "b"}
             {"id" "4" "tenant" "a"}]
       schema {"columns" [{"name" "id" "type" "TEXT"
                             "nullable" false}
@@ -74,6 +75,7 @@
                                   {"column" "tenant" "equals" "a"}]}})]
   (if (and (not (get tree "leaf"))
            (= (get query "plan") "index-range-scan")
-           (= (count (get query "rows")) 2))
+            (= (count (get query "rows")) 1)
+            (= (get (first (get query "rows")) "id") "4"))
     (println "afj-db95 composite page range PASS")
     (throw "composite page range failed")))

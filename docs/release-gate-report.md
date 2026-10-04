@@ -4,6 +4,18 @@
 - Repository: afj-db95
 - Automated cases: 55 PASS, 1 FAIL
 - Release status: **BLOCKED**
+- The automated table above is the historical full-gate baseline. The post-review
+  targeted checks below were run after the composite page-range correction; the
+  full gate was not rerun in this change.
+
+## Post-review targeted validation
+
+- `tests/compound-range.fls`: PASS with mixed `tenant` values across two pages;
+  the page-range branch now rechecks both predicates and returns only the
+  matching row.
+- `tests/compound-index.fls`: PASS.
+- `tests/tcp-mvcc-conflicts.fls`: PASS.
+- FreeLang syntax/type checks for `src/engine.fls` and `src/tcp-server.fls`: PASS.
 
 ## Automated evidence
 
@@ -73,11 +85,15 @@ do not waive an incomplete architectural condition:
 
 - Native TLS listener, external bind policy, CA/mTLS, certificate rotation and failure-injection regressions pass; no blocker remains in this area.
 - MariaDB wire-level support includes a native FreeLang Script listener for handshake, COM_QUERY and COM_STMT_PREPARE/EXECUTE/CLOSE; 32-bit capability intersection, max-packet-size/charset parsing, mysql_native_password SHA-1 challenge verification, standard-client and native prepared INT, NULL, string, and multi-parameter smoke pass. TLS/auth-plugin variants beyond mysql_native_password remain incomplete.
-- Complete row-version MVCC and page-level composite range validation are not complete; row-version WAL replay, compound predicate candidate validation, multi-index intersection, range predicate conflict, and TCP transaction process-kill recovery cases are covered above.
+- DDL/schema-level MVCC granularity and full composite-key encoding/type-order
+  compatibility are not complete; row-version WAL replay, row-level DML merge,
+  compound predicate candidate validation, composite page-range recheck,
+  multi-index intersection, range predicate conflict, and TCP transaction
+  process-kill recovery cases are covered above.
   - TCP table-page manifest, page-backed B+Tree leaf-index persistence/reopen,
     bounded pin/flush pool, lazy table eviction, lazy transaction snapshot and
     durable row-version checkpoint recovery pass; page-level row execution and
-    page-level composite range validation remains incomplete.
+    full composite-key encoding/type-order compatibility remain incomplete.
 - Large-corpus, high-concurrency, and the reproducible 5-minute performance envelope pass with p95/max latency thresholds; unrestricted duration beyond the bounded envelope is not claimed as a guarantee.
 
 The report must remain **BLOCKED** until each item has implementation evidence and a

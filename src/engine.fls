@@ -839,12 +839,18 @@
                (= (get first-predicate "column")
                   (first (get index "columns" [])))
                (has-key? first-predicate "operator"))
-        (map (fn [entry] (get (get table "rows") (get entry "row-id")))
-             (engine-btree-composite-range-entries
-               (get index "btree")
-               (get first-predicate "operator")
-               (get first-predicate "value")
-               0))
+        (filter (fn [row]
+                  ;; Keep the page traversal as a candidate selector, but
+                  ;; always recheck both predicates before returning a row.
+                  (and (engine-match? row first-predicate)
+                       (engine-match? row second-predicate)))
+                (map (fn [entry] (get (get table "rows")
+                                      (get entry "row-id")))
+                     (engine-btree-composite-range-entries
+                       (get index "btree")
+                       (get first-predicate "operator")
+                       (get first-predicate "value")
+                       0)))
         (let [first-index (get (deref engine-indexes)
                              (str name "." (get first-predicate "column")))
             second-index (get (deref engine-indexes)

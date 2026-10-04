@@ -738,19 +738,22 @@
       (catch [error]
         (do
           (if fast-insert?
-            ;; execute-insert validates every row before publishing the new
-            ;; table. A validation failure therefore leaves catalog/index state
-            ;; untouched, so the hot path needs no O(table-size) snapshot.
+            ;; fast-insert? owns no rollback snapshot: execute-insert validates
+            ;; all rows and constraints before publishing the new table state.
             nil
             (if local-table?
-            (do
-              (reset! engine-catalog
-                      (assoc (deref engine-catalog) table-name catalog))
-              (engine-rebuild-table-indexes table-name catalog))
-            (do
-              (reset! engine-catalog catalog)
-              (reset! engine-indexes indexes)
-              (reset! engine-databases databases))))
+              (do
+                ;; update/delete/alter keep a one-table snapshot and restore
+                ;; that table, then rebuild its indexes after a failure.
+                (reset! engine-catalog
+                        (assoc (deref engine-catalog) table-name catalog))
+                (engine-rebuild-table-indexes table-name catalog))
+              (do
+                ;; multi-table and DDL batches keep full catalog/index/database
+                ;; snapshots because validation may touch several objects.
+                (reset! engine-catalog catalog)
+                (reset! engine-indexes indexes)
+                (reset! engine-databases databases))))
           (throw error))))
     ;; The successful validation execution already published the AST into the
     ;; live in-memory state. Replaying it after restoring the snapshots doubles
