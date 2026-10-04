@@ -51,11 +51,39 @@
               (parse-sql
                 "SELECT * FROM numeric_compound WHERE id > 2 AND tenant = 'x'"))
       rows (get query "rows")]
-  (if (and (= (get query "plan") "index-range-scan")
+  (if (and (= (get query "plan") "index-full-scan")
            (= (count rows) 98)
            (any? (fn [row] (= (get row "id") "100")) rows))
     (println "afj-db95 composite numeric range PASS")
     (throw "composite numeric range lost rows due to string key ordering")))
+
+(execute-ast (parse-sql
+  "CREATE TABLE numeric_single (id INTEGER PRIMARY KEY, note TEXT)"))
+(execute-ast {"type" "insert" "table" "numeric_single"
+              "rows" (map (fn [id] {"id" (str id) "note" "x"})
+                         (range 1 101))})
+(let [query (execute-ast
+              (parse-sql "SELECT * FROM numeric_single WHERE id > 2"))
+      rows (get query "rows")]
+  (if (and (= (count rows) 98)
+           (any? (fn [row] (= (get row "id") "100")) rows))
+    (println "afj-db95 single numeric range PASS")
+    (throw "single INTEGER index range lost rows due to string key ordering")))
+
+;; Delimiter characters are ordinary TEXT data and must not be mistaken for
+;; composite-key component boundaries during range candidate selection.
+(execute-ast (parse-sql
+  "CREATE TABLE pipe_compound (label TEXT, tenant TEXT, UNIQUE (label,tenant))"))
+(execute-ast {"type" "insert" "table" "pipe_compound"
+              "rows" [{"label" "a|x" "tenant" "q"}]})
+(let [query (execute-ast
+              (parse-sql
+                "SELECT * FROM pipe_compound WHERE label > 'a' AND tenant = 'q'"))]
+  (if (and (= (get query "plan") "index-full-scan")
+           (= (count (get query "rows")) 1)
+           (= (get (first (get query "rows")) "label") "a|x"))
+    (println "afj-db95 composite delimiter range PASS")
+    (throw "composite range split TEXT data as a key delimiter")))
 
 ;; Use two persisted leaf pages with mixed tenant values. The leading
 ;; component range must visit the second page, then recheck tenant so the
@@ -91,7 +119,7 @@
                "where" {"and" [{"column" "id" "operator" ">" "value" "2"}
                                   {"column" "tenant" "equals" "a"}]}})]
   (if (and (not (get tree "leaf"))
-           (= (get query "plan") "index-range-scan")
+           (= (get query "plan") "index-full-scan")
             (= (count (get query "rows")) 1)
             (= (get (first (get query "rows")) "id") "4"))
     (println "afj-db95 composite page range PASS")

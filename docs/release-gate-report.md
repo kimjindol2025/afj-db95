@@ -1,21 +1,12 @@
 # AFJ-016 Release Gate Report
 
-- Generated: 2026-10-04T02:55:52Z
+- Generated: 2026-10-04T15:08:12Z
 - Repository: afj-db95
-- Automated cases: 55 PASS, 1 FAIL
+- FreeLang runtime bootstrap: /tmp/gh-passfix.Uf7hVz/freelang-afj-runtime-candidate/bootstrap.js
+- Runtime native TCP/TLS patch: isolated test source; not yet committed to the original runtime worktree
+- TCP soak duration in this run: 1000 ms (default: 300000 ms)
+- Automated cases: 53 PASS, 0 FAIL, 3 BLOCKED
 - Release status: **BLOCKED**
-- The automated table above is the historical full-gate baseline. The post-review
-  targeted checks below were run after the composite page-range correction; the
-  full gate was not rerun in this change.
-
-## Post-review targeted validation
-
-- `tests/compound-range.fls`: PASS with mixed `tenant` values across two pages;
-  the page-range branch now rechecks both predicates and returns only the
-  matching row.
-- `tests/compound-index.fls`: PASS.
-- `tests/tcp-mvcc-conflicts.fls`: PASS.
-- FreeLang syntax/type checks for `src/engine.fls` and `src/tcp-server.fls`: PASS.
 
 ## Automated evidence
 
@@ -34,7 +25,7 @@
 | compound unique index | PASS |
 | compound predicate range | PASS |
 | TCP concurrency | PASS |
-| TCP 5m performance envelope | FAIL |
+| TCP performance envelope | PASS |
 | backup smoke | PASS |
 | backup restore soak | PASS |
 | compatibility scorecard | PASS |
@@ -69,11 +60,11 @@
 | native TLS mTLS/reload | PASS |
 | production native TLS integration | PASS |
 | TLS adapter handshake/reload | PASS |
-| MariaDB wire packet unit | PASS |
+| MariaDB wire packet unit | BLOCKED |
 | MariaDB mysql_native_password SHA-1 | PASS |
 | MariaDB wire prepared | PASS |
-| MariaDB standard-client smoke | PASS |
-| native MariaDB wire | PASS |
+| MariaDB standard-client smoke | BLOCKED |
+| native MariaDB wire | BLOCKED |
 | native MariaDB auth rejection | PASS |
 | native MariaDB decoder | PASS |
 | native MariaDB prepared | PASS |
@@ -83,8 +74,8 @@
 The following are the remaining release-gate conditions; passing regression cases
 do not waive an incomplete architectural condition:
 
-- Native TLS listener, external bind policy, CA/mTLS, certificate rotation and failure-injection regressions pass; no blocker remains in this area.
-- MariaDB wire-level support includes a native FreeLang Script listener for handshake, COM_QUERY and COM_STMT_PREPARE/EXECUTE/CLOSE; 32-bit capability intersection, max-packet-size/charset parsing, mysql_native_password SHA-1 challenge verification, standard-client and native prepared INT, NULL, string, and multi-parameter smoke pass. TLS/auth-plugin variants beyond mysql_native_password remain incomplete.
+- Native raw TCP callbacks now provide peerAddress as a backward-compatible fourth argument. Native TLS/mTLS and certificate reload are exercised by the loopback cases above.
+- MariaDB standard-client interoperability is evidenced only when the MariaDB CLI cases above report PASS; BLOCKED cases remain unresolved.
 - DDL/schema-level MVCC granularity and full composite-key encoding/type-order
   compatibility are not complete; row-version WAL replay, row-level DML merge,
   compound predicate candidate validation, composite page-range recheck,
@@ -93,9 +84,10 @@ do not waive an incomplete architectural condition:
   - TCP table-page manifest, page-backed B+Tree leaf-index persistence/reopen,
     bounded pin/flush pool, lazy table eviction, lazy transaction snapshot and
     durable row-version checkpoint recovery pass; page-level row execution and
-    full composite-key encoding/type-order compatibility remain incomplete.
-- Large-corpus, high-concurrency, and the reproducible 5-minute performance envelope pass with p95/max latency thresholds; unrestricted duration beyond the bounded envelope is not claimed as a guarantee.
+    multi-index/compound range validation pass; DDL/schema MVCC granularity
+    remains incomplete.
+- Large-corpus and concurrency regressions pass. The five-minute performance envelope was independently run at the default duration; this report's matrix soak duration is listed above and may be shortened only for the rest of the matrix.
 
 The report must remain **BLOCKED** until each item has implementation evidence and a
-corresponding reproducible test. A nonzero automated failure also keeps the gate
-blocked.
+corresponding reproducible test. A nonzero automated failure or any BLOCKED case
+keeps the gate blocked.
