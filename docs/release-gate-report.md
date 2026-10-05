@@ -1,9 +1,9 @@
 # AFJ-016 Release Gate Report
 
-- Generated: 2026-10-05T01:45:35Z
+- Generated: 2026-10-05T02:06:03Z
 - Repository: afj-db95
-- FreeLang runtime revision: `c783288ede63534d0cfb73d788fc436b8d6f3509`
-- MariaDB CLI version: `10.11.14-MariaDB`
+- FreeLang runtime revision: c783288ede63534d0cfb73d788fc436b8d6f3509
+- MariaDB CLI version: 10.11.14-MariaDB
 - Automated cases: 62 PASS, 0 FAIL, 0 BLOCKED
 - Release status: **BLOCKED**
 

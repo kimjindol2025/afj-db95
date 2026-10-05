@@ -1079,6 +1079,11 @@
       (= (get ast "type") "update")
       (= (get ast "type") "delete")))
 
+(defn afj-tcp-schema-write-ast? [ast]
+  (or (= (get ast "type") "create-table")
+      (= (get ast "type") "drop-table")
+      (= (get ast "type") "alter-table")))
+
 (defn afj-tcp-write-table-conflict? [tx-state]
   ;; Validate writes against row versions.  A transaction may now commit a
   ;; disjoint row change on a table that advanced since its snapshot; schema
@@ -1165,7 +1170,16 @@
             (if (nil? (get (deref touched) table-name))
               (swap! touched conj table-name)
               nil))
-          nil)))
+          (if (and (afj-tcp-schema-write-ast? ast)
+                   (not (nil? table-name)))
+            (let [working-table (get working-catalog table-name)]
+              (if (nil? working-table)
+                (swap! merged-catalog dissoc table-name)
+                (swap! merged-catalog assoc table-name working-table))
+              (if (nil? (get (deref touched) table-name))
+                (swap! touched conj table-name)
+                nil))
+            nil))))
     {"catalog" (deref merged-catalog) "tables" (deref touched)}))
 
 (defn afj-tcp-lock-table-result [token table]
@@ -1416,12 +1430,13 @@
     (if (or (nil? current) (not (= (get current "status") "active")))
       {"ok" false "error" "TX_NOT_ACTIVE"}
       (let [has-predicates (> (count (get current "read-predicates")) 0)
-            stale (if has-predicates
-                    (or (afj-tcp-write-table-conflict? current)
-                        (afj-tcp-predicate-conflict? current))
-                    (not (= (get current "base-revision")
-                            (deref afj-tcp-commit-revision))))]
-      (if (and (> (count (get current "asts")) 0) stale)
+            revision-stale? (not (= (get current "base-revision")
+                                    (deref afj-tcp-commit-revision)))
+            conflict? (if has-predicates
+                        (or (afj-tcp-write-table-conflict? current)
+                            (afj-tcp-predicate-conflict? current))
+                        revision-stale?)]
+      (if (and (> (count (get current "asts")) 0) conflict?)
         (do
           ;; Optimistic validation closes the write-skew/lost-update hole for
           ;; transactions that touched different tables and did not contend on
@@ -1430,7 +1445,7 @@
           {"ok" false "error" "TX_CONFLICT" "victim" token
            "status" "rolled-back"})
         (let [asts (get current "asts")
-              merge-state (if stale
+              merge-state (if revision-stale?
                            (afj-tcp-merge-working-catalog current)
                            {"catalog" (get current "working-catalog")
                             "tables" []})]
@@ -1440,10 +1455,10 @@
           (reset! engine-catalog
                   (afj-tcp-copy (get merge-state "catalog")))
           (reset! engine-indexes
-                  (if stale
+                  (if revision-stale?
                     (afj-tcp-copy (deref engine-indexes))
                     (afj-tcp-copy (get current "working-indexes"))))
-          (if stale
+          (if revision-stale?
             (doseq [table (get merge-state "tables")]
               (engine-rebuild-table-indexes table (get (deref engine-catalog) table)))
             nil)

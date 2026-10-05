@@ -356,3 +356,49 @@
     (println "afj-db95 MVCC multi-table DDL batch conflict PASS")
     (throw (str "batched schema changes missed a stale reader: "
                 (json_str reader-commit)))))
+
+;; Concurrent schema edits on independent tables should merge. An unrelated
+;; DDL commit must not force a retry or erase the second table's schema.
+(afj-tcp-commit-asts
+  [{"type" "create-table" "table" "ddl_merge_left"
+    "schema" {"columns" [{"name" "id" "type" "INTEGER"
+                             "nullable" false "primary" true}]
+               "primary-key" "id" "unique-columns" []}}
+   {"type" "insert" "table" "ddl_merge_left" "rows" [{"id" "1"}]}
+   {"type" "create-table" "table" "ddl_merge_right"
+    "schema" {"columns" [{"name" "id" "type" "INTEGER"
+                             "nullable" false "primary" true}]
+               "primary-key" "id" "unique-columns" []}}
+   {"type" "insert" "table" "ddl_merge_right" "rows" [{"id" "1"}]}])
+(swap! afj-tcp-sessions assoc "mvcc-ddl-merge-left" "root")
+(swap! afj-tcp-sessions assoc "mvcc-ddl-merge-right" "root")
+(afj-tcp-begin-level "mvcc-ddl-merge-left" "REPEATABLE READ")
+(afj-tcp-begin-level "mvcc-ddl-merge-right" "REPEATABLE READ")
+(let [left-read (afj-tcp-query
+                  {"token" "mvcc-ddl-merge-left"
+                   "statement" "SELECT * FROM ddl_merge_left WHERE id=1"})
+      right-read (afj-tcp-query
+                   {"token" "mvcc-ddl-merge-right"
+                    "statement" "SELECT * FROM ddl_merge_right WHERE id=1"})
+      left-alter (afj-tcp-query
+                   {"token" "mvcc-ddl-merge-left"
+                    "statement" "ALTER TABLE ddl_merge_left ADD COLUMN left_note TEXT"})
+      right-alter (afj-tcp-query
+                    {"token" "mvcc-ddl-merge-right"
+                     "statement" "ALTER TABLE ddl_merge_right ADD COLUMN right_note TEXT"})
+      left-commit (afj-tcp-commit "mvcc-ddl-merge-left")
+      right-commit (afj-tcp-commit "mvcc-ddl-merge-right")
+      left-columns (get (get (get (deref engine-catalog) "ddl_merge_left") "schema")
+                        "columns")
+      right-columns (get (get (get (deref engine-catalog) "ddl_merge_right") "schema")
+                         "columns")]
+  (if (and (get left-read "ok") (get right-read "ok")
+           (get left-alter "ok") (get right-alter "ok")
+           (get left-commit "ok") (get right-commit "ok")
+           (any? (fn [column] (= (get column "name") "left_note")) left-columns)
+           (any? (fn [column] (= (get column "name") "right_note")) right-columns))
+    (println "afj-db95 MVCC independent DDL merge PASS")
+    (throw (str "independent DDL did not merge: left="
+                (json_str left-commit) " right=" (json_str right-commit)
+                " left-columns=" (json_str left-columns)
+                " right-columns=" (json_str right-columns)))))
