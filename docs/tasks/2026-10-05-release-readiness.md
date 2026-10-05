@@ -55,9 +55,9 @@ JS/셸 검수기의 bootstrap 경로는 환경변수 기반으로 바꿨지만, 
 
 ### P1 복구·회귀 범위
 
-- [ ] backup/restore soak
-- [ ] WAL torn-write 및 복구
-- [ ] row-version checkpoint/snapshot/index recovery
+- [x] backup/restore soak
+- [x] WAL torn-write 및 복구
+- [x] row-version checkpoint/snapshot/index recovery
 - [ ] CI에서 check → targeted test → full gate를 직렬 실행
 
 ## 검수 방식
@@ -97,6 +97,26 @@ JS/셸 검수기의 bootstrap 경로는 환경변수 기반으로 바꿨지만, 
 - `node --check` 변경 JS 및 `bash -n` 변경 셸: PASS
 - `bash tests/release-gate.sh` without runtime env: 명시적 preflight BLOCKED (exit 2)
 - 전체 release gate: 아직 실행하지 않음. 기존 문서상 TCP 5분 envelope 실패가 있어 P0-3로 남김.
+
+## 2026-10-05 복구 신뢰성 검증
+
+- path-normalized 임시 clone에서 `tests/fault-injection-restart.sh`를 실행해
+  실제 runtime 프로세스를 `SIGKILL`한 뒤 committed row만 복구되는 것을 확인:
+  `afj-db95 forced-kill process recovery PASS`.
+- `tests/backup-soak.fls` 12회 반복 backup/restore와 backup corruption,
+  manifest corruption, live backup consistency, partial/large backup 경로를 함께
+  실행해 모두 PASS했다. FreeLang runtime의 `file-write path text is deprecated`
+  경고는 있었지만 실행 결과는 성공했다.
+- `tests/wal-format.fls`에서 WAL version/length/checksum, restart, torn tail,
+  중간 corruption 거부, prepare-only 미복구를 모두 PASS했다.
+- `tests/tcp-row-version-recovery.fls`와 환경변수로 명시한 WAL/catalog page를
+  사용하는 `tests/tcp-row-version-checkpoint.fls`가 row-version chain과
+  checkpoint 복구를 모두 PASS했다.
+- `tests/tcp-transaction-kill-recovery.js`에서 TCP daemon을 강제 종료한 뒤
+  재기동해 committed row만 남고 uncommitted row가 사라지는 것을 PASS했다.
+- 이번 검수에서는 `AFJ_DB_CATALOG_PAGES`를 누락한 수동 재현 명령이 한 차례
+  `CATALOG_PAGE_MISSING`을 냈으나, 이는 제품 실패가 아니라 검수 명령 누락이었다.
+  release gate와 동일한 WAL/page 환경변수를 지정한 재실행에서 PASS했다.
 
 ## 성능 실패 원인 조사
 

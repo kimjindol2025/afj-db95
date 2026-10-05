@@ -20,7 +20,9 @@
 - [x] 외부 TCP client의 login/query/close smoke — path-normalized 임시 복제본에서 PASS
 - [x] 10초 축약 soak PASS — writes=72, throughput=7.20/s, p95=1233ms, max=1462ms
 - [x] 5분 performance envelope PASS — writes=1272, throughput=4.24/s, p95=2288ms, max=2977ms
-- [ ] WAL forced-kill 및 backup/restore PASS
+- [x] WAL forced-kill 및 backup/restore PASS — path-normalized 임시 clone에서
+  forced-kill, torn-tail, corruption rejection, backup restore soak,
+  row-version/checkpoint recovery, TCP transaction kill recovery PASS
 - [ ] CI에서 동일 검수를 새 clone 기준으로 재현
 
 ### 상용서비스 — 아직 차단
