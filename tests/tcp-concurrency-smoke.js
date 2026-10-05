@@ -6,6 +6,7 @@ const net = require("net");
 const os = require("os");
 const path = require("path");
 const { spawn } = require("child_process");
+const { resolveBootstrap } = require("./runtime-path");
 
 function freePort() {
   return new Promise((resolve, reject) => {
@@ -95,7 +96,7 @@ async function main() {
   const port = await freePort();
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "afj-db95-concurrency-"));
   const walPath = path.join(directory, "tcp.wal");
-  const bootstrap = "/root/freelang-surface-v0-clean-ek3qo2/v11/bootstrap.js";
+  const bootstrap = resolveBootstrap();
   const daemon = spawn(process.execPath, [bootstrap, "run", "tests/tcp-daemon.fls"], {
     cwd: path.join(__dirname, ".."),
     env: { ...process.env, AFJ_DB_MODE: "development", AFJ_DB_PORT: String(port),

@@ -7,6 +7,7 @@ const os = require("os");
 const path = require("path");
 const tls = require("tls");
 const { execFileSync, spawn } = require("child_process");
+const { resolveBootstrap } = require("./runtime-path");
 
 function freePort() {
   return new Promise((resolve, reject) => {
@@ -63,7 +64,7 @@ async function main() {
     { stdio: "ignore" });
   const port = await freePort();
   const child = spawn(process.execPath,
-    ["/root/freelang-surface-v0-clean-ek3qo2/v11/bootstrap.js", "run", "tests/tcp-daemon.fls"],
+    [resolveBootstrap(), "run", "tests/tcp-daemon.fls"],
     { cwd: path.join(__dirname, ".."), env: { ...process.env,
       AFJ_DB_MODE: "production", AFJ_DB_PORT: String(port), AFJ_DB_BIND_HOST: "0.0.0.0",
       AFJ_DB_ROOT_PASSWORD: "production-test-password", AFJ_DB_WAL: wal,

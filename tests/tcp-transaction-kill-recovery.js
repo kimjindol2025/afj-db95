@@ -6,6 +6,7 @@ const net = require("net");
 const os = require("os");
 const path = require("path");
 const { spawn } = require("child_process");
+const { resolveBootstrap } = require("./runtime-path");
 
 function freePort() {
   return new Promise((resolve, reject) => {
@@ -88,7 +89,7 @@ function connectClient(port) {
 
 async function startDaemon(port, walPath) {
   const daemon = spawn(process.execPath,
-    ["/root/freelang-surface-v0-clean-ek3qo2/v11/bootstrap.js", "run", "tests/tcp-daemon.fls"],
+    [resolveBootstrap(), "run", "tests/tcp-daemon.fls"],
     { cwd: path.join(__dirname, ".."), env: { ...process.env,
       AFJ_DB_MODE: "development", AFJ_DB_PORT: String(port),
       AFJ_DB_BIND_HOST: "127.0.0.1", AFJ_DB_WAL: walPath },

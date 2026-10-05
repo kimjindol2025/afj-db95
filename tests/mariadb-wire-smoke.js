@@ -7,6 +7,7 @@ const os = require("os");
 const path = require("path");
 const { spawn } = require("child_process");
 const { createMariaDbWireServer } = require("../tools/afj-mariadb-wire");
+const { resolveBootstrap } = require("./runtime-path");
 
 let daemonOutput = "";
 
@@ -105,7 +106,7 @@ async function main() {
   const upstreamPort = await freePort();
   const wirePort = await freePort();
   const walPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "afj-db95-wire-")), "tcp.wal");
-  const bootstrap = "/root/freelang-surface-v0-clean-ek3qo2/v11/bootstrap.js";
+  const bootstrap = resolveBootstrap();
   const daemon = spawn(process.execPath, [bootstrap, "run", "tests/tcp-daemon.fls"], {
     cwd: path.join(__dirname, ".."),
     env: {

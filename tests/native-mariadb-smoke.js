@@ -3,6 +3,7 @@
 const assert = require("assert");
 const net = require("net");
 const { spawn } = require("child_process");
+const { resolveBootstrap } = require("./runtime-path");
 
 function freePort() {
   return new Promise((resolve, reject) => {
@@ -71,7 +72,7 @@ function waitForPort(port) {
 async function main() {
   const port = await freePort();
   const child = spawn(process.execPath,
-    ["/root/freelang-surface-v0-clean-ek3qo2/v11/bootstrap.js", "run", "tests/native-mariadb-daemon.fls"],
+    [resolveBootstrap(), "run", "tests/native-mariadb-daemon.fls"],
     { cwd: require("path").join(__dirname, ".."), env: { ...process.env,
       AFJ_NATIVE_MARIADB_PORT: String(port) },
       stdio: ["ignore", "pipe", "pipe"] });

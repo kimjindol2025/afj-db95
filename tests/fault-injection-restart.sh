@@ -5,7 +5,8 @@ set -u
 # This wrapper supplies the one capability that the script cannot model by
 # itself: terminating the real runtime process between WAL writes and replay.
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
-bootstrap="/root/freelang-surface-v0-clean-ek3qo2/v11/bootstrap.js"
+source "$repo_root/tests/bootstrap-path.sh"
+bootstrap="$(resolve_afj_bootstrap)" || exit 2
 wal="/tmp/afj-db95-fault-injection.wal"
 log_file="$(mktemp /tmp/afj-db95-fault-injection.XXXXXX.log)"
 writer_pid=""

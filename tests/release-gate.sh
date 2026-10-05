@@ -4,7 +4,8 @@ set -u
 # AFJ-016 reproducible release gate. This is intentionally a gate, not a
 # promise that the current development tree is a 1.0 release.
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
-bootstrap="/root/freelang-surface-v0-clean-ek3qo2/v11/bootstrap.js"
+source "$repo_root/tests/bootstrap-path.sh"
+bootstrap="$(resolve_afj_bootstrap)" || exit 2
 report="$repo_root/docs/release-gate-report.md"
 temp_dir="$(mktemp -d)"
 trap 'rm -rf "$temp_dir"' EXIT
@@ -17,12 +18,25 @@ run_case() {
   label="$1"
   shift
   log_file="$temp_dir/case-$((passed + failed + 1)).log"
-  if "$@" >"$log_file" 2>&1; then
+  case_number=$((passed + failed + 1))
+  case_timeout="${AFJ_GATE_CASE_TIMEOUT_SEC:-120}"
+  if [[ "$label" == "TCP 5m performance envelope" ]]; then
+    case_timeout="${AFJ_GATE_SOAK_TIMEOUT_SEC:-360}"
+  fi
+  printf '[release-gate] START case=%s timeout=%ss label=%s\n' \
+    "$case_number" "$case_timeout" "$label" >&2
+  if timeout --foreground "${case_timeout}s" "$@" >"$log_file" 2>&1; then
     status="PASS"
     passed=$((passed + 1))
   else
     status="FAIL"
     failed=$((failed + 1))
+  fi
+  printf '[release-gate] END case=%s status=%s label=%s\n' \
+    "$case_number" "$status" "$label" >&2
+  if [[ "$status" == FAIL ]]; then
+    printf '[release-gate] tail case=%s\n' "$case_number" >&2
+    tail -n 12 "$log_file" >&2 || true
   fi
   results+=$'\n| '
   results+="$label | $status |"

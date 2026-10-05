@@ -28,7 +28,8 @@ transaction 복구 기준선을 제공합니다. 아직 공식 1.0 DB는 아닙�
 ## 실행
 
 ```text
-node /root/freelang-surface-v0-clean-ek3qo2/v11/bootstrap.js run src/afj-db95.fls
+export AFJ_BOOTSTRAP=/path/to/freelang-afj/bootstrap.js
+node "$AFJ_BOOTSTRAP" run src/afj-db95.fls
 ```
 
 TCP 운영 인스턴스는 환경변수로 인스턴스별 WAL 위치와 root 비밀번호를 지정할 수
@@ -108,7 +109,7 @@ adapter는 loopback JSON TCP를 TLS 1.2+로 전달하고 만료 인증서를 거
 기존 HTTP adapter는 개발·계약 테스트 전용이며 `AFJ_DB_MODE=production`에서
 시작되지 않습니다.
 
-운영 후보 gate는 `bash tests/release-gate.sh`로 실행합니다. 결과는
+운영 후보 gate는 `AFJ_BOOTSTRAP=/path/to/freelang-afj/bootstrap.js bash tests/release-gate.sh`로 실행합니다. 결과는
 `docs/release-gate-report.md`에 기록되며, 자동 회귀가 모두 통과해도 TLS,
 MariaDB wire protocol, 완전한 MVCC와 대규모 soak 같은 미완료 게이트가 있으면
 `BLOCKED`로 종료합니다.

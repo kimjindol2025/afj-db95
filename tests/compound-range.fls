@@ -53,13 +53,13 @@
                             "nullable" false}]
               "primary-key" nil "unique-columns" []
               "unique-groups" [["id" "tenant"]]}
-      tree {"leaf" false "separators" ["3|a"]
+      tree {"leaf" false "separators" ["[\"3\",\"a\"]"]
             "children" [{"leaf" true "entries"
-                          [{"key" "1|a" "row-id" 0}
-                           {"key" "2|a" "row-id" 1}]}
+                          [{"key" "[\"1\",\"a\"]" "row-id" 0}
+                           {"key" "[\"2\",\"a\"]" "row-id" 1}]}
                          {"leaf" true "entries"
-                          [{"key" "3|a" "row-id" 2}
-                           {"key" "4|a" "row-id" 3}]}]}
+                          [{"key" "[\"3\",\"a\"]" "row-id" 2}
+                           {"key" "[\"4\",\"a\"]" "row-id" 3}]}]}
       _catalog (reset! engine-catalog
                         {"paged_compound" {"name" "paged_compound"
                                            "rows" rows "columns" ["id" "tenant"]

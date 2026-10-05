@@ -2,7 +2,8 @@
 set -u
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
-bootstrap="/root/freelang-surface-v0-clean-ek3qo2/v11/bootstrap.js"
+source "$repo_root/tests/bootstrap-path.sh"
+bootstrap="$(resolve_afj_bootstrap)" || exit 2
 log_file="/tmp/afj-db95-production-tls-boundary.log"
 trap 'rm -f "$log_file" /root/afj-db95-production-tls-boundary.wal /root/afj-db95-production-tls-boundary.audit.jsonl /root/afj-db95-production-tls-boundary.state.jsonl' EXIT
 

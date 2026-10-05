@@ -8,6 +8,7 @@ const path = require("path");
 const { execFileSync, spawn } = require("child_process");
 const tls = require("tls");
 const { createTlsProxy } = require("../tools/afj-tls-proxy");
+const { resolveBootstrap } = require("./runtime-path");
 
 function listen(server) {
   return new Promise((resolve, reject) => {
@@ -49,7 +50,7 @@ function tlsRequest(port, options) {
 }
 
 function startAfjDaemon(port, walPath) {
-  const bootstrap = "/root/freelang-surface-v0-clean-ek3qo2/v11/bootstrap.js";
+  const bootstrap = resolveBootstrap();
   const daemon = path.resolve(__dirname, "tcp-daemon.fls");
   const child = spawn(process.execPath, [bootstrap, "run", daemon], {
     env: {

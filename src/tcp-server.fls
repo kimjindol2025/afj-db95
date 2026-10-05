@@ -1,10 +1,12 @@
 ;; AFJ-DB95 line-delimited JSON TCP server.
 ;; The FreeLang runtime owns sockets; this module owns protocol, auth and SQL.
 
-(load "/root/kilo-freelang/projects/afj-db95/src/engine.fls")
-(load "/root/kilo-freelang/projects/afj-db95/src/sql-core.fls")
-(load "/root/kilo-freelang/projects/afj-db95/src/protocol.fls")
-(load "/root/kilo-freelang/projects/afj-db95/src/auth.fls")
+(define AFJ-DB95-ROOT
+  (env-or "AFJ_DB95_ROOT" "/root/kilo-freelang/projects/afj-db95"))
+(load (str AFJ-DB95-ROOT "/src/engine.fls"))
+(load (str AFJ-DB95-ROOT "/src/sql-core.fls"))
+(load (str AFJ-DB95-ROOT "/src/protocol.fls"))
+(load (str AFJ-DB95-ROOT "/src/auth.fls"))
 
 (define afj-tcp-port
   (let [raw (env-get "AFJ_DB_PORT")]
@@ -290,14 +292,15 @@
             (afj-tcp-lazy-touch table path)
             true))))))
 
-;; tcp-server-raw queues connect/data/close callbacks in the runtime event
-;; queue. A long-lived DB daemon must drain that queue independently of the
-;; caller; otherwise external clients can connect but never receive a reply.
+;; tcp-server-raw is backed by the runtime IO worker. `fl-yield` transfers
+;; worker-ring events into the evaluator and dispatches them; `fl-event-drain`
+;; only drains the legacy in-VM queue, so using it here accepts connections but
+;; leaves external clients waiting forever for a response.
 (defn afj-tcp-event-drain-loop []
   (if (deref afj-tcp-event-loop-active)
     (do
-      (fl-event-drain)
-      (set-timeout (fn [] (afj-tcp-event-drain-loop)) 10))
+      (fl-yield 10)
+      (set-timeout (fn [] (afj-tcp-event-drain-loop)) 0))
     nil))
 
 (defn afj-tcp-rate-key [connection]
@@ -1729,9 +1732,12 @@
                 (afj-tcp-send conn (afj-tcp-shutdown request))
                 (afj-tcp-send conn {"ok" false "error" "UNKNOWN_REQUEST"}))))))))))))))
 
-(defn afj-db-tcp-handler [event conn payload peer]
+(defn afj-db-tcp-handler [event conn payload]
   (if (= event "connect")
-    (swap! afj-tcp-peer-addresses assoc conn peer)
+    ;; tcp-server-raw runtime contract is handler(event, conn, payload).
+    ;; Peer metadata is unavailable on this raw boundary; rate limiting falls
+    ;; back to the connection id when the peer address is absent.
+    (swap! afj-tcp-peer-addresses assoc conn nil)
     (if (= event "data")
     (let [combined (str (get (deref afj-tcp-buffers) conn "") payload)]
       (afj-tcp-process-buffer conn combined))

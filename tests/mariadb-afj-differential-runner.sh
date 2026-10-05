@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -u
 
-project="/root/kilo-freelang/projects/afj-db95"
-runtime="/root/freelang-surface-v0-clean-ek3qo2/v11"
+project="$(cd "$(dirname "$0")/.." && pwd)"
+source "$project/tests/bootstrap-path.sh"
+bootstrap="$(resolve_afj_bootstrap)" || exit 2
 corpus="$project/tests/mariadb-compatibility-expanded.sql"
 client="$project/tests/mariadb-afj-differential-client.fls"
 report="$project/docs/mariadb-afj-differential-report.md"
@@ -48,18 +49,18 @@ if [ "$ready" -ne 1 ]; then
   exit 1
 fi
 
-node "$runtime/bootstrap.js" run "$project/tests/tcp-daemon.fls" >"$afj_log" 2>&1 &
+node "$bootstrap" run "$project/tests/tcp-daemon.fls" >"$afj_log" 2>&1 &
 afj_pid=$!
 sleep 2
 
 mariadb --no-defaults --batch --raw --socket="$socket" -uroot \
   <"$corpus" >"$maria_result" 2>&1
 maria_rc=$?
-timeout 30s node "$runtime/bootstrap.js" run "$client" >"$afj_result" 2>&1
+timeout 30s node "$bootstrap" run "$client" >"$afj_result" 2>&1
 afj_rc=$?
-node "$runtime/bootstrap.js" run "$project/src/engine.fls" >"$error_result" 2>&1
+node "$bootstrap" run "$project/src/engine.fls" >"$error_result" 2>&1
 error_rc=$?
-node "$runtime/bootstrap.js" run "$project/src/transaction-engine.fls" >"$isolation_result" 2>&1
+node "$bootstrap" run "$project/src/transaction-engine.fls" >"$isolation_result" 2>&1
 isolation_rc=$?
 
 statement_count=$(grep -o ';' "$corpus" | wc -l | tr -d ' ')

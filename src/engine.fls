@@ -14,12 +14,10 @@
       (conj unique-columns primary))))
 
 (defn engine-composite-key-token [row columns]
-  (if (= (count columns) 0)
-    ""
-    (if (= (count columns) 1)
-      (str (get row (first columns)))
-      (str (get row (first columns)) "|"
-           (engine-composite-key-token row (rest columns))))))
+  ;; Encode the complete component vector as JSON so delimiters and runtime
+  ;; types remain part of the key. String concatenation with `|` made
+  ;; ["a|b" "c"] collide with ["a" "b|c"], and made 1 collide with "1".
+  (json-stringify (map (fn [column] (get row column)) columns)))
 
 (defn engine-index-group-name [columns]
   (str_join columns "|"))
@@ -217,7 +215,7 @@
            (get node "children" [])))))
 
 (defn engine-composite-key-part [key index]
-  (get (str_split (str key) "|") index))
+  (get (json-parse key) index))
 
 (defn engine-btree-composite-child-may-match? [child operator value part]
   (if (or (= operator "!=") (= operator "<>"))
@@ -1116,7 +1114,9 @@
     (throw "ALTER TABLE did not add column")))
 
 ;; Parser-to-engine smoke: literal SQL values must reach the real executor.
-(load "/root/kilo-freelang/projects/afj-db95/src/sql-core.fls")
+(define AFJ-DB95-ROOT
+  (env-or "AFJ_DB95_ROOT" "/root/kilo-freelang/projects/afj-db95"))
+(load (str AFJ-DB95-ROOT "/src/sql-core.fls"))
 (execute-ast (parse-sql "CREATE TABLE literal_users"))
 (execute-ast (parse-sql "INSERT INTO literal_users (id,name) VALUES (1,'Kim')"))
 (execute-ast (parse-sql "UPDATE literal_users SET name='Lee' WHERE id=1"))

@@ -6,6 +6,7 @@ const net = require("net");
 const os = require("os");
 const path = require("path");
 const { spawn } = require("child_process");
+const { resolveBootstrap } = require("./runtime-path");
 
 function freePort() { return new Promise((resolve, reject) => { const s = net.createServer(); s.once("error", reject); s.listen(0, "127.0.0.1", () => { const p = s.address().port; s.close(() => resolve(p)); }); }); }
 function waitForOutput(child, expected) { return new Promise((resolve, reject) => { let output = ""; const timer = setTimeout(() => reject(new Error(`soak start timeout: ${output}`)), 60000); const onData = (x) => { output += x.toString(); if (output.includes(expected)) { clearTimeout(timer); resolve(); } }; child.stdout.on("data", onData); child.stderr.on("data", onData); child.once("exit", (code) => { if (code !== null) reject(new Error(`soak daemon exited ${code}: ${output}`)); }); }); }
@@ -14,7 +15,7 @@ function connectClient(port) { return new Promise((resolve, reject) => { const s
 function percentile(values, fraction) { const sorted = [...values].sort((a, b) => a - b); return sorted[Math.min(sorted.length - 1, Math.floor((sorted.length - 1) * fraction))] || 0; }
 async function main() {
   const port = await freePort(); const directory = fs.mkdtempSync(path.join(os.tmpdir(), "afj-db95-soak-")); const wal = path.join(directory, "tcp.wal");
-  const child = spawn(process.execPath, ["/root/freelang-surface-v0-clean-ek3qo2/v11/bootstrap.js", "run", "tests/tcp-soak-daemon.fls"], { cwd: path.join(__dirname, ".."), env: { ...process.env, AFJ_DB_MODE: "development", AFJ_DB_PORT: String(port), AFJ_DB_BIND_HOST: "127.0.0.1", AFJ_DB_WAL: wal, AFJ_DB_RATE_MAX_REQUESTS: "10000", AFJ_DB_RATE_WINDOW_MS: "60000" }, stdio: ["ignore", "pipe", "pipe"] });
+  const child = spawn(process.execPath, [resolveBootstrap(), "run", "tests/tcp-soak-daemon.fls"], { cwd: path.join(__dirname, ".."), env: { ...process.env, AFJ_DB_MODE: "development", AFJ_DB_PORT: String(port), AFJ_DB_BIND_HOST: "127.0.0.1", AFJ_DB_WAL: wal, AFJ_DB_RATE_MAX_REQUESTS: "10000", AFJ_DB_RATE_WINDOW_MS: "60000" }, stdio: ["ignore", "pipe", "pipe"] });
   const clients = [];
   try {
     await waitForOutput(child, "TCP soak server STARTED"); await waitForPort(port);

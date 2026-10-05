@@ -2,6 +2,21 @@
 (load "/root/kilo-freelang/projects/afj-db95/src/engine.fls")
 (load "/root/kilo-freelang/projects/afj-db95/src/sql-core.fls")
 
+(let [left (engine-composite-key-token {"tenant" "a|b" "email" "c"}
+                                       ["tenant" "email"])
+      right (engine-composite-key-token {"tenant" "a" "email" "b|c"}
+                                        ["tenant" "email"])
+      number (engine-composite-key-token {"tenant" 1 "email" "x"}
+                                         ["tenant" "email"])
+      text (engine-composite-key-token {"tenant" "1" "email" "x"}
+                                       ["tenant" "email"])]
+  (if (and (not (= left right))
+           (= (engine-composite-key-part left 0) "a|b")
+           (= (engine-composite-key-part right 1) "b|c")
+           (not (= number text)))
+    (println "afj-db95 composite key encoding edge cases PASS")
+    (throw "composite key encoding collision")))
+
 (reset! engine-catalog {})
 (reset! engine-indexes {})
 (let [create (parse-sql
@@ -26,7 +41,10 @@
                     nil)
                   (catch [error] error))
       index (get (deref engine-indexes) "compound_users.tenant|email")
-      bucket (get (get index "buckets") "a|same@example.test")]
+      bucket (get (get index "buckets")
+               (engine-composite-key-token
+                 {"tenant" "a" "email" "same@example.test"}
+                 ["tenant" "email"]))]
   (if (and (regex_match_i (error_message duplicate) ".*UNIQUE_VIOLATION.*")
            (= (count bucket) 1)
            (= (count (get (get (get (deref engine-catalog) "compound_users")

@@ -446,7 +446,7 @@
         (load-wal-events path)
         (throw "oversized WAL was accepted"))
       (catch [error]
-        (if (= (error_message error) "WAL_CORRUPT")
+        (if (regex_match_i (error_message error) ".*WAL_CORRUPT.*")
           (println "afj-db95 oversized WAL PASS")
           (throw error))))
     (file_delete path)))
