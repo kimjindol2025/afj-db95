@@ -1,12 +1,10 @@
 ;; AFJ-DB95 line-delimited JSON TCP server.
 ;; The FreeLang runtime owns sockets; this module owns protocol, auth and SQL.
 
-(define AFJ-DB95-ROOT
-  (env-or "AFJ_DB95_ROOT" "/root/kilo-freelang/projects/afj-db95"))
-(load (str AFJ-DB95-ROOT "/src/engine.fls"))
-(load (str AFJ-DB95-ROOT "/src/sql-core.fls"))
-(load (str AFJ-DB95-ROOT "/src/protocol.fls"))
-(load (str AFJ-DB95-ROOT "/src/auth.fls"))
+(load "../src/engine.fls")
+(load "../src/sql-core.fls")
+(load "../src/protocol.fls")
+(load "../src/auth.fls")
 
 (define afj-tcp-port
   (let [raw (env-get "AFJ_DB_PORT")]
@@ -621,10 +619,14 @@
               (if (= (get event "type") "commit")
                 (let [pending (get (deref prepared) tx)
                       body (if (nil? pending) nil (get pending "body"))]
-                (if (and (not (nil? body))
-                         (afj-tcp-wal-record-valid? pending body)
-                         (afj-tcp-wal-record-valid? event body))
-                  (afj-tcp-replay-commit-body body)
+                (if (not (nil? body))
+                  (if (afj-tcp-wal-record-valid? pending body)
+                    (if (afj-tcp-wal-record-valid? event body)
+                      (do
+                        (afj-tcp-replay-commit-body body)
+                        true)
+                      nil)
+                    nil)
                   nil))
                 nil))
             (afj-tcp-recover-lines lines (+ index 1) prepared final-newline)))))))
@@ -634,7 +636,9 @@
   (doseq [table (keys (deref engine-catalog))]
     (let [definition (get (deref engine-catalog) table)]
       (if (not (afj-tcp-lazy-placeholder? definition))
-        (engine-rebuild-table-indexes table definition)
+        (do
+          (engine-rebuild-table-indexes table definition)
+          true)
         nil)))
   true)
 
@@ -690,7 +694,10 @@
                     (str_lines (str-slice raw replay-start (count raw))))
             0 (atom {}) (str_ends_with raw "\n"))
           (catch [error] (throw "WAL_CORRUPT")))
-        nil))
+        nil)
+      ;; Keep rebuild as the final value of the recovery let-block so its
+      ;; registry side effect is evaluated before the outer result returns.
+      (afj-tcp-rebuild-all-indexes))
     true))
 
 (defn afj-tcp-record-asts [asts]
@@ -766,8 +773,10 @@
     (afj-tcp-record-asts asts)
     (swap! afj-tcp-commit-revision (fn [revision] (+ revision 1)))
     (afj-tcp-mark-table-revisions asts (deref afj-tcp-commit-revision))
-    (afj-tcp-record-row-versions-for-asts
-      (deref engine-catalog) asts (deref afj-tcp-commit-revision))
+    (do
+      (afj-tcp-record-row-versions-for-asts
+        (deref engine-catalog) asts (deref afj-tcp-commit-revision))
+      true)
     (afj-tcp-write-catalog-pages)
     (deref result)))
 
@@ -859,21 +868,24 @@
   true)
 
 (defn afj-tcp-record-row-versions-for-asts [catalog asts revision]
-  (doseq [ast asts]
-    (let [table (get ast "table")
-          definition (if (nil? table) nil (get catalog table))]
-      (if (or (nil? table) (nil? definition))
-        nil
-        (if (= (get ast "type") "insert")
-          (afj-tcp-append-insert-row-versions
-            table
-            (if (has-key? ast "rows")
-              (get ast "rows")
-              [(get ast "row")])
-            revision)
-          (afj-tcp-record-table-row-versions
-            table (get definition "rows" []) revision)))))
-  true)
+  (let [results
+          (map (fn [ast]
+                 (let [table (get ast "table")
+                       definition (if (nil? table) nil (get catalog table))]
+                   (if (or (nil? table) (nil? definition))
+                     true
+                     (if (= (get ast "type") "insert")
+                       (afj-tcp-append-insert-row-versions
+                         table
+                         (if (has-key? ast "rows")
+                           (get ast "rows")
+                           [(get ast "row")])
+                         revision)
+                       (afj-tcp-record-table-row-versions
+                         table (get definition "rows" []) revision)))))
+               asts)]
+    (count results)
+    true))
 
 (defn afj-tcp-replay-commit-body [body]
   (let [asts (if (has-key? body "asts")
@@ -886,8 +898,10 @@
       (execute-ast ast))
     (swap! afj-tcp-commit-revision (fn [revision] (+ revision 1)))
     (afj-tcp-mark-table-revisions asts (deref afj-tcp-commit-revision))
-    (afj-tcp-record-row-versions-for-asts
-      (deref engine-catalog) asts (deref afj-tcp-commit-revision))
+    (do
+      (afj-tcp-record-row-versions-for-asts
+        (deref engine-catalog) asts (deref afj-tcp-commit-revision))
+      true)
     true))
 
 (defn afj-tcp-versioned-rows [table fallback snapshot]
@@ -989,6 +1003,42 @@
       (= (get ast "type") "update")
       (= (get ast "type") "delete")))
 
+(defn afj-tcp-schema-write-ast? [ast]
+  (or (= (get ast "type") "alter-table")
+      (= (get ast "type") "create-table")
+      (= (get ast "type") "drop-table")))
+
+(defn afj-tcp-schema-same? [left right]
+  (and (not (nil? left))
+       (not (nil? right))
+       (= (json_str (get left "schema" {}))
+          (json_str (get right "schema" {})))
+       (= (json_str (get left "columns" []))
+          (json_str (get right "columns" [])))))
+
+(defn afj-tcp-merge-schema-row [row columns index]
+  (if (>= index (count columns))
+    row
+    (let [column (get columns index)
+          updated (if (has-key? row column)
+                    row
+                    (assoc row column nil))]
+      (afj-tcp-merge-schema-row updated columns (+ index 1)))))
+
+(defn afj-tcp-merge-schema-rows-at [rows columns index result]
+  (if (>= index (count rows))
+    result
+    (afj-tcp-merge-schema-rows-at
+      rows columns (+ index 1)
+      (conj result
+            (afj-tcp-merge-schema-row (get rows index) columns 0)))))
+
+(defn afj-tcp-merge-schema-rows [current working]
+  (let [columns (map (fn [column] (get column "name"))
+                     (get (get working "schema" {}) "columns" []))]
+    (afj-tcp-merge-schema-rows-at
+      (get current "rows" []) columns 0 [])))
+
 (defn afj-tcp-write-table-conflict? [tx-state]
   ;; Validate writes against row versions.  A transaction may now commit a
   ;; disjoint row change on a table that advanced since its snapshot; schema
@@ -1020,8 +1070,28 @@
                     (get working-table "rows" [])))
               (reset! conflict true)
               nil)
-            (reset! conflict true)))))
+            (if (and (afj-tcp-schema-write-ast? ast)
+                     (afj-tcp-schema-same? snapshot-table current-table))
+              nil
+              (reset! conflict true))))))
     (deref conflict)))
+
+(defn afj-tcp-schema-merge-eligible? [tx-state]
+  (let [snapshot (get tx-state "snapshot")
+        current (deref engine-catalog)
+        eligible (atom false)]
+    (doseq [ast (get tx-state "asts")]
+      (let [table (get ast "table")
+            snapshot-table (if (nil? table) nil (get snapshot table))
+            current-table (if (nil? table) nil (get current table))]
+        (if (or (afj-tcp-schema-write-ast? ast)
+                (and (not (nil? snapshot-table))
+                     (not (nil? current-table))
+                     (not (afj-tcp-schema-same?
+                            snapshot-table current-table))))
+          (reset! eligible true)
+          nil)))
+    (deref eligible)))
 
 (defn afj-tcp-merge-table-rows [base current working]
   (let [merged (atom (afj-tcp-row-map current))
@@ -1064,7 +1134,26 @@
             (if (nil? (get (deref touched) table-name))
               (swap! touched conj table-name)
               nil))
-          nil)))
+          (if (and (afj-tcp-schema-write-ast? ast)
+                   (not (nil? table-name))
+                   (not (nil? (get snapshot-catalog table-name)))
+                   (not (nil? (get working-catalog table-name)))
+                   (not (nil? (get (deref merged-catalog) table-name)))
+                   (afj-tcp-schema-same?
+                     (get snapshot-catalog table-name)
+                     (get (deref merged-catalog) table-name)))
+            (let [current-table (get (deref merged-catalog) table-name)
+                  working-table (get working-catalog table-name)]
+              (swap! merged-catalog assoc table-name
+                     (assoc (assoc current-table
+                                   "columns" (get working-table "columns" []))
+                            "schema" (get working-table "schema" {})
+                            "rows" (afj-tcp-merge-schema-rows
+                                      current-table working-table)))
+              (if (nil? (get (deref touched) table-name))
+                (swap! touched conj table-name)
+                nil))
+            nil))))
     {"catalog" (deref merged-catalog) "tables" (deref touched)}))
 
 (defn afj-tcp-lock-table-result [token table]
@@ -1313,12 +1402,15 @@
     (if (or (nil? current) (not (= (get current "status") "active")))
       {"ok" false "error" "TX_NOT_ACTIVE"}
       (let [has-predicates (> (count (get current "read-predicates")) 0)
-            stale (if has-predicates
-                    (or (afj-tcp-write-table-conflict? current)
-                        (afj-tcp-predicate-conflict? current))
-                    (not (= (get current "base-revision")
-                            (deref afj-tcp-commit-revision))))]
-      (if (and (> (count (get current "asts")) 0) stale)
+            revision-stale (not (= (get current "base-revision")
+                                   (deref afj-tcp-commit-revision)))
+            conflict (if has-predicates
+                       (or (afj-tcp-write-table-conflict? current)
+                           (afj-tcp-predicate-conflict? current))
+                       (if (afj-tcp-schema-merge-eligible? current)
+                         (afj-tcp-write-table-conflict? current)
+                         revision-stale))]
+      (if (and (> (count (get current "asts")) 0) conflict)
         (do
           ;; Optimistic validation closes the write-skew/lost-update hole for
           ;; transactions that touched different tables and did not contend on
@@ -1327,7 +1419,7 @@
           {"ok" false "error" "TX_CONFLICT" "victim" token
            "status" "rolled-back"})
         (let [asts (get current "asts")
-              merge-state (if stale
+              merge-state (if revision-stale
                            (afj-tcp-merge-working-catalog current)
                            {"catalog" (get current "working-catalog")
                             "tables" []})]
@@ -1337,10 +1429,10 @@
           (reset! engine-catalog
                   (afj-tcp-copy (get merge-state "catalog")))
           (reset! engine-indexes
-                  (if stale
+                  (if revision-stale
                     (afj-tcp-copy (deref engine-indexes))
                     (afj-tcp-copy (get current "working-indexes"))))
-          (if stale
+          (if revision-stale
             (doseq [table (get merge-state "tables")]
               (engine-rebuild-table-indexes table (get (deref engine-catalog) table)))
             nil)
@@ -1758,12 +1850,12 @@
                 (afj-tcp-send conn (afj-tcp-shutdown request))
                 (afj-tcp-send conn {"ok" false "error" "UNKNOWN_REQUEST"})))))))))))))))
 
-(defn afj-db-tcp-handler [event conn payload]
+(defn afj-db-tcp-handler [event conn payload peer]
   (if (= event "connect")
-    ;; tcp-server-raw runtime contract is handler(event, conn, payload).
-    ;; Peer metadata is unavailable on this raw boundary; rate limiting falls
-    ;; back to the connection id when the peer address is absent.
-    (swap! afj-tcp-peer-addresses assoc conn nil)
+    ;; tcp-server-raw/tls runtime contract is handler(event, conn, payload, peer).
+    ;; Keep the peer address on the connection so multiple sockets from one
+    ;; source share the same request budget.
+    (swap! afj-tcp-peer-addresses assoc conn peer)
     (if (= event "data")
     (let [combined (str (get (deref afj-tcp-buffers) conn "") payload)]
       (afj-tcp-process-buffer conn combined))

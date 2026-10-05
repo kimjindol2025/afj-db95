@@ -1,7 +1,7 @@
 ;; AFJ-DB lock manager + engine mutation integration.
 
-(load "/root/kilo-freelang/projects/afj-db95/src/engine.fls")
-(load "/root/kilo-freelang/projects/afj-db95/src/locking.fls")
+(load "../src/engine.fls")
+(load "../src/locking.fls")
 
 (defn locked-update [tx table id changes]
   (let [resource (str table ":" id)

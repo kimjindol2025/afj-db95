@@ -1,0 +1,61 @@
+;; AFJ-014 schema-level MVCC contract.
+;; A disjoint row commit and nullable ADD COLUMN on the same table must merge;
+;; a second schema change still conflicts with the snapshot schema.
+(load "../src/tcp-server.fls")
+
+(server-start "tcp-schema-mvcc-test")
+(reset! engine-catalog {})
+(reset! engine-indexes {})
+(reset! afj-tcp-commit-revision 0)
+(reset! afj-tcp-table-revisions {})
+(reset! afj-tcp-row-versions {})
+(reset! afj-tcp-sessions {"schema-a" "root" "schema-b" "root"})
+(reset! afj-tcp-session-expiries {})
+(reset! afj-tcp-transactions {})
+(reset! afj-tcp-locks {})
+(reset! afj-tcp-wait-for {})
+(reset! afj-tcp-wait-starts {})
+
+(execute-ast
+  {"type" "create-table" "table" "schema_mvcc"
+   "schema" {"columns" [{"name" "id" "type" "INTEGER"
+                             "nullable" false "primary" true}]
+              "primary-key" "id" "unique-columns" []}})
+
+;; Commit the row first, then merge a disjoint nullable schema change.
+(afj-tcp-begin "schema-a")
+(afj-tcp-begin "schema-b")
+(afj-tcp-query {"token" "schema-a"
+                "statement" "INSERT INTO schema_mvcc (id) VALUES (1)"})
+(let [row-commit (afj-tcp-commit "schema-a")
+      ddl (afj-tcp-query {"token" "schema-b"
+                          "statement" "ALTER TABLE schema_mvcc ADD COLUMN note TEXT"})]
+  (let [ddl-commit (afj-tcp-commit "schema-b")
+        table (engine-table "schema_mvcc")
+        columns (get (get table "schema") "columns")]
+  (if (and (get row-commit "ok")
+           (get ddl "ok")
+           (get ddl-commit "ok")
+           (= (count (get table "rows")) 1)
+           (= (get (last columns) "name") "note")
+           (nil? (get (first (get table "rows")) "note")))
+    nil
+    (throw "schema MVCC row/DDL merge failed"))))
+
+;; A concurrent second schema change must not silently overwrite the first.
+(afj-tcp-begin "schema-a")
+(afj-tcp-begin "schema-b")
+(let [first-ddl (afj-tcp-query {"token" "schema-a"
+                                "statement" "ALTER TABLE schema_mvcc ADD COLUMN left_col TEXT"})
+      second-ddl (afj-tcp-query {"token" "schema-b"
+                                 "statement" "ALTER TABLE schema_mvcc ADD COLUMN right_col TEXT"})
+      first-commit (afj-tcp-commit "schema-a")
+      second-commit (afj-tcp-commit "schema-b")]
+  (if (and (get first-ddl "ok")
+           (not (get second-ddl "ok"))
+           (= (get second-ddl "error") "LOCK_CONFLICT")
+           (get first-commit "ok")
+           (get second-commit "ok")
+           (= (get second-commit "statements") 0))
+    (println "afj-db95 schema MVCC PASS")
+    (throw "schema MVCC conflict boundary failed")))

@@ -1,6 +1,6 @@
 ;; AFJ-010 mysql_native_password digest vectors.
-(load "/root/kilo-freelang/projects/afj-db95/src/sha1.fls")
-(load "/root/kilo-freelang/projects/afj-db95/src/mariadb-wire.fls")
+(load "../src/sha1.fls")
+(load "../src/mariadb-wire.fls")
 
 (let [empty (sha1-digest (utf8-encode ""))
       abc (sha1-digest (utf8-encode "abc"))

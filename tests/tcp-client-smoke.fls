@@ -1,5 +1,5 @@
 ;; Independent-process TCP client contract.
-(load "/root/kilo-freelang/projects/afj-db95/src/tcp-server.fls")
+(load "../src/tcp-server.fls")
 
 (defn tcp-request [body]
   (json-parse (tcp-send "127.0.0.1" afj-tcp-port (json_str body) 3000)))

@@ -1,7 +1,5 @@
 ;; One-shot authenticated query contract for clients that close each TCP request.
-(define AFJ-DB95-ROOT
-  (env-or "AFJ_DB95_ROOT" "/root/kilo-freelang/projects/afj-db95"))
-(load (str AFJ-DB95-ROOT "/src/tcp-server.fls"))
+(load "../src/tcp-server.fls")
 
 (let [$started (start-afj-tcp)]
   (if (get $started "ok")

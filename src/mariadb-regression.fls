@@ -1,6 +1,6 @@
 ;; MariaDB compatibility regression baseline.
 
-(load "/root/kilo-freelang/projects/afj-db95/src/sql-core.fls")
+(load "../src/sql-core.fls")
 
 (defn regression-case [sql expected-type]
   (let [ast (parse-sql sql)]

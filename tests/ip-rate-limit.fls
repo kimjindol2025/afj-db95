@@ -1,7 +1,7 @@
 ;; AFJ-006 peer-address rate-limit contract.
 ;; The runtime passes remoteAddress as the fourth TCP event argument. Two
 ;; connections from one peer must share a budget; different peers do not.
-(load "/root/kilo-freelang/projects/afj-db95/src/tcp-server.fls")
+(load "../src/tcp-server.fls")
 
 (reset! afj-tcp-rate-state {})
 (reset! afj-tcp-peer-addresses {})

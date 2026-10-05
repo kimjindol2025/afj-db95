@@ -1,5 +1,5 @@
 ;; Authentication failure lockout contract.
-(load "/root/kilo-freelang/projects/afj-db95/src/auth.fls")
+(load "../src/auth.fls")
 
 (create-role "lockout-role")
 (grant "lockout-role" "db.read")

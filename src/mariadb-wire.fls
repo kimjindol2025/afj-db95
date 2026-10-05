@@ -15,7 +15,7 @@
                (buf-u8 (bit-and (bit_shr value 8) 255))
                (buf-u8 (bit-and (bit_shr value 16) 255))]))
 
-(load "/root/kilo-freelang/projects/afj-db95/src/sha1.fls")
+(load "../src/sha1.fls")
 
 (defn mariadb-read-u24le [bytes offset]
   (+ (buf-read-u8 bytes offset)

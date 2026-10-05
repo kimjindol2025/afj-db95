@@ -20,17 +20,21 @@ function freePort() {
   });
 }
 
-function waitForOutput(child, expected) {
+function waitForOutput(child, expected, port) {
   return new Promise((resolve, reject) => {
     let output = "";
     const timer = setTimeout(() => reject(new Error(`TLS start timeout: ${output}`)), 15000);
     const onData = (chunk) => {
       output += chunk.toString();
       if (output.includes(expected)) {
-        clearTimeout(timer);
-        child.stdout.off("data", onData);
-        child.stderr.off("data", onData);
-        resolve();
+        const probe = setInterval(() => {
+          const socket = net.connect(port, "127.0.0.1", () => {
+            clearInterval(probe); clearTimeout(timer);
+            child.stdout.off("data", onData); child.stderr.off("data", onData);
+            socket.destroy(); resolve();
+          });
+          socket.once("error", () => socket.destroy());
+        }, 50);
       }
     };
     child.stdout.on("data", onData);
@@ -78,7 +82,7 @@ async function main() {
       AFJ_NATIVE_TLS_KEY: key, AFJ_NATIVE_TLS_HOST: "127.0.0.1" },
       stdio: ["ignore", "pipe", "pipe"] });
   try {
-    await waitForOutput(child, "afj-db95 native TLS STARTED");
+    await waitForOutput(child, "afj-db95 native TLS STARTED", port);
     assert.strictEqual(await tlsEcho(port, fs.readFileSync(cert)), "native-tls\n");
     await plainConnectionRejected(port);
     console.log("afj-db95 native TLS listener PASS");

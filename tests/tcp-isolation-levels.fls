@@ -1,6 +1,6 @@
 ;; TCP isolation-level contract: READ COMMITTED refreshes, REPEATABLE READ
 ;; keeps its snapshot, and SERIALIZABLE protects a read table with a lock.
-(load "/root/kilo-freelang/projects/afj-db95/src/tcp-server.fls")
+(load "../src/tcp-server.fls")
 
 (server-start "tcp-isolation-levels-test")
 (reset! engine-catalog {})

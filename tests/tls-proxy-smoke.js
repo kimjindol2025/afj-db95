@@ -24,6 +24,22 @@ function close(server) {
   return new Promise((resolve) => server.close(() => resolve()));
 }
 
+function waitForPort(port) {
+  return new Promise((resolve, reject) => {
+    const deadline = Date.now() + 20000;
+    const probe = () => {
+      const socket = net.connect(port, "127.0.0.1");
+      socket.once("connect", () => { socket.destroy(); resolve(); });
+      socket.once("error", () => {
+        socket.destroy();
+        if (Date.now() >= deadline) reject(new Error("AFJ port did not open"));
+        else setTimeout(probe, 50);
+      });
+    };
+    probe();
+  });
+}
+
 function tlsRequest(port, options) {
   return new Promise((resolve) => {
     const client = tls.connect({
@@ -73,7 +89,7 @@ function startAfjDaemon(port, walPath) {
       if (output.includes("afj-db95 TCP server STARTED")) {
         clearTimeout(timer);
         child.stdout.off("data", onData);
-        resolve(child);
+        waitForPort(port).then(() => resolve(child), reject);
       }
     };
     child.stdout.on("data", onData);

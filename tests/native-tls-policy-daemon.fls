@@ -28,5 +28,8 @@
 (if (= native-tls-policy-start "ok")
   (do
     (println "afj-db95 native TLS mTLS STARTED")
-    (set-timeout (fn [] (tcp-server-stop native-tls-policy-port)) 30000))
+    (loop [tick 0]
+      (if (< tick 3000)
+        (do (fl-yield 10) (recur (+ tick 1)))
+        (tcp-server-stop native-tls-policy-port))))
   (throw native-tls-policy-start))

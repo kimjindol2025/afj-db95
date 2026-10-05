@@ -1,6 +1,6 @@
 ;; Slow-client contract: an incomplete request has a generation timestamp and
 ;; timeout cleanup removes the connection buffer.
-(load "/root/kilo-freelang/projects/afj-db95/src/tcp-server.fls")
+(load "../src/tcp-server.fls")
 
 (reset! afj-tcp-buffers {})
 (reset! afj-tcp-buffer-starts {})

@@ -1,5 +1,5 @@
 ;; AFJ-010 packet framing and length-encoded string regression.
-(load "/root/kilo-freelang/projects/afj-db95/src/mariadb-wire.fls")
+(load "../src/mariadb-wire.fls")
 (define body (utf8-encode "SELECT 1"))
 (define frame (mariadb-packet 7 body))
 (if (and (mariadb-packet-complete? frame)

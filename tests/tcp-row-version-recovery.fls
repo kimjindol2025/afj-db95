@@ -1,5 +1,5 @@
 ;; AFJ-014 WAL replay must rebuild committed row-version history.
-(load "/root/kilo-freelang/projects/afj-db95/src/tcp-server.fls")
+(load "../src/tcp-server.fls")
 
 (if (file_exists afj-tcp-wal) (file_delete afj-tcp-wal) nil)
 (reset! engine-catalog {})
@@ -23,6 +23,8 @@
   {"type" "update" "table" "recovery_accounts"
    "where" {"column" "id" "equals" "1"}
    "changes" {"balance" "20"}})
+
+
 
 (reset! engine-catalog {})
 (reset! engine-indexes {})

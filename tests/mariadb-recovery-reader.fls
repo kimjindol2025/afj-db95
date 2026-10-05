@@ -1,7 +1,7 @@
 ;; New process, no socket or write to the recorded WAL.
-(load "/root/kilo-freelang/projects/afj-db95/src/tcp-server.fls")
+(load "../src/tcp-server.fls")
 (define afj-tcp-wal
-  (str_trim (file_read "/root/kilo-freelang/projects/afj-db95/docs/remediation-recovery-path.txt")))
+  (str_trim (file_read "../docs/remediation-recovery-path.txt")))
 (let [expected (json-parse (file_read (str afj-tcp-wal ".expected.json")))]
   (afj-tcp-recover)
   (if (and (= (get expected "catalog") (deref engine-catalog))

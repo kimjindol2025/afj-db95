@@ -1,6 +1,6 @@
 ;; AFJ-013 compound UNIQUE key and index maintenance contract.
-(load "/root/kilo-freelang/projects/afj-db95/src/engine.fls")
-(load "/root/kilo-freelang/projects/afj-db95/src/sql-core.fls")
+(load "../src/engine.fls")
+(load "../src/sql-core.fls")
 
 (let [left (engine-composite-key-token {"tenant" "a|b" "email" "c"}
                                        ["tenant" "email"])

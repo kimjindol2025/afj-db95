@@ -19,6 +19,47 @@
   ;; ["a|b" "c"] collide with ["a" "b|c"], and made 1 collide with "1".
   (json-stringify (map (fn [column] (get row column)) columns)))
 
+(defn engine-composite-order-value [value]
+  ;; Wire SQL integers may arrive as strings. Normalize only for ordering;
+  ;; the JSON token remains the exact identity key.
+  (if (and (string? value) (regex_match value "^-?[0-9]+$"))
+    (str-to-num value)
+    value))
+
+(defn engine-composite-order-rank [value]
+  (if (nil? value)
+    0
+    (if (number? (engine-composite-order-value value))
+      1
+      (if (boolean? value) 2 3))))
+
+(defn engine-composite-order-compare [left right]
+  (let [a (engine-composite-order-value left)
+        b (engine-composite-order-value right)
+        left-rank (engine-composite-order-rank left)
+        right-rank (engine-composite-order-rank right)]
+    (if (not (= left-rank right-rank))
+      (if (< left-rank right-rank) -1 1)
+      (if (and (number? a) (number? b))
+        (if (< a b) -1 (if (> a b) 1 0))
+        (if (= (str a) (str b))
+          0
+          (if (< (str a) (str b)) -1 1))))))
+
+(defn engine-composite-key-before-at [left right index]
+  (let [a (json-parse left)
+        b (json-parse right)]
+    (if (>= index (count a))
+      false
+      (let [comparison (engine-composite-order-compare
+                         (get a index) (get b index))]
+        (if (= comparison 0)
+          (engine-composite-key-before-at left right (+ index 1))
+          (< comparison 0))))))
+
+(defn engine-composite-key-before? [left right]
+  (engine-composite-key-before-at left right 0))
+
 (defn engine-index-group-name [columns]
   (str_join columns "|"))
 
@@ -63,7 +104,7 @@
 (defn engine-btree-child-index [separators key index]
   (if (>= index (count separators))
     index
-    (if (< key (get separators index))
+    (if (engine-btree-key-before? key (get separators index))
       index
       (engine-btree-child-index separators key (+ index 1)))))
 
@@ -80,9 +121,21 @@
             (engine-btree-insert-at (rest items) (- index 1) value))))
 
 (defn engine-btree-key-before? [left right]
-  (if (and (number? left) (number? right))
-    (< left right)
-    (< (str left) (str right))))
+  (if (and (string? left) (string? right)
+           (str_starts_with left "[")
+           (str_starts_with right "["))
+    (engine-composite-key-before? left right)
+    (if (and (number? left) (number? right))
+      (< left right)
+      (< (str left) (str right)))))
+
+(defn engine-btree-compare-value [value]
+  ;; SQL numeric literals may be stored as strings by the wire protocol. Keep
+  ;; B+Tree range planning consistent with engine-match-basic? by normalizing
+  ;; integer-looking strings before comparison.
+  (if (and (string? value) (regex_match value "^-?[0-9]+$"))
+    (str-to-num value)
+    value))
 
 (defn engine-btree-insert-sorted [entries entry]
   (if (= (count entries) 0)
@@ -183,30 +236,35 @@
 (defn engine-btree-child-may-match? [child operator value]
   (if (or (= operator "!=") (= operator "<>"))
     true
-    (let [first-key (engine-btree-node-first-key child)
-          last-key (engine-btree-node-last-key child)]
+    (let [first-key (engine-btree-compare-value
+                      (engine-btree-node-first-key child))
+          last-key (engine-btree-compare-value
+                     (engine-btree-node-last-key child))
+          compare-value (engine-btree-compare-value value)]
       (if (= operator ">")
-        (> last-key value)
+        (> last-key compare-value)
         (if (= operator ">=")
-          (>= last-key value)
+          (>= last-key compare-value)
           (if (= operator "<")
-            (< first-key value)
+            (< first-key compare-value)
             (if (= operator "<=")
-              (<= first-key value)
+              (<= first-key compare-value)
               true)))))))
 
 (defn engine-btree-range-entries [node operator value]
   (if (get node "leaf")
     (filter (fn [entry]
-              (if (= operator ">")
-                (> (get entry "key") value)
-                (if (= operator ">=")
-                  (>= (get entry "key") value)
-                  (if (= operator "<")
-                    (< (get entry "key") value)
-                    (if (= operator "<=")
-                      (<= (get entry "key") value)
-                      (not (= (get entry "key") value)))))))
+              (let [entry-key (engine-btree-compare-value (get entry "key"))
+                    compare-value (engine-btree-compare-value value)]
+                (if (= operator ">")
+                  (> entry-key compare-value)
+                  (if (= operator ">=")
+                    (>= entry-key compare-value)
+                    (if (= operator "<")
+                      (< entry-key compare-value)
+                      (if (= operator "<=")
+                        (<= entry-key compare-value)
+                        (not (= entry-key compare-value))))))))
             (get node "entries" []))
     (arr_flatten
       (map (fn [child]
@@ -221,18 +279,21 @@
 (defn engine-btree-composite-child-may-match? [child operator value part]
   (if (or (= operator "!=") (= operator "<>"))
     true
-    (let [first-key (engine-composite-key-part
-                      (engine-btree-node-first-key child) part)
-          last-key (engine-composite-key-part
-                     (engine-btree-node-last-key child) part)]
+    (let [first-key (engine-composite-order-value
+                      (engine-composite-key-part
+                        (engine-btree-node-first-key child) part))
+          last-key (engine-composite-order-value
+                     (engine-composite-key-part
+                       (engine-btree-node-last-key child) part))
+          compare-value (engine-composite-order-value value)]
       (if (= operator ">")
-        (> last-key value)
+        (> last-key compare-value)
         (if (= operator ">=")
-          (>= last-key value)
+          (>= last-key compare-value)
           (if (= operator "<")
-            (< first-key value)
+            (< first-key compare-value)
             (if (= operator "<=")
-              (<= first-key value)
+              (<= first-key compare-value)
               true)))))))
 
 (defn engine-btree-composite-range-entries [node operator value part]
@@ -243,17 +304,19 @@
   ;; semantically safe.
   (if (get node "leaf")
     (filter (fn [entry]
-              (let [component (engine-composite-key-part
-                                (get entry "key") part)]
+              (let [component (engine-composite-order-value
+                                (engine-composite-key-part
+                                  (get entry "key") part))
+                    compare-value (engine-composite-order-value value)]
                 (if (= operator ">")
-                  (> component value)
+                  (> component compare-value)
                   (if (= operator ">=")
-                    (>= component value)
+                    (>= component compare-value)
                     (if (= operator "<")
-                      (< component value)
+                      (< component compare-value)
                       (if (= operator "<=")
-                        (<= component value)
-                        (not (= component value))))))))
+                        (<= component compare-value)
+                        (not (= component compare-value))))))))
             (get node "entries" []))
     (arr_flatten
       (map (fn [child]
@@ -310,7 +373,11 @@
     (engine-drop-table-indexes name)
     (doseq [column (engine-index-columns table)]
       (let [persisted (get (get table "page-indexes" {}) column)
-            tree persisted]
+            tree (if (nil? persisted)
+                   (engine-build-btree
+                     (get table "rows") column 0
+                     {"leaf" true "entries" []})
+                   persisted)]
         (reset! engine-indexes
                 (assoc (deref engine-indexes) (str name "." column)
                        {"table" name
@@ -912,7 +979,8 @@
         rows (map (fn [row]
                     (engine-qualify-row row (get ast "table-alias")))
                   source-rows)
-        filtered (if (nil? where)
+        filtered (if (or (nil? where)
+                         (has-key? where "and"))
                    rows
                    (filter (fn [row] (engine-match? row where)) rows))
         joined (if (nil? (get ast "join"))
@@ -1116,9 +1184,7 @@
     (throw "ALTER TABLE did not add column")))
 
 ;; Parser-to-engine smoke: literal SQL values must reach the real executor.
-(define AFJ-DB95-ROOT
-  (env-or "AFJ_DB95_ROOT" "/root/kilo-freelang/projects/afj-db95"))
-(load (str AFJ-DB95-ROOT "/src/sql-core.fls"))
+(load "../src/sql-core.fls")
 (execute-ast (parse-sql "CREATE TABLE literal_users"))
 (execute-ast (parse-sql "INSERT INTO literal_users (id,name) VALUES (1,'Kim')"))
 (execute-ast (parse-sql "UPDATE literal_users SET name='Lee' WHERE id=1"))

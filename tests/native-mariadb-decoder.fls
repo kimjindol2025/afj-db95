@@ -1,5 +1,5 @@
 ;; AFJ-010 native COM_STMT_EXECUTE decoder unit.
-(load "/root/kilo-freelang/projects/afj-db95/src/mariadb-wire.fls")
+(load "../src/mariadb-wire.fls")
 (define payload
   (buf-concat [(buf-u8 23) (buf_u32le 1) (buf-u8 0)
                (buf-u8 0) (buf-u8 0) (buf-u8 0) (buf-u8 0)

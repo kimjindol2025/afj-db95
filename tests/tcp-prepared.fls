@@ -1,6 +1,6 @@
 ;; TCP prepared statement contract: ownership and parameter binding use the
 ;; same authenticated SQL path as ordinary queries.
-(load "/root/kilo-freelang/projects/afj-db95/src/tcp-server.fls")
+(load "../src/tcp-server.fls")
 
 (server-start "tcp-prepared-test")
 (reset! engine-catalog {})

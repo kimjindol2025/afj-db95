@@ -36,6 +36,22 @@ function waitForOutput(child, expected) {
     child.once("exit", (code) => { if (code !== null) reject(new Error(`daemon exited ${code}: ${output}`)); });
   });
 }
+
+function waitForPort(port) {
+  return new Promise((resolve, reject) => {
+    const deadline = Date.now() + 30000;
+    const probe = () => {
+      const socket = net.connect(port, "127.0.0.1");
+      socket.once("connect", () => { socket.destroy(); resolve(); });
+      socket.once("error", () => {
+        socket.destroy();
+        if (Date.now() >= deadline) reject(new Error("native prepared port timeout"));
+        else setTimeout(probe, 50);
+      });
+    };
+    probe();
+  });
+}
 function runMaria(port, statement) {
   return new Promise((resolve, reject) => {
     const child = spawn("mariadb", ["--protocol=tcp", "--host=127.0.0.1", `--port=${port}`,
@@ -93,6 +109,7 @@ async function main() {
     { cwd: path.join(__dirname, ".."), env: { ...process.env, AFJ_NATIVE_MARIADB_PORT: String(port) }, stdio: ["ignore", "pipe", "pipe"] });
   try {
     await waitForOutput(child, "afj-db95 native MariaDB STARTED");
+    await waitForPort(port);
     await runMaria(port, "CREATE TABLE native_prepared (id INT PRIMARY KEY, name TEXT)");
     await runMaria(port, "INSERT INTO native_prepared (id,name) VALUES (7,'prepared')");
     const socket = net.connect(port, "127.0.0.1"); const reader = new Reader(socket);

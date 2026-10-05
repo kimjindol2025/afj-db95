@@ -13,10 +13,10 @@
   (if (= started "ok")
     (do
       (println "afj-db95 native TLS STARTED")
-      (set-timeout
-        (fn []
+      (loop [tick 0]
+        (if (< tick 3000)
+          (do (fl-yield 10) (recur (+ tick 1)))
           (do
             (tcp-server-stop port)
-            (println "afj-db95 native TLS STOPPED")))
-        30000))
+            (println "afj-db95 native TLS STOPPED")))))
     (throw (str "native TLS start failed: " started))))

@@ -1,9 +1,9 @@
 ;; Same 21 statements, real request handler, isolated process-local catalog.
 ;; No listening server, no existing WAL touched. The unique evidence WAL stays.
 ;; Expectations are the historical MariaDB checkpoints, NOT a live comparison.
-(load "/root/kilo-freelang/projects/afj-db95/src/tcp-server.fls")
+(load "../src/tcp-server.fls")
 (define afj-tcp-wal
-  (str "/root/kilo-freelang/projects/afj-db95/docs/corpus-" (uuid_short) ".wal"))
+  (str "../docs/corpus-" (uuid_short) ".wal"))
 (reset! engine-catalog {})
 (reset! engine-databases {})
 (swap! afj-tcp-sessions assoc "corpus-local" "root")
@@ -14,7 +14,7 @@
     (str_split
       (str_join
         (drop 1 (str_lines
-          (file_read "/root/kilo-freelang/projects/afj-db95/tests/mariadb-compatibility-expanded.sql")))
+          (file_read "../tests/mariadb-compatibility-expanded.sql")))
         " ") ";")))
 
 (defn corpus-expected? [number response]

@@ -1,0 +1,15 @@
+;; AFJ-013 composite NULL ordering contract.
+(load "../src/engine.fls")
+
+(let [rows [{"tenant" "a" "score" 2}
+            {"tenant" "a" "score" nil}
+            {"tenant" "a" "score" 1}]
+      tree (engine-build-composite-btree
+             rows ["tenant" "score"] 0 {"leaf" true "entries" []})
+      entries (engine-btree-entries tree)
+      ordered (map (fn [entry]
+                     (engine-composite-key-part (get entry "key") 1))
+                   entries)]
+  (if (= ordered [nil 1 2])
+    (println "afj-db95 composite NULL order PASS")
+    (throw (str "composite NULL order failed: " (json_str ordered)))))

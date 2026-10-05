@@ -1,5 +1,5 @@
 ;; AFJ-013 bounded B+Tree range traversal contract.
-(load "/root/kilo-freelang/projects/afj-db95/src/engine.fls")
+(load "../src/engine.fls")
 
 (let [tree {"leaf" false
             "separators" [8 16]

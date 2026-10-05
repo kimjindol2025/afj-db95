@@ -1,10 +1,10 @@
 ;; AFJ side of the MariaDB/AFJ-DB differential runner.
 ;; It reads and sends the same expanded SQL corpus used by mariadb.
 
-(load "/root/kilo-freelang/projects/afj-db95/src/tcp-server.fls")
+(load "../src/tcp-server.fls")
 
 (define diff-sql-file
-  "/root/kilo-freelang/projects/afj-db95/tests/mariadb-compatibility-expanded.sql")
+  "../tests/mariadb-compatibility-expanded.sql")
 
 (defn diff-request [token statement]
   (try

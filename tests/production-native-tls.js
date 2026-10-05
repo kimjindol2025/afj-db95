@@ -39,6 +39,22 @@ function waitForOutput(child, expected) {
   });
 }
 
+function waitForPort(port) {
+  return new Promise((resolve, reject) => {
+    const deadline = Date.now() + 20000;
+    const probe = () => {
+      const socket = net.connect(port, "127.0.0.1");
+      socket.once("connect", () => { socket.destroy(); resolve(); });
+      socket.once("error", () => {
+        socket.destroy();
+        if (Date.now() >= deadline) reject(new Error("TLS port did not open"));
+        else setTimeout(probe, 50);
+      });
+    };
+    probe();
+  });
+}
+
 function tlsPing(port, ca) {
   return new Promise((resolve, reject) => {
     const socket = tls.connect({ host: "127.0.0.1", port, servername: "localhost",
@@ -76,6 +92,7 @@ async function main() {
       stdio: ["ignore", "pipe", "pipe"] });
   try {
     await waitForOutput(child, "afj-db95 TCP server STARTED");
+    await waitForPort(port);
     assert.strictEqual(await tlsPing(port, fs.readFileSync(cert)), "{\"ok\":true,\"type\":\"pong\"}\n");
     console.log("afj-db95 production native TLS integration PASS");
   } finally {

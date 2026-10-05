@@ -1,7 +1,7 @@
 ;; Semantic regressions with a new retained WAL; never starts a server.
-(load "/root/kilo-freelang/projects/afj-db95/src/tcp-server.fls")
+(load "../src/tcp-server.fls")
 (define afj-tcp-wal
-  (str "/root/kilo-freelang/projects/afj-db95/docs/remediation-" (uuid_short) ".wal"))
+  (str "../docs/remediation-" (uuid_short) ".wal"))
 (reset! engine-catalog {})
 (reset! engine-databases {})
 (swap! afj-tcp-sessions assoc "regression-a" "root")
@@ -124,7 +124,7 @@
 ;; Preserve the snapshot for an independent-process reader.
 (file_write (str afj-tcp-wal ".expected.json")
   (json_str {"catalog" (deref engine-catalog) "databases" (deref engine-databases)}))
-(file_write "/root/kilo-freelang/projects/afj-db95/docs/remediation-recovery-path.txt" afj-tcp-wal)
+(file_write "../docs/remediation-recovery-path.txt" afj-tcp-wal)
 (let [before (afj-tcp-copy (deref engine-catalog))
       databases (afj-tcp-copy (deref engine-databases))]
   (afj-tcp-recover)

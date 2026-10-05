@@ -1,5 +1,5 @@
 ;; AFJ-014 row-version core contract.
-(load "/root/kilo-freelang/projects/afj-db95/src/mvcc.fls")
+(load "../src/mvcc.fls")
 
 (reset! mvcc-next-tx 0)
 (reset! mvcc-rows {})

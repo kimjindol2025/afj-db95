@@ -1,6 +1,6 @@
 ;; AFJ-013 compound predicate range planning contract.
-(load "/root/kilo-freelang/projects/afj-db95/src/engine.fls")
-(load "/root/kilo-freelang/projects/afj-db95/src/sql-core.fls")
+(load "../src/engine.fls")
+(load "../src/sql-core.fls")
 
 (reset! engine-catalog {})
 (reset! engine-indexes {})

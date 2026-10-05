@@ -1,5 +1,5 @@
 ;; AFJ-012 executor lazy table page cache contract.
-(load "/root/kilo-freelang/projects/afj-db95/src/tcp-server.fls")
+(load "../src/tcp-server.fls")
 
 (if (file_exists afj-tcp-wal) (file_delete afj-tcp-wal) nil)
 (if (file_exists afj-tcp-catalog-page-path)

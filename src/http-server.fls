@@ -1,7 +1,7 @@
 ;; AFJ-DB HTTP server adapter baseline.
 ;; Route registration is separate from startup so tests do not leave a daemon.
 
-(load "/root/kilo-freelang/projects/afj-db95/src/sql-core.fls")
+(load "../src/sql-core.fls")
 (define http-db-mode (env-or "AFJ_DB_MODE" "development"))
 (define http-root-password-env (env-get "AFJ_DB_ROOT_PASSWORD"))
 (define http-root-password

@@ -8,7 +8,11 @@ source "$repo_root/tests/bootstrap-path.sh"
 bootstrap="$(resolve_afj_bootstrap)" || exit 2
 report="$repo_root/docs/release-gate-report.md"
 temp_dir="$(mktemp -d)"
-trap 'rm -rf "$temp_dir"' EXIT
+if [[ "${AFJ_GATE_KEEP_LOGS:-0}" == "1" ]]; then
+  printf '[release-gate] logs=%s\n' "$temp_dir" >&2
+else
+  trap 'rm -rf "$temp_dir"' EXIT
+fi
 
 passed=0
 failed=0
@@ -25,6 +29,7 @@ run_case() {
   fi
   printf '[release-gate] START case=%s timeout=%ss label=%s\n' \
     "$case_number" "$case_timeout" "$label" >&2
+  started_at="$(date +%s)"
   if timeout --foreground "${case_timeout}s" "$@" >"$log_file" 2>&1; then
     status="PASS"
     passed=$((passed + 1))
@@ -32,10 +37,12 @@ run_case() {
     status="FAIL"
     failed=$((failed + 1))
   fi
-  printf '[release-gate] END case=%s status=%s label=%s\n' \
-    "$case_number" "$status" "$label" >&2
+  finished_at="$(date +%s)"
+  elapsed=$((finished_at - started_at))
+  printf '[release-gate] END case=%s status=%s elapsed=%ss label=%s\n' \
+    "$case_number" "$status" "$elapsed" "$label" >&2
   if [[ "$status" == FAIL ]]; then
-    printf '[release-gate] tail case=%s\n' "$case_number" >&2
+    printf '[release-gate] tail case=%s log=%s\n' "$case_number" "$log_file" >&2
     tail -n 12 "$log_file" >&2 || true
   fi
   results+=$'\n| '
@@ -54,6 +61,9 @@ run_case "persistent recursive B+Tree" node "$bootstrap" run "$repo_root/tests/p
 run_case "bounded B+Tree range" node "$bootstrap" run "$repo_root/tests/btree-range.fls"
 run_case "compound unique index" node "$bootstrap" run "$repo_root/tests/compound-index.fls"
 run_case "compound predicate range" node "$bootstrap" run "$repo_root/tests/compound-range.fls"
+run_case "schema MVCC merge" node "$bootstrap" run "$repo_root/tests/tcp-schema-mvcc.fls"
+run_case "composite type order" node "$bootstrap" run "$repo_root/tests/composite-type-order.fls"
+run_case "composite NULL order" node "$bootstrap" run "$repo_root/tests/composite-null-order.fls"
 run_case "TCP concurrency" node "$repo_root/tests/tcp-concurrency-smoke.js"
 run_case "TCP 5m performance envelope" env AFJ_SOAK_MS=300000 AFJ_SOAK_P95_LATENCY_MS=15000 AFJ_SOAK_MAX_LATENCY_MS=20000 node "$repo_root/tests/tcp-long-soak.js"
 run_case "backup smoke" node "$bootstrap" run "$repo_root/src/backup.fls"
@@ -119,16 +129,17 @@ do not waive an incomplete architectural condition:
 
 - Native TLS listener, external bind policy, CA/mTLS, certificate rotation and failure-injection regressions pass; no blocker remains in this area.
 - MariaDB wire-level support includes a native FreeLang Script listener for handshake, COM_QUERY and COM_STMT_PREPARE/EXECUTE/CLOSE; 32-bit capability intersection, max-packet-size/charset parsing, mysql_native_password SHA-1 challenge verification, standard-client and native prepared INT, NULL, string, and multi-parameter smoke pass. TLS/auth-plugin variants beyond mysql_native_password remain incomplete.
-- DDL/schema-level MVCC granularity and full composite-key encoding/type-order
-  compatibility are not complete; row-version WAL replay, row-level DML merge,
-  compound predicate candidate validation, composite page-range recheck,
-  multi-index intersection, range predicate conflict, and TCP transaction
-  process-kill recovery cases are covered above.
+- DDL/schema-level MVCC row/DDL merge and composite numeric/NULL type-order are
+  covered by dedicated regression cases; full composite compatibility for
+  collation and every mixed SQL type remains incomplete. Row-version WAL
+  replay, row-level DML merge, compound predicate candidate validation,
+  composite page-range recheck, multi-index intersection, range predicate
+  conflict, and TCP transaction process-kill recovery cases are covered above.
   - TCP table-page manifest, page-backed B+Tree leaf-index persistence/reopen,
     bounded pin/flush pool, lazy table eviction, lazy transaction snapshot and
     durable row-version checkpoint recovery pass; page-level row execution and
-    multi-index/compound range validation pass; DDL/schema MVCC granularity
-    remains incomplete.
+    multi-index/compound range validation and schema MVCC merge pass; full
+    composite collation/type compatibility remains incomplete.
 - Large-corpus, high-concurrency, and the reproducible 5-minute performance envelope pass with p95/max latency thresholds; unrestricted duration beyond the bounded envelope is not claimed as a guarantee.
 
 The report must remain **BLOCKED** until each item has implementation evidence and a

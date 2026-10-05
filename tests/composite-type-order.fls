@@ -1,0 +1,17 @@
+;; AFJ-013 composite key type-order contract.
+;; JSON key tokens preserve identity, but B+Tree order must compare each
+;; component with SQL-like numeric ordering rather than JSON text ordering.
+(load "../src/engine.fls")
+
+(let [rows [{"tenant" "a" "score" 10}
+            {"tenant" "a" "score" 2}
+            {"tenant" "b" "score" 1}]
+      tree (engine-build-composite-btree
+             rows ["tenant" "score"] 0 {"leaf" true "entries" []})
+      entries (engine-btree-entries tree)
+      ordered (map (fn [entry]
+                     (engine-composite-key-part (get entry "key") 1))
+                   entries)]
+  (if (= ordered [2 10 1])
+    (println "afj-db95 composite type order PASS")
+    (throw (str "composite type order failed: " (json_str ordered)))))

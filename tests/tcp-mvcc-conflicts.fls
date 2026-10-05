@@ -1,5 +1,5 @@
 ;; AFJ-014 phantom and write-skew/lost-update regression.
-(load "/root/kilo-freelang/projects/afj-db95/src/tcp-server.fls")
+(load "../src/tcp-server.fls")
 
 (server-start "tcp-mvcc-conflicts-test")
 (reset! engine-catalog {})

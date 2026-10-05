@@ -1,5 +1,5 @@
 ;; Long-soak daemon with a shutdown window longer than the workload.
-(load "/root/kilo-freelang/projects/afj-db95/src/tcp-server.fls")
+(load "../src/tcp-server.fls")
 (let [soak-raw (env-get "AFJ_SOAK_MS")
       soak-ms (if (nil? soak-raw) 60000 (str-to-num soak-raw))
       started (start-afj-tcp)]
