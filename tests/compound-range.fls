@@ -70,6 +70,47 @@
     (println "afj-db95 single numeric range PASS")
     (throw "single INTEGER index range lost rows due to string key ordering")))
 
+;; Force the persistent-style B+Tree path; the in-memory fixture above uses
+;; buckets and cannot detect comparator/pruning mismatches.
+(let [table (get (deref engine-catalog) "numeric_single")
+      tree (engine-build-btree (get table "rows") "id" 0
+                               {"leaf" true "entries" []})
+      index-key "numeric_single.id"
+      index (get (deref engine-indexes) index-key)]
+  (reset! engine-indexes
+          (assoc (deref engine-indexes) index-key (assoc index "btree" tree)))
+  (let [query (execute-ast
+                (parse-sql "SELECT * FROM numeric_single WHERE id > 20"))
+        rows (get query "rows")]
+  (if (and (= (get query "plan") "index-full-scan")
+           (= (count rows) 80)
+           (any? (fn [row] (= (get row "id") "100")) rows))
+    (println "afj-db95 single numeric high-boundary range PASS")
+    (throw (str "single INTEGER B+Tree fallback mismatch: plan="
+                (get query "plan") " rows=" (count rows)
+                " has100="
+                (any? (fn [row] (= (get row "id") "100")) rows))))))
+
+(execute-ast (parse-sql
+  "CREATE TABLE text_numeric_keys (id TEXT PRIMARY KEY)"))
+(execute-ast {"type" "insert" "table" "text_numeric_keys"
+              "rows" [{"id" "2"} {"id" "10"} {"id" "30"}]})
+(let [table (get (deref engine-catalog) "text_numeric_keys")
+      tree (engine-build-btree (get table "rows") "id" 0
+                               {"leaf" true "entries" []})
+      index-key "text_numeric_keys.id"
+      index (get (deref engine-indexes) index-key)]
+  (reset! engine-indexes
+          (assoc (deref engine-indexes) index-key (assoc index "btree" tree)))
+  (let [query (execute-ast
+                (parse-sql "SELECT * FROM text_numeric_keys WHERE id > '2'"))]
+    (if (and (= (get query "plan") "index-range-scan")
+             (= (count (get query "rows")) 1)
+             (= (get (first (get query "rows")) "id") "30"))
+      (println "afj-db95 numeric-looking TEXT range remains lexical PASS")
+      (throw (str "TEXT range semantics changed: plan=" (get query "plan")
+                  " rows=" (get query "rows"))))))
+
 ;; Delimiter characters are ordinary TEXT data and must not be mistaken for
 ;; composite-key component boundaries during range candidate selection.
 (execute-ast (parse-sql

@@ -421,11 +421,14 @@
     연산자(`>`, `>=`, `<`, `<=`, `!=`, `<>`)와 `src/engine.fls` 비교 실행을
     연결했다. `tests/tcp-range-predicate.fls`에서 `id > 10` 조회의 신규 행
     phantom 비가시성과 stale predicate write의 `TX_CONFLICT`를 실제 TCP
-    transaction 경로로 확인했다. `engine.fls`는 primary/unique index bucket의
-    `>`, `>=`, `<`, `<=`, `!=`, `<>` 후보를 먼저 좁히고 row-level predicate로
-    확정하며 `index-range-scan` 계획을 반환한다. 이는 범위 conflict와 후보
-    검증의 통합 증거지만, 페이지 기반 B+Tree range scan 완료를 의미하지
-    않는다. checkpoint table page에 row-version history를 저장·복원하는
+    transaction 경로로 확인했다. `engine.fls`는 bucket 경로에서
+    `>`, `>=`, `<`, `<=`, `!=`, `<>` 후보를 row-level predicate로 확정한다.
+    반면 INTEGER persisted-style B+Tree는 현재 문자열 키 순서와 SQL 숫자 순서가
+    다를 수 있어 범위 후보 전체를 훑은 뒤 재검증하며 `index-full-scan`으로
+    표시한다. `tests/compound-range.fls`가 20보다 큰 80개 키에서 100을 놓치지
+    않는지 확인하고, 숫자처럼 보이는 TEXT는 기존 lexical range scan을 유지하는지
+    검증한다. 이 보수 경로는 correctness를 지키지만 페이지 pruning 최적화 완료를
+    의미하지 않는다. checkpoint table page에 row-version history를 저장·복원하는
     durable 경로는 별도 회귀로 검증했으며, WAL history 압축은 운영 최적화
     범위로 남아 있다.
   - 추가 granular 증거: `afj-tcp-row-version-predicate-conflict?`가 snapshot
@@ -450,7 +453,11 @@
     `tests/compound-index.fls`로 확인한다.
   - 추가 range 증거: 내부 B+Tree node의 최소·최대 키로 불필요한 child를
     건너뛰는 bounded range traversal을 연결했다. `tests/btree-range.fls`가
-    `>`, `<=`, `<>` 결과와 경계 key를 재귀 tree fixture에서 검증한다.
+    `>`, `<=`, `<>` 결과와 경계 key를 재귀 tree fixture에서 검증한다. 실제
+    INTEGER 단일 키에서는 문자열 저장 순서가 숫자 범위와 달라질 수 있음을
+    persisted-style B+Tree fixture로 재현해, 타입별 순서 계약이 확정될 때까지
+    전체 entry 후보 검사로 전환했다. 관련 실행 계획은 `index-full-scan`이며,
+    숫자 모양 TEXT 키는 lexical pruning을 계속 사용한다.
   - 추가 복합 predicate 증거: SQL parser가 두 개의 `AND` predicate에서
     equality와 range 연산자를 함께 보존하고, executor가 사용 가능한 단일
     인덱스 후보를 먼저 좁힌 뒤 전체 predicate를 재검증한다. `tests/compound-range.fls`
@@ -508,6 +515,14 @@
   - 최신 이전 실행 기록: 2026-10-04 21:57 UTC, FreeLang runtime checker fix
     `c783288e`를 적용한 전체 loopback gate에서 `56 PASS, 0 FAIL, 0 BLOCKED`.
     당시 MariaDB CLI는 `/tmp`에 추출했고 시스템 패키지는 설치하지 않았다.
+  - 최신 실행 기록: 2026-10-05 00:10 UTC, runtime `c783288e` 및 MariaDB CLI
+    10.11.14로 전체 게이트 `61 PASS, 0 FAIL, 0 BLOCKED`. 이 실행에서 단일
+    INTEGER persisted-style B+Tree의 범위 경계 누락을 재현 후 보수적인 전체 후보
+    scan으로 막고, TCP page recovery 및 range-MVCC 실행계획 기대값을 갱신했다.
+    300초 TCP soak 및 실제 MariaDB loopback client 항목도 포함됐다. 아키텍처
+    제한(DDL/schema MVCC 범위, composite-key type-order/collation, MariaDB TLS·추가
+    auth plugin 및 clean-checkout 재현성)은 해결되지 않아 release status는 계속
+    `BLOCKED`다.
   - 진입점 실검증: `src/server.fls`를 추가해 `start-afj-tcp`를 실제 장기 실행
     서버로 노출했다. 기존 TCP 동시성 smoke가 test-only daemon 대신 이 진입점을
     실행하고, 8개 독립 클라이언트의 인증·동시 쓰기 후 인증된 shutdown, 재기동,

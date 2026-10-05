@@ -577,6 +577,12 @@
         (boolean? value)
         (string? value)))))
 
+(defn engine-index-integer-column? [table column]
+  (any? (fn [definition]
+          (and (= (get definition "name") column)
+               (= (get definition "type" "TEXT") "INTEGER")))
+        (get (get table "schema" {}) "columns" [])))
+
 (defn engine-check-valid? [row check]
   (if (has-key? check "any")
     (any? (fn [clause] (engine-check-valid? row clause)) (get check "any"))
@@ -840,6 +846,10 @@
                                  (get where "equals"))
           (get (get index "buckets")
                (str (get where "equals")) []))
+        (if (and (engine-index-integer-column? table column)
+                 (not (nil? (get index "btree"))))
+          (map (fn [entry] (get entry "row-id"))
+               (engine-btree-entries (get index "btree")))
         (if (or (= operator ">") (= operator ">=")
                 (= operator "<") (= operator "<=")
                 (= operator "!=") (= operator "<>"))
@@ -855,7 +865,7 @@
                          (get (get index "buckets") key-token [])
                          []))
                      keys-to-scan))))
-          (range 0 (count (get table "rows"))))))))
+          (range 0 (count (get table "rows")))))))))
 
 (defn engine-index-single-rows [name table where]
   (map (fn [row-id] (get (get table "rows") row-id))
@@ -984,6 +994,11 @@
                                         (has-key? where "and")
                                         (not (engine-all-equals? (get where "and") 0))
                                         (not (nil? (get index-definition "columns"))))
+        integer-range-full-scan? (and (not (nil? where))
+                                      (not (has-key? where "and"))
+                                      (not (has-key? where "equals"))
+                                      (engine-index-integer-column?
+                                        table (get where "column")))
         source-rows (if (nil? where)
                       (get table "rows")
                       (engine-index-rows-safe (get ast "table") table where))
@@ -1022,7 +1037,8 @@
         {"ok" true "type" "select" "rows" aggregate-rows})
       (if (nil? (get ast "group-by"))
         {"ok" true "type" "select"
-         "plan" (if composite-range-full-scan?
+         "plan" (if (or composite-range-full-scan?
+                        integer-range-full-scan?)
                     "index-full-scan"
                     (if (and (not (nil? where))
                          (not (nil? (get (deref engine-indexes)

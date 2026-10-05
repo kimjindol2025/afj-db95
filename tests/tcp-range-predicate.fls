@@ -37,7 +37,7 @@
       alt-ne (execute-ast (parse-sql "SELECT * FROM range_users WHERE id <> 10"))]
   (if (and (= (get (get parsed "where") "operator") ">")
            (= (get (get parsed "where") "value") "10")
-           (= (get direct "plan") "index-range-scan")
+           (= (get direct "plan") "index-full-scan")
            (= (count (get direct "rows")) 1)
            (= (count (get ge "rows")) 1)
            (= (count (get lt "rows")) 1)
