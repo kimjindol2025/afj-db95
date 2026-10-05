@@ -70,6 +70,28 @@
     (println "afj-db95 single numeric range PASS")
     (throw "single INTEGER index range lost rows due to string key ordering")))
 
+;; MariaDB-style INT is a numeric schema type too; do not silently restore
+;; lexical B+Tree pruning for the common integer alias.
+(execute-ast (parse-sql
+  "CREATE TABLE numeric_int_alias (id INT PRIMARY KEY)"))
+(execute-ast {"type" "insert" "table" "numeric_int_alias"
+              "rows" (map (fn [id] {"id" (str id)}) (range 1 101))})
+(let [table (get (deref engine-catalog) "numeric_int_alias")
+      tree (engine-build-btree (get table "rows") "id" 0
+                               {"leaf" true "entries" []})
+      index-key "numeric_int_alias.id"
+      index (get (deref engine-indexes) index-key)]
+  (reset! engine-indexes
+          (assoc (deref engine-indexes) index-key (assoc index "btree" tree)))
+  (let [query (execute-ast
+                (parse-sql "SELECT * FROM numeric_int_alias WHERE id > 20"))]
+    (if (and (= (get query "plan") "index-full-scan")
+             (= (count (get query "rows")) 80)
+             (any? (fn [row] (= (get row "id") "100")) (get query "rows")))
+      (println "afj-db95 INT alias B+Tree range fallback PASS")
+      (throw (str "INT alias range mismatch: plan=" (get query "plan")
+                  " rows=" (count (get query "rows")))))))
+
 ;; Force the persistent-style B+Tree path; the in-memory fixture above uses
 ;; buckets and cannot detect comparator/pruning mismatches.
 (let [table (get (deref engine-catalog) "numeric_single")

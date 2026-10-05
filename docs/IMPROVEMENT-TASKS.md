@@ -426,7 +426,8 @@
     반면 INTEGER persisted-style B+Tree는 현재 문자열 키 순서와 SQL 숫자 순서가
     다를 수 있어 범위 후보 전체를 훑은 뒤 재검증하며 `index-full-scan`으로
     표시한다. `tests/compound-range.fls`가 20보다 큰 80개 키에서 100을 놓치지
-    않는지 확인하고, 숫자처럼 보이는 TEXT는 기존 lexical range scan을 유지하는지
+    않는지 확인한다. SQL `INT` 선언도 INTEGER alias로 안전 경로에 들어가는지
+    확인하고, 숫자처럼 보이는 TEXT는 기존 lexical range scan을 유지하는지
     검증한다. 이 보수 경로는 correctness를 지키지만 페이지 pruning 최적화 완료를
     의미하지 않는다. checkpoint table page에 row-version history를 저장·복원하는
     durable 경로는 별도 회귀로 검증했으며, WAL history 압축은 운영 최적화
@@ -529,6 +530,11 @@
     300초 TCP soak과 실제 loopback MariaDB client 검증도 포함된다. 따라서 이
     커밋·도구 조합에서 clean-checkout 재현성은 확인됐지만, 다른 host/toolchain
     조합의 재현성이나 남은 아키텍처 차단 해소를 뜻하지 않는다.
+  - 최신 전체 게이트: 2026-10-05 00:33 UTC, 위 고정 런타임·MariaDB CLI 조합으로
+    `61 PASS, 0 FAIL, 0 BLOCKED`. 추가한 `INT` alias persisted-style B+Tree 회귀와
+    앞서 보강한 INTEGER/TEXT 경계 회귀, 300초 TCP soak, 실제 MariaDB loopback
+    client 통합이 모두 포함됐다. release status는 미해결 아키텍처 조건 때문에
+    여전히 `BLOCKED`다.
   - 진입점 실검증: `src/server.fls`를 추가해 `start-afj-tcp`를 실제 장기 실행
     서버로 노출했다. 기존 TCP 동시성 smoke가 test-only daemon 대신 이 진입점을
     실행하고, 8개 독립 클라이언트의 인증·동시 쓰기 후 인증된 shutdown, 재기동,
