@@ -353,7 +353,8 @@
     분리하고 COMMIT 때만 게시한다. `tests/transaction-isolation.fls`에서 다른
     세션의 dirty read 차단, rollback 제거, commit 게시를 검증했다. 명시적
     phantom·write skew 검증과 row-level MVCC 충돌 병합을 추가했다. DDL/schema 변경은
-    안전한 table-level 충돌 판정을 유지한다. 또한
+    기본적으로 table-level 충돌을 사용하되, 서로 다른 typed `ADD COLUMN`은 현재
+    schema/row 상태가 그대로일 때만 제한 병합한다. 또한
     `SAVEPOINT`, `ROLLBACK TO SAVEPOINT`, `RELEASE SAVEPOINT`를 TCP SQL 경로에
     연결하고, `tests/tcp-savepoint.fls`에서 앞선 staged 변경만 보존하는 부분
     롤백과 커밋 게시를 검증했다.
@@ -385,8 +386,9 @@
     재현했다. commit은 충돌 검사 결과와 base revision 경과 여부를 분리하고,
     stale revision이면 변경된 DDL 테이블만 현재 catalog에 병합한다.
     `tests/tcp-mvcc-conflicts.fls`가 두 세션의 독립 ALTER 컬럼 보존뿐 아니라
-    한쪽 DROP과 다른 쪽 CREATE의 동시 커밋도 검증한다. 같은 테이블의 동시 DDL은
-    여전히 충돌로 처리하며, 광범위한 DDL/MVCC matrix와 durable crash 시나리오는
+    한쪽 DROP과 다른 쪽 CREATE의 동시 커밋도 검증한다. 같은 테이블의 서로 다른
+    typed `ADD COLUMN`은 optimistic merge하고, 같은 열 이름의 중복 addition은
+    `TX_CONFLICT`로 거부한다. 광범위한 DDL/MVCC matrix와 durable crash 시나리오는
     남아 있다.
   - 복합 인덱스 범위 조회에서 decimal INTEGER 문자열 정렬과 `|` 구분자 충돌로
     행이 누락되는 문제를 재현했다. 복합 equality/UNIQUE 토큰은 타입 태그와 길이

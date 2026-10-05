@@ -1079,6 +1079,95 @@
       (= (get ast "type") "update")
       (= (get ast "type") "delete")))
 
+(defn afj-tcp-add-column-asts-only? [asts table index found]
+  (if (>= index (count asts))
+    found
+    (let [ast (get asts index)]
+      (if (= (get ast "table") table)
+        (and (= (get ast "type") "alter-table")
+             (= (get ast "operation") "add-column")
+             (has-key? ast "definition")
+             (afj-tcp-add-column-asts-only? asts table (+ index 1) true))
+        (afj-tcp-add-column-asts-only? asts table (+ index 1) found)))))
+
+(defn afj-tcp-column-definitions-prefix? [base current index]
+  (if (>= index (count base))
+    true
+    (and (< index (count current))
+         (= (get base index) (get current index))
+         (afj-tcp-column-definitions-prefix? base current (+ index 1)))))
+
+(defn afj-tcp-column-definition-names-overlap? [left right]
+  (any? (fn [left-column]
+          (any? (fn [right-column]
+                  (= (get left-column "name") (get right-column "name")))
+                right))
+        left))
+
+(defn afj-tcp-column-name-lists-overlap? [left right]
+  (any? (fn [left-name] (any? (fn [right-name] (= left-name right-name)) right))
+        left))
+
+(defn afj-tcp-project-row-columns [row columns index projected]
+  (if (>= index (count columns))
+    projected
+    (let [column (get columns index)]
+      (afj-tcp-project-row-columns
+        row columns (+ index 1)
+        (assoc projected (get column "name") (get row (get column "name")))))))
+
+(defn afj-tcp-project-rows-columns [rows columns]
+  (map (fn [row] (afj-tcp-project-row-columns row columns 0 {})) rows))
+
+(defn afj-tcp-add-column-merge-safe? [tx-state table-name]
+  (let [snapshot-table (get (get tx-state "snapshot") table-name)
+        working-table (get (get tx-state "working-catalog") table-name)
+        current-table (get (deref engine-catalog) table-name)
+        snapshot-schema (get snapshot-table "schema" {})
+        working-schema (get working-table "schema" {})
+        current-schema (get current-table "schema" {})
+        base-definitions (get snapshot-schema "columns" [])
+        own-definitions (drop (count base-definitions)
+                              (get working-schema "columns" []))
+        current-definitions (drop (count base-definitions)
+                                  (get current-schema "columns" []))
+        own-column-names (drop (count (get snapshot-table "columns" []))
+                               (get working-table "columns" []))
+        current-column-names (drop (count (get snapshot-table "columns" []))
+                                  (get current-table "columns" []))]
+    (and (not (nil? snapshot-table))
+         (not (nil? working-table))
+         (not (nil? current-table))
+         (afj-tcp-add-column-asts-only? (get tx-state "asts") table-name 0 false)
+         (> (count own-definitions) 0)
+         (> (count current-definitions) 0)
+         (= (dissoc snapshot-schema "columns")
+            (dissoc working-schema "columns"))
+         (= (dissoc snapshot-schema "columns")
+            (dissoc current-schema "columns"))
+         (afj-tcp-column-definitions-prefix?
+           base-definitions (get working-schema "columns" []) 0)
+         (afj-tcp-column-definitions-prefix?
+           base-definitions (get current-schema "columns" []) 0)
+         (afj-tcp-column-definitions-prefix?
+           (get snapshot-table "columns" [])
+           (get working-table "columns" []) 0)
+         (afj-tcp-column-definitions-prefix?
+           (get snapshot-table "columns" [])
+           (get current-table "columns" []) 0)
+         (not (afj-tcp-column-definition-names-overlap?
+                own-definitions current-definitions))
+         (not (afj-tcp-column-name-lists-overlap?
+                own-column-names current-column-names))
+         (= (json_str (afj-tcp-project-rows-columns
+                        (get snapshot-table "rows" []) base-definitions))
+            (json_str (afj-tcp-project-rows-columns
+                        (get working-table "rows" []) base-definitions)))
+         (= (json_str (afj-tcp-project-rows-columns
+                        (get snapshot-table "rows" []) base-definitions))
+            (json_str (afj-tcp-project-rows-columns
+                        (get current-table "rows" []) base-definitions))))))
+
 (defn afj-tcp-schema-write-ast? [ast]
   (or (= (get ast "type") "create-table")
       (= (get ast "type") "drop-table")
@@ -1125,7 +1214,11 @@
                       (get snapshot-table "schema" {})))
                 (reset! conflict true)
                 nil))
-            (reset! conflict true)))))
+            (if (and (afj-tcp-schema-write-ast? ast)
+                     (= (get ast "type") "alter-table")
+                     (afj-tcp-add-column-merge-safe? tx-state table-name))
+              nil
+              (reset! conflict true))))))
     (deref conflict)))
 
 (defn afj-tcp-merge-table-rows [base current working schema]
@@ -1146,6 +1239,22 @@
         (swap! merged assoc key (get working-map key))
         nil))
     (map (fn [key] (get (deref merged) key)) (keys (deref merged)))))
+
+(defn afj-tcp-merge-add-column-definition [table ast]
+  (let [column (get ast "column")
+        schema (get table "schema" {})
+        updated-schema (if (has-key? ast "definition")
+                         (assoc schema "columns"
+                                (conj (get schema "columns" [])
+                                      (get ast "definition")))
+                         schema)
+        rows (map (fn [row] (assoc row column nil)) (get table "rows" []))]
+    (dissoc
+      (assoc table
+             "columns" (conj (get table "columns" []) column)
+             "rows" rows
+             "schema" updated-schema)
+      "page-indexes")))
 
 (defn afj-tcp-merge-working-catalog [tx-state]
   (let [snapshot-catalog (get tx-state "snapshot")
@@ -1172,10 +1281,18 @@
               nil))
           (if (and (afj-tcp-schema-write-ast? ast)
                    (not (nil? table-name)))
-            (let [working-table (get working-catalog table-name)]
+            (let [working-table (get working-catalog table-name)
+                  current-table (get (deref merged-catalog) table-name)
+                  add-column-merge? (and (= (get ast "type") "alter-table")
+                                         (afj-tcp-add-column-merge-safe?
+                                           tx-state table-name))
+                  merged-table (if add-column-merge?
+                                 (afj-tcp-merge-add-column-definition
+                                   current-table ast)
+                                 working-table)]
               (if (nil? working-table)
                 (swap! merged-catalog dissoc table-name)
-                (swap! merged-catalog assoc table-name working-table))
+                (swap! merged-catalog assoc table-name merged-table))
               (if (nil? (get (deref touched) table-name))
                 (swap! touched conj table-name)
                 nil))
@@ -1641,7 +1758,10 @@
           (let [tx-state (get (deref afj-tcp-transactions) token)
                 active (and (not (nil? tx-state))
                             (= (get tx-state "status") "active"))
+                optimistic-schema-add? (and (= (get ast "type") "alter-table")
+                                            (= (get ast "operation") "add-column"))
                 lock-needed (and active
+                                 (not optimistic-schema-add?)
                                  (or (= permission "db.write")
                                      (and (= permission "db.read")
                                           (= (get tx-state "isolation-level")

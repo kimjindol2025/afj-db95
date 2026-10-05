@@ -437,3 +437,70 @@
     (println "afj-db95 MVCC independent CREATE/DROP merge PASS")
     (throw (str "independent CREATE/DROP did not merge: drop="
                 (json_str drop-commit) " create=" (json_str create-commit)))))
+
+;; Distinct ADD COLUMN operations on one unchanged table are mergeable; a
+;; duplicate column or concurrent row/schema mutation must still conflict.
+(afj-tcp-commit-asts
+  [{"type" "create-table" "table" "ddl_merge_same"
+    "schema" {"columns" [{"name" "id" "type" "INTEGER"
+                             "nullable" false "primary" true}]
+               "primary-key" "id" "unique-columns" []}}
+   {"type" "insert" "table" "ddl_merge_same" "rows" [{"id" "1"}]}])
+(swap! afj-tcp-sessions assoc "mvcc-ddl-same-left" "root")
+(swap! afj-tcp-sessions assoc "mvcc-ddl-same-right" "root")
+(afj-tcp-begin-level "mvcc-ddl-same-left" "REPEATABLE READ")
+(afj-tcp-begin-level "mvcc-ddl-same-right" "REPEATABLE READ")
+(let [left-read (afj-tcp-query
+                  {"token" "mvcc-ddl-same-left"
+                   "statement" "SELECT * FROM quota_a WHERE id=1"})
+      right-read (afj-tcp-query
+                   {"token" "mvcc-ddl-same-right"
+                    "statement" "SELECT * FROM quota_b WHERE id=1"})
+      left-alter (afj-tcp-query
+                   {"token" "mvcc-ddl-same-left"
+                    "statement" "ALTER TABLE ddl_merge_same ADD COLUMN left_note TEXT"})
+      right-alter (afj-tcp-query
+                    {"token" "mvcc-ddl-same-right"
+                     "statement" "ALTER TABLE ddl_merge_same ADD COLUMN right_note TEXT"})
+      left-commit (afj-tcp-commit "mvcc-ddl-same-left")
+      right-commit (afj-tcp-commit "mvcc-ddl-same-right")]
+  (if (and (get left-read "ok") (get right-read "ok")
+           (get left-alter "ok") (get right-alter "ok")
+           (get left-commit "ok") (get right-commit "ok")
+           (any? (fn [column] (= (get column "name") "left_note"))
+                 (get (get (get (deref engine-catalog) "ddl_merge_same") "schema")
+                      "columns"))
+           (any? (fn [column] (= (get column "name") "right_note"))
+                 (get (get (get (deref engine-catalog) "ddl_merge_same") "schema")
+                      "columns")))
+    (println "afj-db95 MVCC disjoint ADD COLUMN merge PASS")
+    (throw (str "same-table disjoint ALTER did not merge: left="
+                (json_str left-commit) " right=" (json_str right-commit)))))
+
+;; Identical concurrent additions are not disjoint and must keep the existing
+;; serialization conflict instead of creating duplicate schema entries.
+(swap! afj-tcp-sessions assoc "mvcc-ddl-collision-left" "root")
+(swap! afj-tcp-sessions assoc "mvcc-ddl-collision-right" "root")
+(afj-tcp-begin-level "mvcc-ddl-collision-left" "REPEATABLE READ")
+(afj-tcp-begin-level "mvcc-ddl-collision-right" "REPEATABLE READ")
+(let [left-read (afj-tcp-query
+                  {"token" "mvcc-ddl-collision-left"
+                   "statement" "SELECT * FROM quota_a WHERE id=1"})
+      right-read (afj-tcp-query
+                   {"token" "mvcc-ddl-collision-right"
+                    "statement" "SELECT * FROM quota_b WHERE id=1"})
+      left-alter (afj-tcp-query
+                   {"token" "mvcc-ddl-collision-left"
+                    "statement" "ALTER TABLE ddl_merge_same ADD COLUMN collision_note TEXT"})
+      right-alter (afj-tcp-query
+                    {"token" "mvcc-ddl-collision-right"
+                     "statement" "ALTER TABLE ddl_merge_same ADD COLUMN collision_note TEXT"})
+      left-commit (afj-tcp-commit "mvcc-ddl-collision-left")
+      right-commit (afj-tcp-commit "mvcc-ddl-collision-right")]
+  (if (and (get left-read "ok") (get right-read "ok")
+           (get left-alter "ok") (get right-alter "ok")
+           (get left-commit "ok") (not (get right-commit "ok"))
+           (= (get right-commit "error") "TX_CONFLICT"))
+    (println "afj-db95 MVCC overlapping ADD COLUMN conflict PASS")
+    (throw (str "overlapping ADD COLUMN did not conflict: left="
+                (json_str left-commit) " right=" (json_str right-commit)))))
