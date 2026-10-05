@@ -79,6 +79,9 @@
 
 ## Failure classification
 
+상세한 1차 소유자·완료 조건·중복 방지 규칙은
+[`docs/release-gate-ownership.md`](release-gate-ownership.md)에 고정했다.
+
 The 11 failures are not one growing product-failure counter. They are grouped by
 the owner of the missing contract or dependency:
 
