@@ -583,6 +583,22 @@
                (= (get definition "type" "TEXT") "INTEGER")))
         (get (get table "schema" {}) "columns" [])))
 
+(defn engine-indexed-integer-range-predicate? [name table predicate]
+  (let [column (get predicate "column")
+        indexed (get (deref engine-indexes) (str name "." column))]
+    (and (not (nil? indexed))
+         (engine-index-integer-column? table column)
+         (has-key? predicate "operator")
+         (not (has-key? predicate "equals")))))
+
+(defn engine-indexed-integer-range-in-list? [name table predicates index]
+  (if (>= index (count predicates))
+    false
+    (or (engine-indexed-integer-range-predicate?
+          name table (get predicates index))
+        (engine-indexed-integer-range-in-list?
+          name table predicates (+ index 1)))))
+
 (defn engine-check-valid? [row check]
   (if (has-key? check "any")
     (any? (fn [clause] (engine-check-valid? row clause)) (get check "any"))
@@ -994,11 +1010,14 @@
                                         (has-key? where "and")
                                         (not (engine-all-equals? (get where "and") 0))
                                         (not (nil? (get index-definition "columns"))))
-        integer-range-full-scan? (and (not (nil? where))
-                                      (not (has-key? where "and"))
-                                      (not (has-key? where "equals"))
-                                      (engine-index-integer-column?
-                                        table (get where "column")))
+        integer-range-full-scan? (if (nil? where)
+                                   false
+                                   (if (has-key? where "and")
+                                     (engine-indexed-integer-range-in-list?
+                                       (get ast "table") table
+                                       (get where "and") 0)
+                                     (engine-indexed-integer-range-predicate?
+                                       (get ast "table") table where)))
         source-rows (if (nil? where)
                       (get table "rows")
                       (engine-index-rows-safe (get ast "table") table where))

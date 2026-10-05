@@ -16,7 +16,7 @@
               (parse-sql
                 "SELECT * FROM compound_range WHERE id > 1 AND tenant = 'a'"))
       rows (get query "rows")]
-  (if (and (= (get query "plan") "index-range-scan")
+  (if (and (= (get query "plan") "index-full-scan")
            (= (count rows) 2)
            (= (get (first rows) "id") 3)
            (= (get (last rows) "id") 4))
@@ -26,7 +26,7 @@
 (let [query (execute-ast
               (parse-sql
                 "SELECT * FROM compound_range WHERE tenant = 'a' AND id >= 3"))]
-  (if (and (= (get query "plan") "index-range-scan")
+  (if (and (= (get query "plan") "index-full-scan")
            (= (count (get query "rows")) 2))
     (println "afj-db95 compound range reverse predicate PASS")
     (throw "compound reverse range predicate failed")))
@@ -34,7 +34,7 @@
 (let [query (execute-ast
               (parse-sql
                 "SELECT * FROM compound_range WHERE id > 1 AND email = 'c@example.test'"))]
-  (if (and (= (get query "plan") "index-range-scan")
+  (if (and (= (get query "plan") "index-full-scan")
            (= (count (get query "rows")) 1)
            (= (get (first (get query "rows")) "id") 4))
     (println "afj-db95 multi-index intersection PASS")
@@ -111,7 +111,17 @@
     (throw (str "single INTEGER B+Tree fallback mismatch: plan="
                 (get query "plan") " rows=" (count rows)
                 " has100="
-                (any? (fn [row] (= (get row "id") "100")) rows))))))
+                (any? (fn [row] (= (get row "id") "100")) rows)))))
+  (let [query (execute-ast
+                (parse-sql
+                  "SELECT * FROM numeric_single WHERE id > 20 AND note = 'x'"))
+        rows (get query "rows")]
+    (if (and (= (get query "plan") "index-full-scan")
+             (= (count rows) 80)
+             (any? (fn [row] (= (get row "id") "100")) rows))
+      (println "afj-db95 integer range with residual predicate PASS")
+      (throw (str "integer residual range mismatch: plan=" (get query "plan")
+                  " rows=" (count rows))))))
 
 (execute-ast (parse-sql
   "CREATE TABLE text_numeric_keys (id TEXT PRIMARY KEY)"))

@@ -535,6 +535,11 @@
     앞서 보강한 INTEGER/TEXT 경계 회귀, 300초 TCP soak, 실제 MariaDB loopback
     client 통합이 모두 포함됐다. release status는 미해결 아키텍처 조건 때문에
     여전히 `BLOCKED`다.
+  - 최신 전체 게이트: 2026-10-05 00:51 UTC, INTEGER range+residual `AND`의
+    실행 계획 분류 변경까지 포함해 `61 PASS, 0 FAIL, 0 BLOCKED`. 이 회귀는
+    결과 80행 및 `id=100` 경계와 `index-full-scan` 계획을 확인한다. 300초 TCP
+    soak과 실제 MariaDB loopback client 통합도 PASS했다. Release status는 기존
+    아키텍처 차단으로 계속 `BLOCKED`다.
   - 진입점 실검증: `src/server.fls`를 추가해 `start-afj-tcp`를 실제 장기 실행
     서버로 노출했다. 기존 TCP 동시성 smoke가 test-only daemon 대신 이 진입점을
     실행하고, 8개 독립 클라이언트의 인증·동시 쓰기 후 인증된 shutdown, 재기동,
