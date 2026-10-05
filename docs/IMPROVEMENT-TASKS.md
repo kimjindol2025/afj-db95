@@ -521,8 +521,14 @@
     scan으로 막고, TCP page recovery 및 range-MVCC 실행계획 기대값을 갱신했다.
     300초 TCP soak 및 실제 MariaDB loopback client 항목도 포함됐다. 아키텍처
     제한(DDL/schema MVCC 범위, composite-key type-order/collation, MariaDB TLS·추가
-    auth plugin 및 clean-checkout 재현성)은 해결되지 않아 release status는 계속
-    `BLOCKED`다.
+    auth plugin)은 해결되지 않아 release status는 계속 `BLOCKED`다.
+  - clean-checkout 재현: 푸시된 `a3bbdceec5ed7d08dc799e0ed7c15138f4e7c724`를
+    별도 디렉터리에 새 clone으로 checkout하고, 같은 pinned FreeLang runtime
+    `c783288e`와 MariaDB CLI 10.11.14를 제공해 전체 게이트를 다시 실행했다.
+    `docs/release-gate-report.md`에 기록된 대로 `61 PASS, 0 FAIL, 0 BLOCKED`이며
+    300초 TCP soak과 실제 loopback MariaDB client 검증도 포함된다. 따라서 이
+    커밋·도구 조합에서 clean-checkout 재현성은 확인됐지만, 다른 host/toolchain
+    조합의 재현성이나 남은 아키텍처 차단 해소를 뜻하지 않는다.
   - 진입점 실검증: `src/server.fls`를 추가해 `start-afj-tcp`를 실제 장기 실행
     서버로 노출했다. 기존 TCP 동시성 smoke가 test-only daemon 대신 이 진입점을
     실행하고, 8개 독립 클라이언트의 인증·동시 쓰기 후 인증된 shutdown, 재기동,
