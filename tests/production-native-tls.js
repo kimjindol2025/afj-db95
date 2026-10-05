@@ -52,7 +52,10 @@ function tlsPing(port, ca) {
 }
 
 async function main() {
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "afj-db95-prod-tls-"));
+  // Production rejects /tmp state paths. Keep the fixture inside the checked
+  // out project so the test exercises the production path policy instead of
+  // failing before the TLS listener starts.
+  const directory = fs.mkdtempSync(path.join(path.dirname(__dirname), ".production-native-tls-"));
   const cert = path.join(directory, "server.crt");
   const key = path.join(directory, "server.key");
   const wal = path.join(directory, "db.wal");

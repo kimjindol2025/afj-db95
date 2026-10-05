@@ -88,8 +88,8 @@ the owner of the missing contract or dependency:
 
 | 분류 | Cases | 의미 |
 |---|---|---|
-| FreeLang runtime contract | 40, 41, 45, 46 | peer address와 `tcp-server-tls`가 현재 runtime 경계에 없음 |
-| Test/environment contract | 47, 49, 52 | production test의 `/tmp` 상태 경로 또는 `mariadb` client 미설치 |
+| FreeLang runtime contract | 40, 41, 45, 46, 47 | peer address와 `tcp-server-tls`가 현재 runtime 경계에 없음 |
+| Test/environment contract | 49, 52 | `mariadb` client 미설치 |
 | Integration follow-up | 48, 53, 54, 56 | TLS adapter/native MariaDB listener·auth·prepared 경로의 별도 추적 필요 |
 
 이번 실행에서 기존에 통과하던 AFJ-DB95 core 회귀가 새로 깨졌다는 증거는
@@ -103,8 +103,9 @@ The following are the remaining release-gate conditions; passing regression case
 do not waive an incomplete architectural condition:
 
 - Native TLS boundary case 44 passed, but native TLS listener and mTLS cases 45/46 fail
-  because the current runtime does not expose `tcp-server-tls`. Production native TLS
-  case 47 is also blocked by an insecure `/tmp` auth-state path in the test setup.
+  because the current runtime does not expose `tcp-server-tls`. Case 47's `/tmp`
+  auth-state test setup was corrected in this branch; it now reaches and confirms the
+  same runtime `tcp-server-tls` blocker.
 - MariaDB wire packet unit and standard-client cases 49/52 cannot spawn the `mariadb`
   client in this environment. Native MariaDB cases 53/54/56 fail in listener/auth/
   prepared paths and need a separate runtime/client investigation. The FreeLang

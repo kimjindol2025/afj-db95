@@ -143,8 +143,8 @@ JS/셸 검수기의 bootstrap 경로는 환경변수 기반으로 바꿨지만, 
     timeout 또는 client 환경 문제로 실패해 별도 원인 추적 필요.
 - 결론: 이번 full gate는 `BLOCKED`다. 실패 case를 같은 조건으로 반복하지 않고,
   다음 작업은 runtime 계약과 외부 의존성의 소유 경계를 먼저 확정한다.
-- 실패 11건은 누적된 제품 결함 수가 아니다. runtime 계약 4건(case 40/41/45/46),
-  테스트·환경 계약 3건(case 47/49/52), integration follow-up 4건(case
+- 실패 11건은 누적된 제품 결함 수가 아니다. runtime 계약 5건(case 40/41/45/46/47),
+  테스트·환경 계약 2건(case 49/52), integration follow-up 4건(case
   48/53/54/56)으로 고정 분류했다. 현재 core 회귀가 새로 깨졌다는 증거는 없다.
 
 ## 성능 실패 원인 조사

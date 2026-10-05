@@ -11,8 +11,7 @@
 | Case | 분류 | 1차 소유자 | 현재 근거 | 완료 조건 |
 |---|---|---|---|---|
 | 40, 41 | runtime 계약 | `/home/kim/kim/platform/freelang-afj` | `tcp-server-raw` handler가 event/conn/payload만 받아 peer 주소 없음 | remote address 전달 계약과 runtime test 추가 후 AFJ-DB95 IP rate-limit PASS |
-| 45, 46 | runtime 계약 | `/home/kim/kim/platform/freelang-afj` | `tcp-server-tls` builtin 미등록 | TLS listener, mTLS, reload builtin과 runtime test가 PASS |
-| 47 | test/environment 계약 | `afj-db95/tests` | production test가 `/tmp` auth-state 경로로 거부됨 | project-scoped secure temp 경로로 test가 PASS하고 production 경계는 유지됨 |
+| 45, 46, 47 | runtime 계약 | `/home/kim/kim/platform/freelang-afj` | `tcp-server-tls` builtin 미등록. case 47은 `/tmp` 경계를 제거한 뒤 이 원인까지 도달 | TLS listener, mTLS, reload builtin과 runtime test가 PASS |
 | 48 | adapter integration | `afj-db95/tools/afj-tls-proxy.js` + test | TLS handshake 기대 응답이 빈 문자열 | adapter handshake/reload test가 실제 `pong`을 수신 |
 | 49, 52 | test environment | 실행 환경/CI image | `mariadb` executable이 PATH에 없음 | `mariadb --version`과 standard-client cases가 같은 clone에서 PASS |
 | 53, 54, 56 | 공동 진단 | `afj-db95` MariaDB adapter + runtime/환경 | listener, auth, prepared 경로가 각각 timeout/실행 실패 | 최소 native wire handshake → auth reject → prepared를 분리 재현한 뒤 소유자 확정 |
@@ -22,8 +21,7 @@
 1. 환경 확인: `command -v mariadb mariadb-admin mariadbd`와 버전 기록.
 2. runtime 확인: `tcp-server-raw` peer metadata와 `tcp-server-tls` 존재 여부를
    AFJ runtime 자체 테스트로 확정.
-3. AFJ-DB95 test harness: case 47의 secure path를 수정하고 case 48 adapter
-   handshake를 단독 재현한다.
+3. AFJ-DB95 test harness: case 48 adapter handshake를 단독 재현한다.
 4. native MariaDB 공동 진단: 53/54/56을 한 번씩 분리 실행하고 listener,
    auth, client dependency를 각각 기록한다.
 5. 소유자별 수정이 끝난 뒤에만 전체 release gate를 재실행한다.
@@ -39,5 +37,5 @@
 ## 현재 판정
 
 `DEVELOPMENT` 유지. 사내 베타와 상용서비스 승격은 보류한다. 이번 11건은
-“제품 결함 11개”가 아니라 runtime 계약 4건, test/environment 3건,
+“제품 결함 11개”가 아니라 runtime 계약 5건, test/environment 2건,
 integration 공동 진단 4건이다.

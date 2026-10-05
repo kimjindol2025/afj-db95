@@ -113,8 +113,8 @@ login과 10초 soak이 통과했다. AFJ runtime 저장소에는 사용자 변�
 상용서비스 판정             BLOCKED
 ```
 
-최신 11개 FAIL은 제품 결함으로 합산하지 않는다. runtime 계약(4건), 테스트·환경
-계약(3건), 별도 integration follow-up(4건)으로 분리하며, 분류가 끝나기 전에는
+최신 11개 FAIL은 제품 결함으로 합산하지 않는다. runtime 계약(5건), 테스트·환경
+계약(2건), 별도 integration follow-up(4건)으로 분리하며, 분류가 끝나기 전에는
 동일 case를 반복 실행하지 않는다.
 
 공식 1.0 판정: 아직 불가. 실행 가능한 compatibility scorecard는 `88%`이며,
