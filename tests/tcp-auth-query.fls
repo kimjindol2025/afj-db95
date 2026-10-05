@@ -1,0 +1,21 @@
+;; One-shot authenticated query contract for clients that close each TCP request.
+(define AFJ-DB95-ROOT
+  (env-or "AFJ_DB95_ROOT" "/root/kilo-freelang/projects/afj-db95"))
+(load (str AFJ-DB95-ROOT "/src/tcp-server.fls"))
+
+(let [$started (start-afj-tcp)]
+  (if (get $started "ok")
+    (let [$response (json-parse
+                      (tcp-send "127.0.0.1" afj-tcp-port
+                                (json-stringify
+                                  {"type" "auth-query"
+                                   "user" "root"
+                                   "password" (env-or "AFJ_DB_ROOT_PASSWORD" "development-only")
+                                   "statement" "SELECT * FROM auth_query_users"})
+                                3000))]
+      (stop-afj-tcp)
+      (if (or (= (get $response "error") "TABLE_NOT_FOUND")
+              (get $response "ok"))
+        (println "afj-db95 auth-query PASS")
+        (throw (str "auth-query failed: " (json-stringify $response)))))
+    (throw "auth-query daemon start failure")))

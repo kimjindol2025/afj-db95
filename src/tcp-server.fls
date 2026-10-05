@@ -1673,6 +1673,26 @@
           (afj-tcp-query {"token" token "statement" statement})))))
   )
 
+;; One-shot authenticated query for clients whose transport opens one TCP
+;; connection per request. The authenticated session is still scoped to the
+;; connection and is cleaned up by afj-tcp-close-connection.
+(defn afj-tcp-auth-query [request connection]
+  (let [requested-user (get request "user")
+        auth (authenticate requested-user (get request "password"))]
+    (if (not (get auth "ok"))
+      (do
+        (audit-event "auth-query" requested-user "failure")
+        {"ok" false "error" "AUTH_FAILED"})
+      (let [login (server-login requested-user)
+            token (get login "token")]
+        (swap! afj-tcp-sessions assoc token requested-user)
+        (swap! afj-tcp-connection-tokens assoc connection token)
+        (swap! afj-tcp-session-expiries assoc token
+               (+ (now_ms) afj-tcp-session-ttl-ms))
+        (audit-event "auth-query" requested-user "success")
+        (afj-tcp-query {"token" token
+                        "statement" (get request "statement")})))))
+
 (defn afj-tcp-line [conn line]
   (if (not (afj-tcp-rate-allowed? conn))
     (afj-tcp-send conn {"ok" false "error" "RATE_LIMITED"})
@@ -1716,6 +1736,12 @@
             (catch [error]
               (afj-tcp-send conn {"ok" false
                                    "error" (afj-tcp-error-code error)})))
+        (if (= (get request "type") "auth-query")
+          (try
+            (afj-tcp-send conn (afj-tcp-auth-query request conn))
+            (catch [error]
+              (afj-tcp-send conn {"ok" false
+                                   "error" (afj-tcp-error-code error)})))
         (if (= (get request "type") "tx")
           (afj-tcp-send conn (afj-tcp-tx-request request))
           (if (= (get request "type") "query")
@@ -1730,7 +1756,7 @@
               (afj-tcp-send conn (afj-tcp-health))
               (if (= (get request "type") "shutdown")
                 (afj-tcp-send conn (afj-tcp-shutdown request))
-                (afj-tcp-send conn {"ok" false "error" "UNKNOWN_REQUEST"}))))))))))))))
+                (afj-tcp-send conn {"ok" false "error" "UNKNOWN_REQUEST"})))))))))))))))
 
 (defn afj-db-tcp-handler [event conn payload]
   (if (= event "connect")
