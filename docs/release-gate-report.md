@@ -6,6 +6,7 @@
 - Release status: **BLOCKED**
 - This is the latest full-gate result from a path-normalized clone with
   `AFJ_BOOTSTRAP` and network listen permission. The gate exited 1.
+- Executable compatibility scorecard: `88%` (`node ... run src/compatibility.fls`).
 
 ## Post-review targeted validation
 

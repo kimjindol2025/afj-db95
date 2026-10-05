@@ -116,3 +116,8 @@ login과 10초 soak이 통과했다. AFJ runtime 저장소에는 사용자 변�
 최신 11개 FAIL은 제품 결함으로 합산하지 않는다. runtime 계약(4건), 테스트·환경
 계약(3건), 별도 integration follow-up(4건)으로 분리하며, 분류가 끝나기 전에는
 동일 case를 반복 실행하지 않는다.
+
+공식 1.0 판정: 아직 불가. 실행 가능한 compatibility scorecard는 `88%`이며,
+공식 기준의 완전한 MVCC·write skew·페이지 기반 B+Tree·MariaDB wire 호환·전체
+release gate PASS를 충족하지 못했다. 현재는 `DEVELOPMENT`를 유지하고,
+사내 베타도 gate blocker 해소 전에는 승격하지 않는다.
