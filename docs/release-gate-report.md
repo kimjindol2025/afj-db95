@@ -1,10 +1,10 @@
 # AFJ-016 Release Gate Report
 
-- Generated: 2026-10-05T00:51:56Z
+- Generated: 2026-10-05T01:45:35Z
 - Repository: afj-db95
-- FreeLang runtime revision: c783288e
-- MariaDB CLI version: 10.11.14
-- Automated cases: 61 PASS, 0 FAIL, 0 BLOCKED
+- FreeLang runtime revision: `c783288ede63534d0cfb73d788fc436b8d6f3509`
+- MariaDB CLI version: `10.11.14-MariaDB`
+- Automated cases: 62 PASS, 0 FAIL, 0 BLOCKED
 - Release status: **BLOCKED**
 
 ## Automated evidence
@@ -26,6 +26,7 @@
 | bounded B+Tree range | PASS | |
 | compound unique index | PASS | |
 | compound predicate range | PASS | |
+| exact INTEGER precision | PASS | |
 | TCP entrypoint concurrency, DDL MVCC and WAL restart | PASS | |
 | TCP 5m performance envelope | PASS | |
 | backup smoke | PASS | |

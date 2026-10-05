@@ -70,7 +70,7 @@
 (let [range-restore (execute-ast
                       {"type" "select" "table" "checkpoint_users"
                        "where" {"column" "id" "operator" ">" "value" 0}})]
-  (if (and (= (get range-restore "plan") "index-full-scan")
+  (if (and (= (get range-restore "plan") "full-scan")
            (= (count (get range-restore "rows")) 1))
     (println "afj-db95 catalog page B+Tree range PASS")
     (throw "catalog page B+Tree range failed")))

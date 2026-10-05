@@ -1,0 +1,51 @@
+;; INTEGER range predicates must not collapse distinct values above 2^53.
+(load "../src/engine.fls")
+(load "../src/sql-core.fls")
+
+(reset! engine-catalog {})
+(reset! engine-indexes {})
+(execute-ast (parse-sql
+  "CREATE TABLE integer_precision (id INTEGER PRIMARY KEY)"))
+(execute-ast {"type" "insert" "table" "integer_precision"
+              "rows" [{"id" "9007199254740992"}
+                      {"id" "9007199254740993"}]})
+(let [query (execute-ast
+              (parse-sql
+                "SELECT * FROM integer_precision WHERE id > 9007199254740992"))
+      rows (get query "rows")]
+  (if (and (= (count rows) 1)
+           (= (get (first rows) "id") "9007199254740993"))
+    (println "afj-db95 exact INTEGER precision PASS")
+    (throw (str "INTEGER precision lost: plan=" (get query "plan")
+                " rows=" (json_str rows)))))
+
+(let [query (execute-ast
+              (parse-sql
+                "SELECT * FROM integer_precision WHERE id=9007199254740992"))
+      rows (get query "rows")]
+  (if (and (= (count rows) 1)
+           (= (get (first rows) "id") "9007199254740992"))
+    (println "afj-db95 large INTEGER equality PASS")
+    (throw (str "INTEGER equality mismatch: " (json_str rows)))))
+
+(let [query (execute-ast
+              (parse-sql
+                "SELECT * FROM integer_precision WHERE id=09007199254740992"))
+      rows (get query "rows")]
+  (if (and (= (get query "plan") "full-scan")
+           (= (count rows) 1)
+           (= (get (first rows) "id") "9007199254740992"))
+    (println "afj-db95 INTEGER equality normalizes leading zeroes PASS")
+    (throw (str "INTEGER leading-zero equality mismatch: " (json_str rows)))))
+
+(execute-ast {"type" "insert" "table" "integer_precision"
+              "rows" [{"id" "-9007199254740992"}
+                      {"id" "-9007199254740993"}]})
+(let [query (execute-ast
+              (parse-sql
+                "SELECT * FROM integer_precision WHERE id < -9007199254740992"))
+      rows (get query "rows")]
+  (if (and (= (count rows) 1)
+           (= (get (first rows) "id") "-9007199254740993"))
+    (println "afj-db95 exact negative INTEGER range PASS")
+    (throw (str "negative INTEGER precision lost: " (json_str rows)))))

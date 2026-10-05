@@ -466,6 +466,77 @@
                 (assoc (deref qualified) (str alias "." column) (get row column))))
       (deref qualified))))
 
+(defn engine-integer-strip-zeroes [digits]
+  (if (and (> (count digits) 1)
+           (= (str_slice digits 0 1) "0"))
+    (engine-integer-strip-zeroes (str_slice digits 1 (count digits)))
+    digits))
+
+(defn engine-unsigned-integer-compare [left right]
+  (if (< (count left) (count right))
+    -1
+    (if (> (count left) (count right))
+      1
+      (if (= left right) 0 (if (< left right) -1 1)))))
+
+(defn engine-integer-parts [value]
+  (let [raw (str value)
+        negative? (str_starts_with raw "-")
+        digits (engine-integer-strip-zeroes
+                 (if negative?
+                   (str_slice raw 1 (count raw))
+                   raw))]
+    {"negative" (and negative? (not (= digits "0")))
+     "digits" digits}))
+
+(defn engine-integer-canonical-value [value]
+  (let [parts (engine-integer-parts value)]
+    (str (if (get parts "negative") "-" "")
+         (get parts "digits"))))
+
+(defn engine-integer-compare [left right]
+  (let [left-parts (engine-integer-parts left)
+        right-parts (engine-integer-parts right)
+        left-negative (get left-parts "negative")
+        right-negative (get right-parts "negative")
+        magnitude (engine-unsigned-integer-compare
+                    (get left-parts "digits") (get right-parts "digits"))]
+    (if (and left-negative (not right-negative))
+      -1
+      (if (and right-negative (not left-negative))
+        1
+        (if left-negative (- 0 magnitude) magnitude)))))
+
+(defn engine-compare-result [operator comparison]
+  (if (= operator "=")
+    (= comparison 0)
+    (if (or (= operator "!=") (= operator "<>"))
+      (not (= comparison 0))
+      (if (= operator ">") (> comparison 0)
+        (if (= operator ">=") (>= comparison 0)
+          (if (= operator "<") (< comparison 0)
+            (if (= operator "<=") (<= comparison 0) false)))))))
+
+(defn engine-column-type [table column]
+  (let [definition (first
+                     (filter (fn [item] (= (get item "name") column))
+                             (get (get table "schema" {}) "columns" [])))]
+    (let [type (str_upper (get definition "type" "TEXT"))]
+      (if (= type "INT") "INTEGER" type))))
+
+(defn engine-where-with-types [table where]
+  (if (nil? where)
+    nil
+    (if (has-key? where "and")
+      (assoc where "and"
+             (map (fn [predicate]
+                    (assoc predicate "column-type"
+                           (engine-column-type table
+                                               (get predicate "column"))))
+                  (get where "and")))
+      (assoc where "column-type"
+             (engine-column-type table (get where "column"))))))
+
 (defn engine-match-basic? [row where]
   (if (nil? where)
     true
@@ -478,21 +549,28 @@
                     (get where "value")
                     (get where "equals"))
             operator (get where "operator" "=")
+            column-type (get where "column-type")
             left-number (if (and (string? left)
                                  (regex_match left "^-?[0-9]+$"))
                           (str-to-num left) left)
             right-number (if (and (string? right)
                                   (regex_match right "^-?[0-9]+$"))
                            (str-to-num right) right)]
-        (if (= operator "=")
-          (= left right)
-          (if (or (= operator "!=") (= operator "<>"))
-            (not (= left right))
-            (if (= operator ">") (> left-number right-number)
-              (if (= operator ">=") (>= left-number right-number)
-                (if (= operator "<") (< left-number right-number)
-                  (if (= operator "<=") (<= left-number right-number)
-                    false))))))))))
+        (if (= column-type "INTEGER")
+          (engine-compare-result operator (engine-integer-compare left right))
+          (if (= column-type "TEXT")
+            (let [comparison (if (= left right) 0
+                               (if (< left right) -1 1))]
+              (engine-compare-result operator comparison))
+            (if (= operator "=")
+              (= left right)
+              (if (or (= operator "!=") (= operator "<>"))
+                (not (= left right))
+                (if (= operator ">") (> left-number right-number)
+                  (if (= operator ">=") (>= left-number right-number)
+                    (if (= operator "<") (< left-number right-number)
+                      (if (= operator "<=") (<= left-number right-number)
+                        false))))))))))))
 
 (defn engine-all-predicates-match? [row predicates index]
   (if (>= index (count predicates))
@@ -580,7 +658,8 @@
 (defn engine-index-integer-column? [table column]
   (any? (fn [definition]
           (and (= (get definition "name") column)
-               (= (get definition "type" "TEXT") "INTEGER")))
+               (or (= (str_upper (get definition "type" "TEXT")) "INTEGER")
+                   (= (str_upper (get definition "type" "TEXT")) "INT"))))
         (get (get table "schema" {}) "columns" [])))
 
 (defn engine-indexed-integer-range-predicate? [name table predicate]
@@ -588,8 +667,11 @@
         indexed (get (deref engine-indexes) (str name "." column))]
     (and (not (nil? indexed))
          (engine-index-integer-column? table column)
-         (has-key? predicate "operator")
-         (not (has-key? predicate "equals")))))
+         (or (has-key? predicate "operator")
+             (and (has-key? predicate "equals")
+                  (not (= (str (get predicate "equals"))
+                          (engine-integer-canonical-value
+                            (get predicate "equals")))))))))
 
 (defn engine-indexed-integer-range-in-list? [name table predicates index]
   (if (>= index (count predicates))
@@ -850,38 +932,77 @@
 
 ;; Keep the index lookup helper adjacent to the executor so the bootstrap
 ;; loader registers it before any self-test query invokes the planner.
+(defn engine-index-text-row-ids [column index where operator table]
+  (if (has-key? where "equals")
+    (get (get index "buckets") (str (get where "equals")) [])
+    (if (or (= operator ">") (= operator ">=")
+            (= operator "<") (= operator "<=")
+            (= operator "!=") (= operator "<>"))
+      (if (not (nil? (get index "btree")))
+        (map (fn [entry] (get entry "row-id"))
+             (engine-btree-range-entries
+               (get index "btree") operator (get where "value")))
+        (let [keys-to-scan (keys (get index "buckets"))]
+          (arr_flatten
+            (map (fn [key-token]
+                   (if (engine-match? (assoc {} column key-token) where)
+                     (get (get index "buckets") key-token [])
+                     []))
+                 keys-to-scan)))
+      (range 0 (count (get table "rows")))))))
+
 (defn engine-index-row-ids [name table where]
   (let [column (get where "column")
         index (get (deref engine-indexes) (str name "." column))
         operator (get where "operator")]
     (if (nil? index)
       (range 0 (count (get table "rows")))
-      (if (has-key? where "equals")
-        (if (not (nil? (get index "btree")))
-          (engine-btree-root-get (get index "btree")
-                                 (get where "equals"))
-          (get (get index "buckets")
-               (str (get where "equals")) []))
-        (if (and (engine-index-integer-column? table column)
-                 (not (nil? (get index "btree"))))
-          (map (fn [entry] (get entry "row-id"))
-               (engine-btree-entries (get index "btree")))
-        (if (or (= operator ">") (= operator ">=")
-                (= operator "<") (= operator "<=")
-                (= operator "!=") (= operator "<>"))
+      (if (= (engine-column-type table column) "TEXT")
+        (engine-index-text-row-ids column index where operator table)
+      (if (= (engine-column-type table column) "INTEGER")
+        (if (has-key? where "equals")
+          (let [value (get where "equals")
+                canonical (= (str value)
+                             (engine-integer-canonical-value value))]
+            (if canonical
+              (if (not (nil? (get index "btree")))
+                (engine-btree-root-get (get index "btree") value)
+                (get (get index "buckets") (str value) []))
+              (if (not (nil? (get index "btree")))
+                (map (fn [entry] (get entry "row-id"))
+                     (filter (fn [entry]
+                               (= (engine-integer-compare
+                                    (get entry "key") value) 0))
+                             (engine-btree-entries (get index "btree"))))
+                (arr_flatten
+                  (map (fn [key-token]
+                         (if (= (engine-integer-compare key-token value) 0)
+                           (get (get index "buckets") key-token [])
+                           []))
+                       (keys (get index "buckets"))))))
+          (range 0 (count (get table "rows"))))
+        (if (has-key? where "equals")
           (if (not (nil? (get index "btree")))
-            (map (fn [entry] (get entry "row-id"))
-                 (engine-btree-range-entries
-                   (get index "btree") operator (get where "value")))
-            (let [keys-to-scan (keys (get index "buckets"))]
-              (arr_flatten
-                (map (fn [key-token]
-                       (if (engine-match?
-                             (assoc {} column key-token) where)
-                         (get (get index "buckets") key-token [])
-                         []))
-                     keys-to-scan))))
-          (range 0 (count (get table "rows")))))))))
+            (engine-btree-root-get (get index "btree")
+                                   (get where "equals"))
+            (get (get index "buckets")
+                 (str (get where "equals")) []))
+          (if (or (= operator ">") (= operator ">=")
+                  (= operator "<") (= operator "<=")
+                  (= operator "!=") (= operator "<>"))
+            (if (not (nil? (get index "btree")))
+              (map (fn [entry] (get entry "row-id"))
+                   (engine-btree-range-entries
+                     (get index "btree") operator (get where "value")))
+              (let [keys-to-scan (keys (get index "buckets"))]
+                (arr_flatten
+                  (map (fn [key-token]
+                         (if (engine-match?
+                               (assoc {} column key-token) where)
+                           (get (get index "buckets") key-token [])
+                           []))
+                       keys-to-scan)))
+            (range 0 (count (get table "rows"))))))))))))
 
 (defn engine-index-single-rows [name table where]
   (map (fn [row-id] (get (get table "rows") row-id))
@@ -984,7 +1105,7 @@
 
 (defn execute-select [ast]
   (let [table (engine-table (get ast "table"))
-        where (get ast "where")
+        where (engine-where-with-types table (get ast "where"))
         index-key (if (nil? where)
                     nil
                     (if (has-key? where "and")
@@ -1020,7 +1141,10 @@
                                        (get ast "table") table where)))
         source-rows (if (nil? where)
                       (get table "rows")
-                      (engine-index-rows-safe (get ast "table") table where))
+                      (if integer-range-full-scan?
+                        (get table "rows")
+                        (engine-index-rows-safe
+                          (get ast "table") table where)))
         rows (engine-qualify-rows
                source-rows (get ast "table-alias") 0 [])
         filtered (if (nil? where)
@@ -1056,9 +1180,10 @@
         {"ok" true "type" "select" "rows" aggregate-rows})
       (if (nil? (get ast "group-by"))
         {"ok" true "type" "select"
-         "plan" (if (or composite-range-full-scan?
-                        integer-range-full-scan?)
+         "plan" (if composite-range-full-scan?
                     "index-full-scan"
+                    (if integer-range-full-scan?
+                      "full-scan"
                     (if (and (not (nil? where))
                          (not (nil? (get (deref engine-indexes)
                                         index-key)))
@@ -1070,7 +1195,7 @@
                       (if (has-key? where "equals")
                         "index-scan"
                         "index-range-scan"))
-                    "full-scan"))
+                    "full-scan")))
          "rows" (if (or (nil? (get ast "columns"))
                         (= (get ast "columns") ["*"]))
                    limited
@@ -1084,7 +1209,7 @@
 (defn execute-update [ast]
   (let [name (get ast "table")
         table (engine-table name)
-        where (get ast "where")
+        where (engine-where-with-types table (get ast "where"))
         rows (map (fn [row]
                     (if (engine-match? row where)
                       (obj-merge row (get ast "changes"))
@@ -1099,7 +1224,7 @@
 (defn execute-delete [ast]
   (let [name (get ast "table")
         table (engine-table name)
-        where (get ast "where")
+        where (engine-where-with-types table (get ast "where"))
         rows (if (nil? where)
                []
                (filter (fn [row]

@@ -467,6 +467,15 @@
     numeric ordering을 안전하게 처리할 수 없어 현재 전체 index-entry scan 후
     predicate 재검증을 사용하며, 계획에 `index-full-scan`을 표시한다. 두 leaf
     page에 걸친 결과의 정확성은 검증하지만 child pruning 성능은 주장하지 않는다.
+  - 추가 정밀도 회귀: INTEGER 비교에서 JS 안전 정수 범위 밖 값을 숫자로
+    변환하면 서로 다른 decimal 값이 같아질 수 있음을 재현했다. 문자열 기반
+    부호·자릿수 비교를 적용하고 INTEGER equality/range와 leading-zero 입력을
+    검증한다. TEXT는 숫자 모양 값도 lexical 비교를 유지한다. 단일 INTEGER
+    범위가 `full-scan`으로 계획되면 실제 후보도 전체 행이어야 하므로 실행
+    경로를 계획과 일치시켰다. `tests/integer-precision.fls` 및
+    `tests/compound-range.fls`가 큰 양수·음수, INT alias, B+Tree fallback을
+    다룬다. persisted B+Tree numeric ordering이나 페이지 pruning 성능을
+    해결한 것으로 간주하지 않는다.
   - 추가 durable 증거: catalog page checkpoint의 table page에 immutable
     `row-version-history`와 manifest의 `commit-revision`·`table-revisions`를
     함께 저장하고, recovery가 WAL tail 없이도 이전 snapshot과 최신 snapshot을
