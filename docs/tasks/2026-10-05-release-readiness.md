@@ -140,6 +140,19 @@ JS/셸 검수기의 bootstrap 경로는 환경변수 기반으로 바꿨지만, 
   `utf8-encode` builtin 없음, case 33 slow-timeout cleanup 실패, case 40/41
   peer IP rate-limit 기대 불일치, case 44 production TLS boundary의 `/root`
   상태 파일 `EACCES`.
+- 후속 수정 후 case 3/4/33/44를 재검증해 모두 PASS했다. canonical `buf-*`
+  binary API와 SHA-1 독립 helper를 사용하고, timeout 테스트의 timer race와
+  TLS boundary의 root 고정 경로를 제거했다.
+- case 40/41 peer IP rate-limit은 현재 `tcp-server-raw`가
+  `(event, conn, payload)`만 전달해 실제 peer 주소를 알 수 없는 runtime 계약
+  blocker다. connection-id fallback은 동작하지만 peer 단위 제한 PASS로 바꾸지 않는다.
+- 후속 large-corpus 검수에서 `engine-index-add-rows`와 update 경로의
+  `engine-build-index`가 각각 재귀 깊이 초과를 일으켰다. 두 행 인덱스 순회를
+  `loop/recur`로 전환한 뒤 120초 독립 실행에서 `afj-db95 large corpus PASS`를
+  확인했다.
+- raw/MariaDB binary 경계는 runtime 정본 API(`buf-to-binary`, `buf-from-binary`,
+  `buf-str`, `buf-read-str`)에 맞추고 SHA-1을 독립 실행 가능하게 바꾼 뒤 관련
+  codec/SHA-1 검수가 PASS했다.
 - case 14의 5분 soak은 진단 실행에서 30초 case timeout을 설정해 의도적으로
   중단됐으므로 성능 실패 근거로 사용하지 않는다. 별도 300초 soak은 PASS다.
 - 남은 P0: 전체 release gate의 case별 종료 증거, 원본 checkout의

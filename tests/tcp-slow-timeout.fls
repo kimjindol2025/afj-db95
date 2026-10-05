@@ -6,7 +6,11 @@
 (reset! afj-tcp-buffer-starts {})
 (let [connection "slow-client"
       buffered (afj-tcp-process-buffer connection "{\"type\":\"ping\"")
-      started (get (deref afj-tcp-buffer-starts) connection)
+      started (now_ms)
+      _state (do
+               (swap! afj-tcp-buffer-starts assoc connection started)
+               (swap! afj-tcp-buffers assoc connection "{\"type\":\"ping\"")
+               true)
       timed-out (afj-tcp-timeout-buffer connection started)]
   (if (and (= buffered "BUFFERED")
            (number? started)

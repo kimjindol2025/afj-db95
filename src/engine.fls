@@ -26,15 +26,16 @@
   (get (get table "schema" {}) "unique-groups" []))
 
 (defn engine-build-index [rows column row-id index]
-  (if (>= row-id (count rows))
-    index
-    (let [row (get rows row-id)
-          key (get row column)
-          key-token (str key)
-          existing-bucket (get index key-token)
-          bucket (if (nil? existing-bucket) [] existing-bucket)]
-      (engine-build-index rows column (+ row-id 1)
-                          (assoc index key-token (conj bucket row-id))))))
+  (loop [current row-id result index]
+    (if (>= current (count rows))
+      result
+      (let [row (get rows current)
+            key (get row column)
+            key-token (str key)
+            existing-bucket (get result key-token)
+            bucket (if (nil? existing-bucket) [] existing-bucket)]
+        (recur (+ current 1)
+               (assoc result key-token (conj bucket current)))))))
 
 (defn engine-build-composite-index [rows columns row-id index]
   (if (>= row-id (count rows))
@@ -372,11 +373,12 @@
   true)
 
 (defn engine-index-add-rows [name table rows row-id]
-  (if (>= row-id (count rows))
-    true
-    (do
-      (engine-index-add-row name table (get rows row-id) row-id)
-      (engine-index-add-rows name table rows (+ row-id 1)))))
+  (loop [current row-id]
+    (if (>= current (count rows))
+      true
+      (do
+        (engine-index-add-row name table (get rows current) current)
+        (recur (+ current 1))))))
 
 (defn engine-index-rows [name table where]
   (let [column (get where "column")

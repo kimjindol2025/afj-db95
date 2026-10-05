@@ -108,12 +108,12 @@
                                            (buf-read-u8 right index)))))))
 
 (defn sha1-mysql-native-token [password scramble]
-  (let [stage-one (sha1-digest (utf8-encode password))
+  (let [stage-one (sha1-digest (buf-str password))
         stage-two (sha1-digest stage-one)
         digest (sha1-digest (buf-concat [scramble stage-two]))]
     (sha1-xor-bytes stage-one digest 0 [])))
 
-(let [vector (sha1-digest (utf8-encode "abc"))]
+(let [vector (sha1-digest (buf-str "abc"))]
   (if (= vector "qZk+NkcGgWq6PiVxeFDCbJzQ2J0=")
     (println "afj-db95 SHA-1 implementation loaded")
     (throw "SHA-1 initialization failure")))
