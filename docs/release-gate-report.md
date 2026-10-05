@@ -1,12 +1,11 @@
 # AFJ-016 Release Gate Report
 
-- Generated: 2026-10-04T02:55:52Z
+- Generated: 2026-10-05 (KST)
 - Repository: afj-db95
-- Automated cases: 55 PASS, 1 FAIL
+- Automated cases: 45 PASS, 11 FAIL
 - Release status: **BLOCKED**
-- The automated table above is the historical full-gate baseline. The post-review
-  targeted checks below were run after the composite page-range correction; the
-  full gate was not rerun in this change.
+- This is the latest full-gate result from a path-normalized clone with
+  `AFJ_BOOTSTRAP` and network listen permission. The gate exited 1.
 
 ## Post-review targeted validation
 
@@ -34,7 +33,7 @@
 | compound unique index | PASS |
 | compound predicate range | PASS |
 | TCP concurrency | PASS |
-| TCP 5m performance envelope | FAIL |
+| TCP 5m performance envelope | PASS |
 | backup smoke | PASS |
 | backup restore soak | PASS |
 | compatibility scorecard | PASS |
@@ -60,31 +59,36 @@
 | session cleanup | PASS |
 | session TTL | PASS |
 | connection rate limit | PASS |
-| peer IP rate limit | PASS |
-| runtime peer IP rate limit | PASS |
+| peer IP rate limit | FAIL |
+| runtime peer IP rate limit | FAIL |
 | fragmented TCP requests | PASS |
 | SQL error mapping | PASS |
 | production TLS boundary | PASS |
-| native TLS listener | PASS |
-| native TLS mTLS/reload | PASS |
-| production native TLS integration | PASS |
-| TLS adapter handshake/reload | PASS |
-| MariaDB wire packet unit | PASS |
+| native TLS listener | FAIL |
+| native TLS mTLS/reload | FAIL |
+| production native TLS integration | FAIL |
+| TLS adapter handshake/reload | FAIL |
+| MariaDB wire packet unit | FAIL |
 | MariaDB mysql_native_password SHA-1 | PASS |
 | MariaDB wire prepared | PASS |
-| MariaDB standard-client smoke | PASS |
-| native MariaDB wire | PASS |
-| native MariaDB auth rejection | PASS |
+| MariaDB standard-client smoke | FAIL |
+| native MariaDB wire | FAIL |
+| native MariaDB auth rejection | FAIL |
 | native MariaDB decoder | PASS |
-| native MariaDB prepared | PASS |
+| native MariaDB prepared | FAIL |
 
 ## Release gate status
 
 The following are the remaining release-gate conditions; passing regression cases
 do not waive an incomplete architectural condition:
 
-- Native TLS listener, external bind policy, CA/mTLS, certificate rotation and failure-injection regressions pass; no blocker remains in this area.
-- MariaDB wire-level support includes a native FreeLang Script listener for handshake, COM_QUERY and COM_STMT_PREPARE/EXECUTE/CLOSE; 32-bit capability intersection, max-packet-size/charset parsing, mysql_native_password SHA-1 challenge verification, standard-client and native prepared INT, NULL, string, and multi-parameter smoke pass. TLS/auth-plugin variants beyond mysql_native_password remain incomplete.
+- Native TLS boundary case 44 passed, but native TLS listener and mTLS cases 45/46 fail
+  because the current runtime does not expose `tcp-server-tls`. Production native TLS
+  case 47 is also blocked by an insecure `/tmp` auth-state path in the test setup.
+- MariaDB wire packet unit and standard-client cases 49/52 cannot spawn the `mariadb`
+  client in this environment. Native MariaDB cases 53/54/56 fail in listener/auth/
+  prepared paths and need a separate runtime/client investigation. The FreeLang
+  codec, SHA-1 and prepared packet unit cases that do not require that client pass.
 - DDL/schema-level MVCC granularity and full composite-key encoding/type-order
   compatibility are not complete; row-version WAL replay, row-level DML merge,
   compound predicate candidate validation, composite page-range recheck,

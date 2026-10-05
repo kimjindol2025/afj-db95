@@ -118,6 +118,32 @@ JS/셸 검수기의 bootstrap 경로는 환경변수 기반으로 바꿨지만, 
   `CATALOG_PAGE_MISSING`을 냈으나, 이는 제품 실패가 아니라 검수 명령 누락이었다.
   release gate와 동일한 WAL/page 환경변수를 지정한 재실행에서 PASS했다.
 
+## 2026-10-05 check → targeted → full gate
+
+- Check: `src/afj-db95.fls`, `src/engine.fls`, `src/tcp-server.fls`,
+  `src/backup.fls`, `src/mariadb-wire.fls`, `src/sha1.fls`,
+  `src/compatibility.fls`와 `git diff --check`가 PASS했다.
+- Targeted: 독립 daemon + client 구성의 `tests/tcp-health-smoke.fls`는
+  PASS가 아니라 `BLOCKED/TEST-HARNESS`로 분류했다. 테스트가 같은 `.fls`
+  프로세스에서 동기 `tcp-send`를 호출해 이벤트 루프를 막으며, 이는
+  `tests/tcp-server-contract.md`에 이미 기록된 계약 위반이다. 이 케이스는
+  전체 gate에 포함되지 않아 별도로 확인했으며 반복하지 않는다.
+- Full gate: `AFJ_BOOTSTRAP`을 지정한 path-normalized 새 clone에서 실제
+  `bash tests/release-gate.sh`를 한 번 실행해 `45 PASS / 11 FAIL`, exit 1을
+  기록했다. 비네트워크 복구·인덱스·5분 성능 케이스는 PASS했다.
+- Full gate FAIL 분류:
+  - case 40/41 peer IP rate limit: `tcp-server-raw`가 peer 주소를 전달하지 않는
+    이미 알려진 FreeLang runtime 계약 blocker.
+  - case 45/46 native TLS: runtime에 `tcp-server-tls` builtin이 없어 시작 실패.
+  - case 47 production native TLS: production test가 `/tmp` 인증 상태 경로로
+    거부되어 테스트 환경 계약을 별도 정리해야 함.
+  - case 48 TLS adapter: handshake 응답이 빈 문자열로 끝남.
+  - case 49/52 MariaDB standard client: 실행 환경에 `mariadb` 바이너리 없음.
+  - case 53/54/56 native MariaDB: listener/auth/prepared client 경로가
+    timeout 또는 client 환경 문제로 실패해 별도 원인 추적 필요.
+- 결론: 이번 full gate는 `BLOCKED`다. 실패 case를 같은 조건으로 반복하지 않고,
+  다음 작업은 runtime 계약과 외부 의존성의 소유 경계를 먼저 확정한다.
+
 ## 성능 실패 원인 조사
 
 - 초기 10초 축약 soak에서 서버 시작은 PASS했지만 첫 `login`이 timeout됨.
