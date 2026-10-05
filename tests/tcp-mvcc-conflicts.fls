@@ -402,3 +402,38 @@
                 (json_str left-commit) " right=" (json_str right-commit)
                 " left-columns=" (json_str left-columns)
                 " right-columns=" (json_str right-columns)))))
+
+;; The stale-catalog merge must preserve table creation and deletion too, not
+;; only ALTER replacements.
+(afj-tcp-commit-asts
+  [{"type" "create-table" "table" "ddl_merge_drop"
+    "schema" {"columns" [{"name" "id" "type" "INTEGER"
+                             "nullable" false "primary" true}]
+               "primary-key" "id" "unique-columns" []}}
+   {"type" "insert" "table" "ddl_merge_drop" "rows" [{"id" "1"}]}])
+(swap! afj-tcp-sessions assoc "mvcc-ddl-merge-drop" "root")
+(swap! afj-tcp-sessions assoc "mvcc-ddl-merge-create" "root")
+(afj-tcp-begin-level "mvcc-ddl-merge-drop" "REPEATABLE READ")
+(afj-tcp-begin-level "mvcc-ddl-merge-create" "REPEATABLE READ")
+(let [drop-read (afj-tcp-query
+                  {"token" "mvcc-ddl-merge-drop"
+                   "statement" "SELECT * FROM ddl_merge_drop WHERE id=1"})
+      create-read (afj-tcp-query
+                    {"token" "mvcc-ddl-merge-create"
+                     "statement" "SELECT * FROM quota_a WHERE id=1"})
+      drop (afj-tcp-query
+             {"token" "mvcc-ddl-merge-drop"
+              "statement" "DROP TABLE ddl_merge_drop"})
+      create (afj-tcp-query
+               {"token" "mvcc-ddl-merge-create"
+                "statement" "CREATE TABLE ddl_merge_created (id INTEGER PRIMARY KEY)"})
+      drop-commit (afj-tcp-commit "mvcc-ddl-merge-drop")
+      create-commit (afj-tcp-commit "mvcc-ddl-merge-create")]
+  (if (and (get drop-read "ok") (get create-read "ok")
+           (get drop "ok") (get create "ok")
+           (get drop-commit "ok") (get create-commit "ok")
+           (nil? (get (deref engine-catalog) "ddl_merge_drop"))
+           (not (nil? (get (deref engine-catalog) "ddl_merge_created"))))
+    (println "afj-db95 MVCC independent CREATE/DROP merge PASS")
+    (throw (str "independent CREATE/DROP did not merge: drop="
+                (json_str drop-commit) " create=" (json_str create-commit)))))

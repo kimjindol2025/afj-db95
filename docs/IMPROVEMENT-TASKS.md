@@ -381,12 +381,13 @@
     두 테이블을 읽은 stale reader의 unrelated write가 `TX_CONFLICT`로 거부되는
     배치 회귀도 추가했다.
   - 독립 DDL 병합 회귀에서 stale revision과 실제 conflict를 분리하지 않아
-    서로 다른 테이블의 동시 ALTER 중 후속 커밋이 앞선 schema를 덮어쓰는
-    결함을 재현했다. commit은 충돌 검사 결과와 base revision 경과 여부를
-    분리하고, stale revision이면 변경된 DDL 테이블만 현재 catalog에 병합한다.
-    `tests/tcp-mvcc-conflicts.fls`가 두 세션의 독립 ALTER 둘 다 커밋되고 두
-    컬럼이 모두 보존되는지 검증한다. 같은 테이블의 동시 DDL은 여전히 충돌로
-    처리하며, 광범위한 DDL/MVCC 매트릭스와 durable crash 시나리오는 남아 있다.
+    서로 다른 테이블의 동시 DDL 중 후속 커밋이 앞선 변경을 덮어쓰는 결함을
+    재현했다. commit은 충돌 검사 결과와 base revision 경과 여부를 분리하고,
+    stale revision이면 변경된 DDL 테이블만 현재 catalog에 병합한다.
+    `tests/tcp-mvcc-conflicts.fls`가 두 세션의 독립 ALTER 컬럼 보존뿐 아니라
+    한쪽 DROP과 다른 쪽 CREATE의 동시 커밋도 검증한다. 같은 테이블의 동시 DDL은
+    여전히 충돌로 처리하며, 광범위한 DDL/MVCC matrix와 durable crash 시나리오는
+    남아 있다.
   - 복합 인덱스 범위 조회에서 decimal INTEGER 문자열 정렬과 `|` 구분자 충돌로
     행이 누락되는 문제를 재현했다. 복합 equality/UNIQUE 토큰은 타입 태그와 길이
     접두부를 사용하는 충돌 없는 tuple 인코딩으로 보강했으며,
