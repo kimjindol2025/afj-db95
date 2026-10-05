@@ -77,6 +77,22 @@
 | native MariaDB decoder | PASS |
 | native MariaDB prepared | FAIL |
 
+## Failure classification
+
+The 11 failures are not one growing product-failure counter. They are grouped by
+the owner of the missing contract or dependency:
+
+| 분류 | Cases | 의미 |
+|---|---|---|
+| FreeLang runtime contract | 40, 41, 45, 46 | peer address와 `tcp-server-tls`가 현재 runtime 경계에 없음 |
+| Test/environment contract | 47, 49, 52 | production test의 `/tmp` 상태 경로 또는 `mariadb` client 미설치 |
+| Integration follow-up | 48, 53, 54, 56 | TLS adapter/native MariaDB listener·auth·prepared 경로의 별도 추적 필요 |
+
+이번 실행에서 기존에 통과하던 AFJ-DB95 core 회귀가 새로 깨졌다는 증거는
+확인되지 않았다. 따라서 다음 수정은 core 기능을 추가하는 작업이 아니라,
+각 분류의 소유자인 runtime·test harness·integration environment를 나눠서
+처리해야 한다.
+
 ## Release gate status
 
 The following are the remaining release-gate conditions; passing regression cases

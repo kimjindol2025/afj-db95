@@ -109,6 +109,10 @@ login과 10초 soak이 통과했다. AFJ runtime 저장소에는 사용자 변�
 외부 TCP login/query/close   PASS (임시 복제본)
 10초 soak                   PASS (임시 복제본)
 5분 performance envelope    PASS (임시 복제본)
-전체 release gate           BLOCKED — case별 logging 적용 후 별도 실패 확인
+전체 release gate           BLOCKED — 45 PASS / 11 FAIL
 상용서비스 판정             BLOCKED
 ```
+
+최신 11개 FAIL은 제품 결함으로 합산하지 않는다. runtime 계약(4건), 테스트·환경
+계약(3건), 별도 integration follow-up(4건)으로 분리하며, 분류가 끝나기 전에는
+동일 case를 반복 실행하지 않는다.
