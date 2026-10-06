@@ -1,8 +1,8 @@
 # AFJ-016 Release Gate Report
 
-- Generated: 2026-10-06T15:26:56Z
+- Generated: 2026-10-06T16:24:11Z
 - Repository: afj-db95
-- Automated cases: 71 PASS, 0 FAIL
+- Automated cases: 60 PASS, 11 FAIL
 - Release status: **BLOCKED**
 
 ## Automated evidence
@@ -17,7 +17,7 @@
 | COLLATE contract | PASS |
 | page/WAL smoke | PASS |
 | metrics contract | PASS |
-| local canary rollback | PASS |
+| local canary rollback | FAIL |
 | large corpus | PASS |
 | TCP catalog pages | PASS |
 | TCP lazy catalog eviction | PASS |
@@ -33,7 +33,7 @@
 | composite reopen rebuild | PASS |
 | schema-aware composite range | PASS |
 | TCP concurrency | PASS |
-| TCP 5m performance envelope | PASS |
+| TCP 5m performance envelope | FAIL |
 | backup smoke | PASS |
 | backup restore soak | PASS |
 | compatibility scorecard | PASS |
@@ -68,18 +68,18 @@
 | fragmented TCP requests | PASS |
 | SQL error mapping | PASS |
 | production TLS boundary | PASS |
-| native TLS listener | PASS |
-| native TLS mTLS/reload | PASS |
-| production native TLS integration | PASS |
-| TLS adapter handshake/reload | PASS |
-| MariaDB wire packet unit | PASS |
+| native TLS listener | FAIL |
+| native TLS mTLS/reload | FAIL |
+| production native TLS integration | FAIL |
+| TLS adapter handshake/reload | FAIL |
+| MariaDB wire packet unit | FAIL |
 | MariaDB mysql_native_password SHA-1 | PASS |
 | MariaDB wire prepared | PASS |
-| MariaDB standard-client smoke | PASS |
-| native MariaDB wire | PASS |
-| native MariaDB auth rejection | PASS |
+| MariaDB standard-client smoke | FAIL |
+| native MariaDB wire | FAIL |
+| native MariaDB auth rejection | FAIL |
 | native MariaDB decoder | PASS |
-| native MariaDB prepared | PASS |
+| native MariaDB prepared | FAIL |
 
 ## Release gate status
 

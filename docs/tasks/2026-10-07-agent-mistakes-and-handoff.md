@@ -49,9 +49,15 @@
 
 ### 2.1 전체 release gate PASS
 
-- 상태: BLOCKED/UNRESOLVED.
-- case 9에서 `tcp-server-tls` 함수 미정의가 발생했다.
-- case 10은 이 문서 작성 시점에 실행 중이므로 최종 종료 코드와 요약을 반드시 회수해야 한다.
+- 상태: BLOCKED. 최종 결과 `60 PASS / 11 FAIL`.
+- case 9에서 `tcp-daemon.fls`가 호출하는 `tcp-server-tls`가 정의되지 않았다.
+- case 25의 5분 성능 envelope는 `soak request timeout: login`으로 실패했다.
+- case 60~62의 native TLS listener/mTLS/production integration은 모두 같은 `tcp-server-tls` 미정의로 실패했다.
+- case 63의 TLS adapter handshake/reload는 기대한 `{"ok":true,"type":"pong"}` 대신 빈 응답을 받아 실패했다.
+- case 64는 `mariadb` 실행 파일이 없어 `spawn mariadb ENOENT`로 실패했다.
+- case 67~69는 standard-client/native MariaDB smoke/auth에서 timeout 또는 응답 부재로 실패했다.
+- case 71 native MariaDB prepared는 MariaDB client 경계에서 실패했다.
+- case 10 및 나머지 다수 케이스는 최종 결과에 반영됐고, artifact 생성과 smoke는 PASS했다.
 - case 9는 단순히 재실행할 일이 아니라, `tcp-daemon.fls`가 호출하는 함수의 정의/등록/fixture 계약을 먼저 추적해야 한다.
 
 ### 2.2 실제 배포
