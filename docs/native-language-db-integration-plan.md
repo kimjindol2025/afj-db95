@@ -103,6 +103,7 @@ afj-db95 → SQL/트랜잭션/WAL/복구/호환성의 검증 기준선
 - `(db "name")` 문법: FX native + v11 interpreter + Script 수직 슬라이스 구현
 - `@db` 표기: 기존 atom 역참조와 충돌하므로 보류
 - 자동 연결: local native/host provider 1차 구현
+- 문장 배열 트랜잭션: FX native + v11 interpreter + Script host에서 COMMIT/ROLLBACK 검증
 - Script capability 통합: `--allow-db[=name,...]` 구현 및 실제 거부/허용 검증
 - 검수: 기존 AFJ-DB95 릴리스 게이트는 DB 엔진 자체의 증거이며,
   `db` 통합의 증거로 간주하지 않음
