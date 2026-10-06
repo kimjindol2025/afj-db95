@@ -229,8 +229,27 @@
                "join" {"table" join-table "left" left "right" right}})
             (throw "unsupported SELECT form")))))))))))))
 
+;; Bounded MariaDB collation contract. Binary and ASCII case-insensitive
+;; ordering are deterministic in the current engine; linguistic collations are
+;; rejected rather than silently using the wrong ordering rules.
+(defn parse-select-collation [tokens]
+  (if (and (= (count tokens) 9)
+           (= (token-at tokens 1) "*")
+           (keyword? (token-at tokens 2) "FROM")
+           (keyword? (token-at tokens 4) "ORDER")
+           (keyword? (token-at tokens 5) "BY")
+           (keyword? (token-at tokens 7) "COLLATE"))
+    (let [collation (str_lower (token-at tokens 8))]
+      (if (or (= collation "utf8mb4_bin")
+              (= collation "utf8mb4_general_ci")
+              (= collation "utf8_general_ci"))
+        {"type" "select" "columns" ["*"] "table" (token-at tokens 3)
+         "order-by" (token-at tokens 6) "order-collation" collation}
+        (throw "COLLATION_NOT_SUPPORTED")))
+    nil))
+
 ;; MariaDB corpus compatibility: grouped COUNT with aliases and LEFT JOIN.
-(defn parse-select [tokens]
+(defn parse-select-standard [tokens]
   (if (and (= (count tokens) 6)
            (keyword? (token-at tokens 2) "FROM")
            (keyword? (token-at tokens 4) "WHERE")
@@ -293,6 +312,12 @@
                  "table-alias" join-alias "left" join-left "right" join-right}
          "group-by" group-by "order-by" order-by})
       (parse-select-basic tokens))))))
+
+(defn parse-select [tokens]
+  (let [collation (parse-select-collation tokens)]
+    (if (nil? collation)
+      (parse-select-standard tokens)
+      collation)))
 
 (defn parse-create [tokens]
     (if (and (= (count tokens) 3)
@@ -405,8 +430,11 @@
            (keyword? (token-at tokens 3) "VALUES"))
     (let [table (token-at tokens 2)
           values-text (str_join (drop 4 tokens) " ")
-          values (map (fn [group] (map sql-value (sql-split-delimited group ",")))
-                      (regex_split values-text "\\),\\s*\\("))]
+          values (map (fn [group]
+                        (map sql-value
+                             (sql-split-delimited
+                               (sql-clean-token group) ",")))
+                      (sql-split-delimited values-text ","))]
       {"type" "insert" "table" table "values" values})
     (if (and (= (count tokens) 6)
            (keyword? (token-at tokens 1) "INTO")
@@ -616,6 +644,9 @@
             {"type" "insert" "table" "users"
              "rows" [{"id" "1" "name" "Kim"}
                      {"id" "2" "name" "Lee"}]})
+(assert-sql "INSERT INTO users VALUES (1,TRUE),(2,FALSE)"
+            {"type" "insert" "table" "users"
+             "values" [["1" true] ["2" false]]})
 (assert-sql "UPDATE users"
             {"type" "update" "table" "users"})
 (assert-sql "UPDATE users SET name='Lee' WHERE id=1"

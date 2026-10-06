@@ -1,0 +1,34 @@
+;; Batch B: unsupported SQL must fail predictably instead of being reported as
+;; successful compatibility.
+(load "../src/engine.fls")
+(load "../src/sql-core.fls")
+
+(reset! engine-catalog {})
+(reset! engine-indexes {})
+(reset! engine-databases {})
+
+(defn execution-error [statement]
+  (try
+    (do
+      (execute-ast (parse-sql statement))
+      "NO_ERROR")
+    (catch [error] (error_message error))))
+
+(let [created (try
+                (do
+                  (execute-ast (parse-sql "CREATE DATABASE b_contract"))
+                  true)
+                (catch [error] false))
+      cases ["USE b_contract"
+             "SELECT 1 UNION SELECT 2"
+             "SELECT CASE WHEN 1=1 THEN 1 END"]
+      errors (map execution-error cases)]
+  (if (and created
+           (= (count errors) 3)
+           (every? (fn [error]
+                     (and (not (= error "NO_ERROR"))
+                          (regex_match_i error
+                                         "unsupported|not supported|unknown|unexpected")))
+                   errors))
+    (println "afj-db95 MariaDB unsupported contract PASS")
+    (throw (str "unsupported contract failed: " (json_str errors)))))

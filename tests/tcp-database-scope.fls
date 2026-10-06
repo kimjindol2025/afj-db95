@@ -1,0 +1,51 @@
+;; Session-scoped USE/database isolation contract.
+(load "../src/tcp-server.fls")
+(reset! engine-catalog {})
+(reset! engine-databases {})
+(reset! afj-tcp-databases {})
+(reset! afj-tcp-sessions {})
+(swap! afj-tcp-sessions assoc "db-a" "root")
+(swap! afj-tcp-sessions assoc "db-b" "root")
+(define scope-count (atom 0))
+
+(defn scope-ok [name condition]
+  (if condition
+    (do (swap! scope-count + 1) (println (str "PASS " name)))
+    (throw (str "FAIL " name))))
+(defn scope-query [token sql]
+  (afj-tcp-query {"token" token "statement" sql}))
+(defn scope-error [token sql]
+  (try
+    (let [response (scope-query token sql)]
+      (if (get response "ok") "NO_ERROR" (get response "error")))
+    (catch [error] (error_message error))))
+
+(scope-query "db-a" "CREATE DATABASE scope_a")
+(scope-query "db-a" "CREATE DATABASE scope_b")
+(scope-query "db-a" "USE scope_a")
+(scope-query "db-b" "USE scope_b")
+(scope-query "db-a" "CREATE TABLE items(id INT PRIMARY KEY)")
+(scope-query "db-b" "CREATE TABLE items(id INT PRIMARY KEY)")
+(scope-query "db-a" "INSERT INTO items VALUES (101)")
+(scope-query "db-b" "INSERT INTO items VALUES (202)")
+(let [a (scope-query "db-a" "SELECT * FROM items")
+      b (scope-query "db-b" "SELECT * FROM items")]
+  (scope-ok "sessions see only their selected database"
+    (and (= (get (get a "result") "rows") [{"id" "101"}])
+         (= (get (get b "result") "rows") [{"id" "202"}]))))
+(scope-ok "session mappings remain independent"
+  (and (= (get (deref afj-tcp-databases) "db-a") "scope_a")
+       (= (get (deref afj-tcp-databases) "db-b") "scope_b")))
+(scope-ok "missing USE does not change selection"
+  (and (= (scope-error "db-a" "USE missing_scope") "DATABASE_NOT_FOUND")
+       (= (get (deref afj-tcp-databases) "db-a") "scope_a")))
+(scope-query "db-a" "DROP DATABASE IF EXISTS scope_a")
+(scope-ok "DROP DATABASE evicts every session selected on it"
+  (and (nil? (get (deref afj-tcp-databases) "db-a"))
+       (= (get (deref afj-tcp-databases) "db-b") "scope_b")))
+(scope-ok "dropped database is unavailable"
+  (= (scope-error "db-a" "USE scope_a") "DATABASE_NOT_FOUND"))
+(scope-ok "remaining database stays readable"
+  (= (get (get (scope-query "db-b" "SELECT * FROM items") "result") "rows")
+     [{"id" "202"}]))
+(println (str "DATABASE_SCOPE PASS " (deref scope-count) "/6"))

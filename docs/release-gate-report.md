@@ -1,8 +1,8 @@
 # AFJ-016 Release Gate Report
 
-- Generated: 2026-10-05T14:38:48Z
+- Generated: 2026-10-06T14:18:54Z
 - Repository: afj-db95
-- Automated cases: 59 PASS, 0 FAIL
+- Automated cases: 70 PASS, 0 FAIL
 - Release status: **BLOCKED**
 
 ## Automated evidence
@@ -13,7 +13,10 @@
 | syntax: afj-db95 | PASS |
 | raw binary boundary | PASS |
 | MariaDB packet codec | PASS |
+| MariaDB charset contract | PASS |
+| COLLATE contract | PASS |
 | page/WAL smoke | PASS |
+| metrics contract | PASS |
 | large corpus | PASS |
 | TCP catalog pages | PASS |
 | TCP lazy catalog eviction | PASS |
@@ -24,11 +27,19 @@
 | schema MVCC merge | PASS |
 | composite type order | PASS |
 | composite NULL order | PASS |
+| schema-aware composite order | PASS |
+| mixed declared composite types | PASS |
+| composite reopen rebuild | PASS |
+| schema-aware composite range | PASS |
 | TCP concurrency | PASS |
 | TCP 5m performance envelope | PASS |
 | backup smoke | PASS |
 | backup restore soak | PASS |
 | compatibility scorecard | PASS |
+| AFJ error token mapping | PASS |
+| MariaDB remediation regression | PASS |
+| MariaDB unsupported contract | PASS |
+| TCP database session scope | PASS |
 | WAL format | PASS |
 | forced-kill WAL recovery | PASS |
 | TCP transaction forced-kill recovery | PASS |
@@ -86,7 +97,7 @@ do not waive an incomplete architectural condition:
     bounded pin/flush pool, lazy table eviction, lazy transaction snapshot and
     durable row-version checkpoint recovery pass; page-level row execution and
     multi-index/compound range validation and schema MVCC merge pass; full
-    composite collation/mixed-type compatibility remains incomplete.
+    composite collation/type compatibility remains incomplete.
 - Large-corpus, high-concurrency, and the reproducible 5-minute performance envelope pass with p95/max latency thresholds; unrestricted duration beyond the bounded envelope is not claimed as a guarantee.
 
 The report must remain **BLOCKED** until each item has implementation evidence and a

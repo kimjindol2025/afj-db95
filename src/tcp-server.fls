@@ -59,6 +59,8 @@
 (define afj-tcp-sessions (atom {}))
 (define afj-tcp-session-expiries (atom {}))
 (define afj-tcp-databases (atom {}))
+(define afj-tcp-metrics
+  (atom {"queries" 0 "commits" 0 "rollbacks" 0 "errors" 0}))
 (define afj-tcp-transactions (atom {}))
 (define afj-tcp-commit-revision (atom 0))
 (define afj-tcp-table-revisions (atom {}))
@@ -333,29 +335,40 @@
     nil))
 
 (defn afj-tcp-error-code-message [message]
-  (if (regex_match_i message ".*PARAMETER_COUNT_MISMATCH.*")
-    "PARAMETER_COUNT_MISMATCH"
-    (if (regex_match_i message ".*NOT_NULL_VIOLATION.*")
-      "NOT_NULL_VIOLATION"
-      (if (regex_match_i message ".*UNIQUE_VIOLATION.*")
-        "UNIQUE_VIOLATION"
-        (if (regex_match_i message ".*FOREIGN_KEY_VIOLATION.*")
-          "FOREIGN_KEY_VIOLATION"
-          (if (regex_match_i message ".*CHECK_VIOLATION.*")
-            "CHECK_VIOLATION"
-            (if (regex_match_i message ".*TYPE_VIOLATION.*")
-              "TYPE_VIOLATION"
-              (if (regex_match_i message ".*COLUMN_COUNT_MISMATCH.*")
-                "COLUMN_COUNT_MISMATCH"
-                (if (regex_match_i message ".*DATABASE_NOT_FOUND.*")
-                  "DATABASE_NOT_FOUND"
-                  (if (regex_match_i message ".*WAL_RECORD_TOO_LARGE.*")
-                    "WAL_RECORD_TOO_LARGE"
-                    (if (regex_match_i message ".*WAL_CORRUPT.*")
-                      "WAL_CORRUPT"
-                      "SQL_ERROR")))))))))))
+  (let [known [["PARAMETER_COUNT_MISMATCH" "PARAMETER_COUNT_MISMATCH"]
+               ["NOT_NULL_VIOLATION" "NOT_NULL_VIOLATION"]
+               ["UNIQUE_VIOLATION" "UNIQUE_VIOLATION"]
+               ["FOREIGN_KEY_VIOLATION" "FOREIGN_KEY_VIOLATION"]
+               ["CHECK_VIOLATION" "CHECK_VIOLATION"]
+               ["TYPE_VIOLATION" "TYPE_VIOLATION"]
+               ["COLUMN_COUNT_MISMATCH" "COLUMN_COUNT_MISMATCH"]
+               ["PRIMARY_KEY_VIOLATION" "PRIMARY_KEY_VIOLATION"]
+               ["DATABASE_NOT_FOUND" "DATABASE_NOT_FOUND"]
+               ["DATABASE_EXISTS" "DATABASE_EXISTS"]
+               ["DATABASE_NAMESPACE_CONFLICT" "DATABASE_NAMESPACE_CONFLICT"]
+               ["TX_ALREADY_ACTIVE" "TX_ALREADY_ACTIVE"]
+               ["TX_NOT_ACTIVE" "TX_NOT_ACTIVE"]
+               ["SAVEPOINT_NOT_FOUND" "SAVEPOINT_NOT_FOUND"]
+               ["LOCK_TIMEOUT" "LOCK_TIMEOUT"]
+               ["DEADLOCK_DETECTED" "DEADLOCK_DETECTED"]
+               ["PERMISSION_DENIED" "PERMISSION_DENIED"]
+               ["WAL_RECORD_TOO_LARGE" "WAL_RECORD_TOO_LARGE"]
+               ["WAL_CORRUPT" "WAL_CORRUPT"]
+               ["COLLATION_NOT_SUPPORTED" "COLLATION_NOT_SUPPORTED"]
+               ["UNSUPPORTED_SQL" "UNSUPPORTED_SQL"]]
+        match (first (filter
+                       (fn [item]
+                         (regex_match_i message
+                           (str ".*" (get item 0) ".*")))
+                       known))]
+    (if (not (nil? match))
+      (get match 1)
+      (if (regex_match_i message ".*(unsupported|not supported).*SELECT.*")
+        "UNSUPPORTED_SQL"
+        "SQL_ERROR"))))
 
 (defn afj-tcp-error-code [error]
+  (swap! afj-tcp-metrics update "errors" (fn [value] (+ value 1)))
   (afj-tcp-error-code-message (error_message error)))
 
 (defn afj-tcp-wal-append-sync [event sync?]
@@ -510,8 +523,8 @@
         (if (nil? index)
           nil
           (let [tree (if (nil? (get index "btree"))
-                       (engine-build-composite-btree
-                         (get table "rows") columns 0
+                       (engine-build-composite-btree-with-schema
+                         (get table "rows") columns (get table "schema" {}) 0
                          {"leaf" true "entries" []})
                        (get index "btree"))]
             (reset! indexes
@@ -771,6 +784,7 @@
     ;; soak latency grow unnecessarily. Keep the validated result and persist
     ;; that state once; the catch path above still restores all snapshots.
     (afj-tcp-record-asts asts)
+    (swap! afj-tcp-metrics update "commits" (fn [value] (+ value 1)))
     (swap! afj-tcp-commit-revision (fn [revision] (+ revision 1)))
     (afj-tcp-mark-table-revisions asts (deref afj-tcp-commit-revision))
     (do
@@ -875,12 +889,19 @@
                    (if (or (nil? table) (nil? definition))
                      true
                      (if (= (get ast "type") "insert")
-                       (afj-tcp-append-insert-row-versions
-                         table
-                         (if (has-key? ast "rows")
-                           (get ast "rows")
-                           [(get ast "row")])
-                         revision)
+                       (if (has-key? ast "values")
+                         ;; Positional INSERT values are materialized by the
+                         ;; engine against the table schema. Record the
+                         ;; resulting rows, not the raw value vectors, so a
+                         ;; later transaction snapshot sees the same rows.
+                         (afj-tcp-record-table-row-versions
+                           table (get definition "rows" []) revision)
+                         (afj-tcp-append-insert-row-versions
+                           table
+                           (if (has-key? ast "rows")
+                             (get ast "rows")
+                             [(get ast "row")])
+                           revision))
                        (afj-tcp-record-table-row-versions
                          table (get definition "rows" []) revision)))))
                asts)]
@@ -1395,6 +1416,7 @@
       (do
         (swap! afj-tcp-transactions dissoc token)
         (afj-tcp-release-token token)
+        (swap! afj-tcp-metrics update "rollbacks" (fn [value] (+ value 1)))
         {"ok" true "status" "rolled-back"}))))
 
 (defn afj-tcp-commit [token]
@@ -1424,7 +1446,9 @@
                            {"catalog" (get current "working-catalog")
                             "tables" []})]
           (if (> (count asts) 0)
-            (afj-tcp-record-asts asts)
+            (do
+              (afj-tcp-record-asts asts)
+              (swap! afj-tcp-metrics update "commits" (fn [value] (+ value 1))))
             nil)
           (reset! engine-catalog
                   (afj-tcp-copy (get merge-state "catalog")))
@@ -1470,6 +1494,19 @@
    "service" "afj-db95"
    "status" "running"
    "wal" (file_exists afj-tcp-wal)})
+
+(defn afj-tcp-metrics-alerts [values]
+  (let [errors (get values "errors" 0)]
+    (if (>= errors 5)
+      ["ERROR_RATE_HIGH"]
+      [])))
+
+(defn afj-tcp-metrics-response []
+  (let [values (deref afj-tcp-metrics)]
+    {"ok" true
+     "service" "afj-db95"
+     "metrics" values
+     "alerts" (afj-tcp-metrics-alerts values)}))
 
 (defn afj-tcp-shutdown [request]
   (if (not (afj-tcp-session-active? (get request "token")))
@@ -1650,6 +1687,7 @@
                 {"ok" true "result" result}))))))))
 
 (defn afj-tcp-query [request]
+  (swap! afj-tcp-metrics update "queries" (fn [value] (+ value 1)))
   (let [token (get request "token")
         user (get (deref afj-tcp-sessions) token)
         statement (get request "statement")]
@@ -1846,9 +1884,11 @@
             (afj-tcp-send conn {"ok" true "type" "pong"})
             (if (= (get request "type") "health")
               (afj-tcp-send conn (afj-tcp-health))
+              (if (= (get request "type") "metrics")
+                (afj-tcp-send conn (afj-tcp-metrics-response))
               (if (= (get request "type") "shutdown")
                 (afj-tcp-send conn (afj-tcp-shutdown request))
-                (afj-tcp-send conn {"ok" false "error" "UNKNOWN_REQUEST"})))))))))))))))
+                (afj-tcp-send conn {"ok" false "error" "UNKNOWN_REQUEST"}))))))))))))))))
 
 (defn afj-db-tcp-handler [event conn payload peer]
   (if (= event "connect")

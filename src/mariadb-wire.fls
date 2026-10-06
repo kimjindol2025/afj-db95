@@ -143,6 +143,12 @@
      "auth-response-length" auth-length
      "auth-response" auth-response}))
 
+;; The executor and wire codec are UTF-8 based.  Accept only the two
+;; commonly used UTF-8 collation IDs that can be represented by that contract;
+;; reject other client encodings instead of silently treating them as UTF-8.
+(defn mariadb-wire-supported-charset? [charset]
+  (or (= charset 33) (= charset 45)))
+
 (defn mariadb-wire-bytes-equal? [left right index difference]
   (if (not (= (buf-len left) (buf-len right)))
     false
@@ -395,6 +401,11 @@
                             (mariadb-packet 2
                                             (mariadb-error-payload 1043
                                                                    "CLIENT_PROTOCOL_UNSUPPORTED"))))
+          (if (not (mariadb-wire-supported-charset? (get login "charset")))
+            (tcp-write conn (buf-to-binary
+                              (mariadb-packet 2
+                                              (mariadb-error-payload 1115
+                                                                     "CHARSET_NOT_SUPPORTED"))))
           (if (or (not (= (get login "username") "root"))
                   (= (get login "auth-response-length") 0)
                   (not (mariadb-wire-auth-valid? login)))
@@ -413,7 +424,7 @@
                           "username" (get login "username")
                           "auth-response-length"
                           (get login "auth-response-length")))
-            (tcp-write conn (buf-to-binary (mariadb-packet 2 (mariadb-ok-payload 0 0))))))))
+            (tcp-write conn (buf-to-binary (mariadb-packet 2 (mariadb-ok-payload 0 0)))))))))
         (let [command (buf-read-u8 payload 0)]
         (if (= command 3)
           (mariadb-wire-query conn

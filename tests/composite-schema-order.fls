@@ -1,0 +1,38 @@
+;; AFJ-017 schema-aware composite index ordering contract.
+;; TEXT "10" must remain before/after "2" lexically; INTEGER "10" must
+;; sort numerically.  Identity lookup still uses the exact JSON key token.
+(load "../src/engine.fls")
+
+(let [text-schema {"columns" [{"name" "tenant" "type" "TEXT"}
+                               {"name" "code" "type" "TEXT"}]}
+      text-rows [{"tenant" "a" "code" "10"}
+                 {"tenant" "a" "code" "2"}]
+      text-tree (engine-build-composite-btree-with-schema
+                 text-rows ["tenant" "code"] text-schema 0
+                 {"leaf" true "entries" []})
+      text-values (map (fn [entry]
+                         (engine-composite-key-part (get entry "key") 1))
+                       (engine-btree-entries text-tree))
+      int-schema {"columns" [{"name" "tenant" "type" "TEXT"}
+                              {"name" "code" "type" "INTEGER"}]}
+      int-rows [{"tenant" "a" "code" "10"}
+                {"tenant" "a" "code" "2"}]
+      int-tree (engine-build-composite-btree-with-schema
+                 int-rows ["tenant" "code"] int-schema 0
+                 {"leaf" true "entries" []})
+      int-values (map (fn [entry]
+                        (engine-composite-key-part (get entry "key") 1))
+                      (engine-btree-entries int-tree))
+      exact-key (engine-composite-key-token {"tenant" "a" "code" "10"}
+                                             ["tenant" "code"])
+      exact-sort (engine-composite-sort-token {"tenant" "a" "code" "10"}
+                                               ["tenant" "code"] int-schema)
+      exact-rows (engine-btree-root-get-sorted int-tree exact-key exact-sort)]
+  (if (and (= text-values ["10" "2"])
+           (= int-values ["2" "10"])
+           (= exact-rows [0]))
+    (println "afj-db95 schema-aware composite order PASS")
+    (throw (str "schema-aware composite order failed: "
+                (json_str {"text" text-values
+                           "integer" int-values
+                           "exact" exact-rows})))))

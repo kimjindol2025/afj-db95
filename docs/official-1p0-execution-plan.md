@@ -15,11 +15,11 @@ AFJ-DB95를 “기능이 동작하는 개발용 DB”에서 “재현 가능한 
 
 ## 2. 현재 기준선
 
-- AFJ-DB95 공식 문서 기준: 실제 listen 환경 전체 gate는 `59 PASS / 0 FAIL`.
+- AFJ-DB95 공식 문서 기준: 실제 listen 환경 전체 gate는 `70 PASS / 0 FAIL`.
 - DB core, WAL, MVCC, 인덱스, 복구 case는 대부분 PASS.
 - 격리 FreeLang runtime에서 TLS listener, mTLS, reload, production TLS integration, TLS adapter는 targeted PASS.
 - 기존 MariaDB 5건은 client 부재와 fixture의 scheduler/bind race를 각각 수정·검증해 해소했다.
-- schema MVCC row/DDL merge와 composite numeric type-order 회귀를 추가하고 전체 gate에 편입했다.
+- schema MVCC row/DDL merge와 schema-aware composite ordering 회귀를 추가하고 전체 gate에 편입했다.
 - 원본 FreeLang runtime에는 아직 격리 runtime 변경을 반영하지 않는다.
 
 ## 3. 작업 원칙
@@ -204,7 +204,7 @@ Phase 2 초기 결과:
 - row-version history wrapper의 lazy AST 순회를 materialize해 WAL recovery/checkpoint PASS.
 - lazy transaction snapshot과 MVCC row-version chain PASS.
 - range predicate는 B+Tree의 문자열 숫자 비교를 executor와 동일하게 정규화해 PASS.
-- 전체 release gate는 실제 listen 환경에서 59개 자동 케이스 모두 PASS했다. DDL/schema MVCC row/DDL merge와 composite numeric/NULL order는 targeted 및 gate에서 PASS했다. 다만 full composite-key compatibility의 collation/혼합 타입 순서는 별도 조건으로 남아 1.0 선언 상태는 `BLOCKED`다.
+- 전체 release gate는 실제 listen 환경에서 64개 자동 케이스 모두 PASS했다. DDL/schema MVCC row/DDL merge와 schema-aware composite ordering/range(TEXT 숫자형 문자열, INTEGER 숫자형 문자열, NULL, 혼합 선언 타입, 구형 페이지 재구축)은 targeted 및 gate에서 PASS했다. 미지원 SQL 계약 회귀도 추가했지만, CREATE DATABASE 실행 오류·언어별 collation·문자셋 호환성은 B 묶음 blocker로 남아 1.0 선언 상태는 여전히 `BLOCKED`다.
 
 2026-10-05 재실행:
 
@@ -217,7 +217,7 @@ Phase 2 초기 결과:
 - large corpus는 gate의 45초 제한에서는 timeout이었지만 120초 단독 실행에서 PASS. 이는 기능 FAIL이 아닌 gate timeout 설정 문제로 분류한다.
 - MariaDB client core를 비-root 임시 경로에 준비해 표준-client 검수를 재현했고, native MariaDB daemon에는 `fl-yield` scheduler loop와 prepared port probe를 추가했다.
 - composite NULL ordering 회귀를 추가하고 전체 gate에 편입했다.
-- 최종 전체 gate를 `AFJ_GATE_CASE_TIMEOUT_SEC=120`, `AFJ_GATE_SOAK_TIMEOUT_SEC=360`으로 재실행해 `59 PASS / 0 FAIL`을 기록했다.
+- 최종 전체 gate를 `AFJ_GATE_CASE_TIMEOUT_SEC=120`, `AFJ_GATE_SOAK_TIMEOUT_SEC=360`으로 재실행해 `70 PASS / 0 FAIL`을 기록했다.
 
 ## 6. 금지 사항
 

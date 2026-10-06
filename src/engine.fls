@@ -19,6 +19,59 @@
   ;; ["a|b" "c"] collide with ["a" "b|c"], and made 1 collide with "1".
   (json-stringify (map (fn [column] (get row column)) columns)))
 
+(defn engine-schema-column-type [schema column]
+  (let [definition (first (filter (fn [item]
+                                    (= (get item "name") column))
+                                  (get schema "columns" [])))]
+    (get definition "type" "TEXT")))
+
+(defn engine-composite-sort-part [value type]
+  ;; The first field is an explicit type rank.  In particular, a numeric
+  ;; looking TEXT value stays text and is never coerced by its spelling.
+  (if (nil? value)
+    [0 0]
+    (if (= type "INTEGER")
+      [1 (if (number? value) value (str_to_num value))]
+      (if (= type "BOOLEAN")
+        [3 (if value 1 0)]
+        [2 (str value)]))))
+
+(defn engine-composite-sort-token [row columns schema]
+  (json-stringify
+    {"afj-sort-key" true
+     "parts" (map (fn [column]
+                     (engine-composite-sort-part
+                       (get row column)
+                       (engine-schema-column-type schema column)))
+                   columns)}))
+
+(defn engine-composite-sort-compare-part [left right]
+  (let [left-rank (get left 0)
+        right-rank (get right 0)
+        left-value (get left 1)
+        right-value (get right 1)]
+    (if (not (= left-rank right-rank))
+      (if (< left-rank right-rank) -1 1)
+      (if (= left-value right-value)
+        0
+        (if (= left-rank 1)
+          (if (< left-value right-value) -1 1)
+          (if (< (str left-value) (str right-value)) -1 1))))))
+
+(defn engine-composite-sort-before-at [left right index]
+  (let [a (get (json-parse left) "parts")
+        b (get (json-parse right) "parts")]
+    (if (>= index (count a))
+      false
+      (let [comparison (engine-composite-sort-compare-part
+                         (get a index) (get b index))]
+        (if (= comparison 0)
+          (engine-composite-sort-before-at left right (+ index 1))
+          (< comparison 0))))))
+
+(defn engine-composite-sort-before? [left right]
+  (engine-composite-sort-before-at left right 0))
+
 (defn engine-composite-order-value [value]
   ;; Wire SQL integers may arrive as strings. Normalize only for ordering;
   ;; the JSON token remains the exact identity key.
@@ -94,7 +147,10 @@
 
 (defn engine-btree-node-first-key [node]
   (if (get node "leaf")
-    (get (first (get node "entries" [])) "key")
+    (let [entry (first (get node "entries" []))]
+      (if (nil? (get entry "sort-key"))
+        (get entry "key")
+        (get entry "sort-key")))
     (engine-btree-node-first-key (first (get node "children" [])))))
 
 (defn engine-btree-node-separators [children]
@@ -122,12 +178,16 @@
 
 (defn engine-btree-key-before? [left right]
   (if (and (string? left) (string? right)
+           (str_starts_with left "{\"afj-sort-key\"")
+           (str_starts_with right "{\"afj-sort-key\"") )
+    (engine-composite-sort-before? left right)
+    (if (and (string? left) (string? right)
            (str_starts_with left "[")
            (str_starts_with right "["))
-    (engine-composite-key-before? left right)
-    (if (and (number? left) (number? right))
-      (< left right)
-      (< (str left) (str right)))))
+      (engine-composite-key-before? left right)
+      (if (and (number? left) (number? right))
+        (< left right)
+        (< (str left) (str right))))))
 
 (defn engine-btree-compare-value [value]
   ;; SQL numeric literals may be stored as strings by the wire protocol. Keep
@@ -142,7 +202,10 @@
     [entry]
     (let [first-entry (first entries)]
       (if (engine-btree-key-before?
-            (get entry "key") (get first-entry "key"))
+            (if (nil? (get entry "sort-key"))
+              (get entry "key") (get entry "sort-key"))
+            (if (nil? (get first-entry "sort-key"))
+              (get first-entry "key") (get first-entry "sort-key")))
         (append [entry] entries)
         (append [first-entry]
                 (engine-btree-insert-sorted (rest entries) entry))))))
@@ -152,7 +215,9 @@
         left (take middle entries)
         right (drop middle entries)]
     {"left" left "right" right
-     "separator" (get (first right) "key")}))
+     "separator" (if (nil? (get (first right) "sort-key"))
+                    (get (first right) "key")
+                    (get (first right) "sort-key"))}))
 
 (defn engine-btree-split-children [children]
   (let [middle (floor (/ (count children) 2))
@@ -179,7 +244,10 @@
            "separator" (get split "separator")})))
     (let [separators (get node "separators" [])
           children (get node "children" [])
-          index (engine-btree-child-index separators (get entry "key") 0)
+          entry-order-key (if (nil? (get entry "sort-key"))
+                            (get entry "key")
+                            (get entry "sort-key"))
+          index (engine-btree-child-index separators entry-order-key 0)
           child-result (engine-btree-insert-node
                          (get children index) entry max-entries)]
       (if (not (get child-result "split"))
@@ -214,23 +282,34 @@
        "children" [(get result "left") (get result "right")]})))
 
 (defn engine-btree-root-get [root key]
+  (engine-btree-root-get-sorted root key key))
+
+(defn engine-btree-root-get-sorted [root key sort-key]
   (if (get root "leaf")
     (map (fn [entry] (get entry "row-id"))
          (filter (fn [entry] (= (get entry "key") key))
                  (get root "entries" [])))
     (let [index (engine-btree-child-index
-                  (get root "separators" []) key 0)]
-      (engine-btree-root-get
-        (get (get root "children" []) index) key))))
+                  (get root "separators" []) sort-key 0)]
+      (engine-btree-root-get-sorted
+        (get (get root "children" []) index) key sort-key))))
 
 (defn engine-btree-entries [node]
   (if (get node "leaf")
     (get node "entries" [])
     (arr_flatten (map engine-btree-entries (get node "children" [])))))
 
+(defn engine-btree-has-sort-key? [node]
+  (if (get node "leaf")
+    (not (nil? (get (first (get node "entries" [])) "sort-key")))
+    (engine-btree-has-sort-key? (first (get node "children" [])))))
+
 (defn engine-btree-node-last-key [node]
   (if (get node "leaf")
-    (get (last (get node "entries" [])) "key")
+    (let [entry (last (get node "entries" []))]
+      (if (nil? (get entry "sort-key"))
+        (get entry "key")
+        (get entry "sort-key")))
     (engine-btree-node-last-key (last (get node "children" [])))))
 
 (defn engine-btree-child-may-match? [child operator value]
@@ -327,6 +406,65 @@
                []))
            (get node "children" [])))))
 
+(defn engine-composite-sort-part-at [sort-key part]
+  (get (get (json-parse sort-key) "parts") part))
+
+(defn engine-composite-range-comparison-match? [comparison operator]
+  (if (= operator ">")
+    (> comparison 0)
+    (if (= operator ">=")
+      (>= comparison 0)
+      (if (= operator "<")
+        (< comparison 0)
+        (if (= operator "<=")
+          (<= comparison 0)
+          (not (= comparison 0)))))))
+
+(defn engine-btree-composite-child-may-match-schema?
+  [child operator value part type]
+  (if (or (= operator "!=") (= operator "<>"))
+    true
+    (let [first-part (engine-composite-sort-part-at
+                       (engine-btree-node-first-key child) part)
+          last-part (engine-composite-sort-part-at
+                      (engine-btree-node-last-key child) part)
+          compare-part (engine-composite-sort-part value type)]
+      (if (or (= operator ">") (= operator ">="))
+        (engine-composite-range-comparison-match?
+          (engine-composite-sort-compare-part last-part compare-part)
+          operator)
+        (if (or (= operator "<") (= operator "<="))
+          (engine-composite-range-comparison-match?
+            (engine-composite-sort-compare-part first-part compare-part)
+            operator)
+          true)))))
+
+(defn engine-btree-composite-range-entries-schema
+  [node operator value part type]
+  ;; Schema-aware composite range traversal.  The final row predicate remains
+  ;; authoritative, while page pruning now follows declared SQL types instead
+  ;; of guessing from a numeric-looking string.
+  (if (not (engine-btree-has-sort-key? node))
+    (engine-btree-composite-range-entries node operator value part)
+    (if (get node "leaf")
+    (filter (fn [entry]
+              (let [entry-part (engine-composite-sort-part-at
+                                 (get entry "sort-key") part)
+                    compare-part (engine-composite-sort-part value type)]
+                (engine-composite-range-comparison-match?
+                  (engine-composite-sort-compare-part
+                    entry-part compare-part)
+                  operator)))
+            (get node "entries" []))
+    (arr_flatten
+      (map (fn [child]
+             (if (engine-btree-composite-child-may-match-schema?
+                   child operator value part type)
+               (engine-btree-composite-range-entries-schema
+                 child operator value part type)
+               []))
+           (get node "children" []))))))
+
 (defn engine-build-btree [rows column row-id root]
   (if (>= row-id (count rows))
     root
@@ -344,6 +482,17 @@
         root {"key" (engine-composite-key-token (get rows row-id) columns)
               "row-id" row-id} 32))))
 
+(defn engine-build-composite-btree-with-schema [rows columns schema row-id root]
+  (if (>= row-id (count rows))
+    root
+    (engine-build-composite-btree-with-schema
+      rows columns schema (+ row-id 1)
+      (engine-btree-root-insert
+        root {"key" (engine-composite-key-token (get rows row-id) columns)
+              "sort-key" (engine-composite-sort-token
+                            (get rows row-id) columns schema)
+              "row-id" row-id} 32))))
+
 (defn engine-build-btree-leaf [rows column row-id entries]
   (if (>= row-id (count rows))
     {"leaf" true "entries" entries}
@@ -359,6 +508,18 @@
       rows columns (+ row-id 1)
       (conj entries
             {"key" (engine-composite-key-token (get rows row-id) columns)
+             "row-id" row-id}))))
+
+(defn engine-build-btree-leaf-columns-with-schema
+  [rows columns schema row-id entries]
+  (if (>= row-id (count rows))
+    {"leaf" true "entries" entries}
+    (engine-build-btree-leaf-columns-with-schema
+      rows columns schema (+ row-id 1)
+      (conj entries
+            {"key" (engine-composite-key-token (get rows row-id) columns)
+             "sort-key" (engine-composite-sort-token
+                           (get rows row-id) columns schema)
              "row-id" row-id}))))
 
 (defn engine-drop-table-indexes [name]
@@ -389,21 +550,30 @@
       (let [index-name (engine-index-group-name columns)
             persisted (get (get table "page-indexes" {}) index-name)
             tree (if (nil? persisted)
-                   (engine-build-composite-btree
-                     (get table "rows") columns 0
+                   (engine-build-composite-btree-with-schema
+                     (get table "rows") columns (get table "schema" {}) 0
                      {"leaf" true "entries" []})
-                   persisted)]
+                   (if (engine-btree-has-sort-key? persisted)
+                     persisted
+                     (engine-build-composite-btree-with-schema
+                       (get table "rows") columns (get table "schema" {}) 0
+                       {"leaf" true "entries" []})))]
         (reset! engine-indexes
                 (assoc (deref engine-indexes) (str name "." index-name)
                        {"table" name
                         "column" index-name
                         "columns" columns
+                        "schema" (get table "schema" {})
                         "buckets" (engine-build-composite-index
                                      (get table "rows") columns 0 {})
                         "btree" tree}))))
     true))
 
 (defn engine-index-add-row-to-index [index key-token key row-id]
+  (engine-index-add-row-to-index-sorted index key-token key nil row-id))
+
+(defn engine-index-add-row-to-index-sorted
+  [index key-token key sort-key row-id]
   (let [buckets (get index "buckets")
         existing (get buckets key-token)
         bucket (if (nil? existing) [] existing)
@@ -411,7 +581,9 @@
         updated-tree (if (nil? tree)
                        nil
                        (engine-btree-root-insert
-                         tree {"key" key "row-id" row-id} 32))]
+                       tree (if (nil? sort-key)
+                              {"key" key "row-id" row-id}
+                              {"key" key "sort-key" sort-key "row-id" row-id}) 32))]
     (assoc (assoc index "buckets"
                   (assoc buckets key-token (conj bucket row-id)))
            "btree" updated-tree)))
@@ -435,8 +607,11 @@
         (let [key-token (engine-composite-key-token row columns)]
           (reset! engine-indexes
                   (assoc (deref engine-indexes) index-key
-                         (engine-index-add-row-to-index
-                           index key-token key-token row-id)))))))
+                         (engine-index-add-row-to-index-sorted
+                           index key-token key-token
+                           (engine-composite-sort-token
+                             row columns (get table "schema" {}))
+                           row-id)))))))
   true)
 
 (defn engine-index-add-rows [name table rows row-id]
@@ -491,12 +666,15 @@
 
 (defn execute-database [ast]
   (let [name (get ast "database")
-        exists (has-key? (deref engine-databases) name)]
+        exists (has-key? (deref engine-databases) name)
+        namespace-conflict (filter
+                             (fn [table]
+                               (str_starts_with table (str name ".")))
+                             (keys (deref engine-catalog)))]
     (if (= (get ast "type") "create-database")
       (if exists
         (throw "DATABASE_EXISTS")
-        (if (any? (fn [table] (str_starts_with table (str name ".")))
-                  (keys (deref engine-catalog)))
+        (if (> (count namespace-conflict) 0)
           (throw "DATABASE_NAMESPACE_CONFLICT")
           (reset! engine-databases (assoc (deref engine-databases) name true))))
       (if (or exists (get ast "if-exists" false))
@@ -897,8 +1075,12 @@
                          (get predicate "equals"))))
         (let [token (engine-composite-key-token
                       (deref values-row) columns)
+              sort-token (engine-composite-sort-token
+                            (deref values-row) columns
+                            (get table "schema" {}))
               row-ids (if (not (nil? (get index "btree")))
-                        (engine-btree-root-get (get index "btree") token)
+                        (engine-btree-root-get-sorted
+                          (get index "btree") token sort-token)
                         (get (get index "buckets") token []))]
           (map (fn [row-id] (get (get table "rows") row-id)) row-ids)))
       (if (and (not (nil? index))
@@ -913,11 +1095,14 @@
                        (engine-match? row second-predicate)))
                 (map (fn [entry] (get (get table "rows")
                                       (get entry "row-id")))
-                     (engine-btree-composite-range-entries
+                     (engine-btree-composite-range-entries-schema
                        (get index "btree")
                        (get first-predicate "operator")
                        (get first-predicate "value")
-                       0)))
+                       0
+                       (engine-schema-column-type
+                         (get table "schema" {})
+                         (get first-predicate "column")))))
         (let [first-index (get (deref engine-indexes)
                              (str name "." (get first-predicate "column")))
             second-index (get (deref engine-indexes)
@@ -949,6 +1134,18 @@
     true
     (and (has-key? (get predicates index) "equals")
          (engine-all-equals? predicates (+ index 1)))))
+
+(defn engine-order-rows [rows order-by collation]
+  (let [key (engine-key order-by)
+        decorated (map (fn [row]
+                         {"row" row
+                          "sort-key" (if (or (= collation "utf8mb4_general_ci")
+                                             (= collation "utf8_general_ci"))
+                                       (str_lower (str (get row key)))
+                                       (get row key))})
+                       rows)
+        sorted (arr_sort_by decorated "sort-key")]
+    (map (fn [entry] (get entry "row")) sorted)))
 
 (defn execute-select [ast]
   (let [table (engine-table (get ast "table"))
@@ -997,7 +1194,8 @@
                                   (get join "left") (get join "right")))))
         ordered (if (nil? (get ast "order-by"))
                   joined
-                  (arr_sort_by joined (engine-key (get ast "order-by"))))
+                  (engine-order-rows joined (get ast "order-by")
+                                      (get ast "order-collation")))
         direction-ordered (if (= (get ast "order-direction") "desc")
                             (reverse ordered)
                             ordered)

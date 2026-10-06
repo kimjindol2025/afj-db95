@@ -4,6 +4,11 @@ FreeLang Script의 공식 관계형 데이터베이스를 목표로 하는 프�
 
 공식 계획과 1.0 완료 기준은 [`docs/official-db-plan.md`](docs/official-db-plan.md)에
 고정합니다.
+상용서비스 승격의 단일 판정표는
+[`docs/commercial-readiness-matrix.md`](docs/commercial-readiness-matrix.md)에서
+관리합니다.
+상용화 전체 순서는 [`docs/commercial-9-stage-plan.md`](docs/commercial-9-stage-plan.md)에
+기록합니다.
 
 ## 현재 단계
 
@@ -91,21 +96,24 @@ transaction, lock을 함께 정리합니다. 허용 범위는 1초~24시간입�
 
 모니터링은 TCP JSON 요청 `{"type":"health"}`를 인증 없이 사용할 수 있습니다.
 응답의 `ok`, `service`, `status`, `wal` 필드를 readiness/liveness 점검에 사용합니다.
+운영 카운터는 TCP JSON 요청 `{"type":"metrics"}`로 인증 없이 조회할 수 있으며,
+`queries`, `commits`, `rollbacks`, `errors`를 반환합니다. 이 endpoint는 원격
+알림 시스템을 대체하지 않으므로 canary/alert 연결은 상용 승격 조건에 남습니다.
 인증된 세션은 `{"type":"shutdown","token":"..."}` 요청으로 graceful shutdown을
 수행할 수 있습니다. 포트는 `AFJ_DB_PORT`로 지정하며 1~65535 범위만 허용합니다.
 bind 주소는 `AFJ_DB_BIND_HOST`로 지정합니다. 개발 모드의 기존 기본값은
 `0.0.0.0`이고, production 모드의 안전한 기본값은 `127.0.0.1`입니다.
-FreeLang runtime의 native TLS listener가 없으므로 production DB listener 자체는
-localhost 밖 bind를 계속 거부합니다. 외부 TLS transport가 필요하면 인증서·키를
-지정한 뒤 별도 Node adapter를 실행합니다.
+상용 연결 정본은 FreeLang runtime의 native TLS listener입니다. production에서
+localhost 밖 bind는 인증서·키 없이는 거부되고, 인증서·CA·선택적 client cert를
+지정하면 native TLS로만 열립니다.
 
 ```bash
 node tools/afj-tls-proxy.js
 ```
 
-adapter는 loopback JSON TCP를 TLS 1.2+로 전달하고 만료 인증서를 거부합니다.
-운영 외부 공개 전에는 CA/mTLS, client hostname verification, 평문 우회 차단과
-인증서 교체 장애 테스트를 별도 릴리스 gate로 통과해야 합니다.
+adapter는 기존 호환성 경로로 유지하며 상용 정본이 아닙니다. native 경로에서
+CA/mTLS, client hostname verification, 평문 우회 차단과 인증서 교체 장애
+테스트를 release gate로 검증합니다.
 기존 HTTP adapter는 개발·계약 테스트 전용이며 `AFJ_DB_MODE=production`에서
 시작되지 않습니다.
 

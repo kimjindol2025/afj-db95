@@ -1,0 +1,43 @@
+;; Batch B: bounded COLLATE contract.
+;; The commercial gate supports deterministic binary and ASCII case-insensitive
+;; ordering. Other linguistic collations must fail explicitly.
+(load "../src/engine.fls")
+(load "../src/sql-core.fls")
+
+(reset! engine-catalog {})
+(reset! engine-indexes {})
+(reset! engine-databases {})
+
+(execute-ast {"type" "create-table" "table" "collation_users"
+              "schema" {"columns" [{"name" "name" "type" "TEXT"}]}})
+(execute-ast {"type" "insert" "table" "collation_users"
+              "row" {"name" "b"}})
+(execute-ast {"type" "insert" "table" "collation_users"
+              "row" {"name" "A"}})
+(execute-ast {"type" "insert" "table" "collation_users"
+              "row" {"name" "a"}})
+
+(defn select-names [statement]
+  (map (fn [row] (get row "name"))
+       (get (execute-ast (parse-sql statement)) "rows")))
+
+(let [binary (select-names
+               "SELECT * FROM collation_users ORDER BY name COLLATE utf8mb4_bin")
+      insensitive (select-names
+                    "SELECT * FROM collation_users ORDER BY name COLLATE utf8mb4_general_ci")
+      unsupported (try
+                   (do
+                     (parse-sql
+                       "SELECT * FROM collation_users ORDER BY name COLLATE utf8mb4_unicode_ci")
+                     "NO_ERROR")
+                   (catch [error] (error_message error)))]
+  (if (and (= binary ["A" "a" "b"])
+           (= (first insensitive) "A")
+           (or (= (get insensitive 1) "a") (= (get insensitive 1) "A"))
+           (= (last insensitive) "b")
+           (regex_match_i unsupported ".*COLLATION_NOT_SUPPORTED.*"))
+    (println "afj-db95 COLLATE contract PASS")
+    (throw (str "COLLATE contract failed: "
+                (json_str {"binary" binary
+                           "insensitive" insensitive
+                           "unsupported" unsupported})))))

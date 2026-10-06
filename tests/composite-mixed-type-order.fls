@@ -1,0 +1,28 @@
+;; Batch A: mixed declared SQL types in one composite index.
+(load "../src/engine.fls")
+
+(let [schema {"columns" [{"name" "tenant" "type" "TEXT"}
+                          {"name" "score" "type" "INTEGER"}
+                          {"name" "active" "type" "BOOLEAN"}]}
+      rows [{"tenant" "a" "score" "10" "active" false}
+            {"tenant" "a" "score" "2" "active" true}
+            {"tenant" "a" "score" nil "active" true}
+            {"tenant" "b" "score" "1" "active" false}]
+      columns ["tenant" "score" "active"]
+      tree (engine-build-composite-btree-with-schema
+             rows columns schema 0 {"leaf" true "entries" []})
+      ordered (map (fn [entry]
+                     [(engine-composite-key-part (get entry "key") 0)
+                      (engine-composite-key-part (get entry "key") 1)])
+                   (engine-btree-entries tree))
+      exact-key (engine-composite-key-token
+                  {"tenant" "a" "score" "2" "active" true} columns)
+      exact-sort (engine-composite-sort-token
+                   {"tenant" "a" "score" "2" "active" true}
+                   columns schema)
+      exact (engine-btree-root-get-sorted tree exact-key exact-sort)]
+  (if (and (= ordered [["a" nil] ["a" "2"] ["a" "10"] ["b" "1"]])
+           (= exact [1]))
+    (println "afj-db95 mixed declared composite types PASS")
+    (throw (str "mixed declared composite types failed: "
+                (json_str {"ordered" ordered "exact" exact})))))

@@ -1,0 +1,31 @@
+;; Batch A: an old persisted composite tree must be rebuilt with the current
+;; schema-aware ordering before it is used for lookup.
+(load "../src/engine.fls")
+
+(reset! engine-indexes {})
+(let [schema {"columns" [{"name" "tenant" "type" "TEXT"}
+                          {"name" "code" "type" "TEXT"}]}
+      rows [{"tenant" "a" "code" "10"}
+            {"tenant" "a" "code" "2"}]
+      columns ["tenant" "code"]
+      old-tree (engine-build-composite-btree
+                 rows columns 0 {"leaf" true "entries" []})
+      table {"name" "reopen_users"
+             "rows" rows
+             "schema" (assoc schema "unique-groups" [columns])
+             "page-indexes" {"tenant|code" old-tree}}]
+  (engine-rebuild-table-indexes "reopen_users" table)
+  (let [index (get (deref engine-indexes) "reopen_users.tenant|code")
+        tree (get index "btree")
+        entries (engine-btree-entries tree)
+        ordered (map (fn [entry]
+                       (get (json-parse (get entry "key")) 1))
+                     entries)
+        first-sort-key (get (first entries) "sort-key")]
+    (if (and (= ordered ["10" "2"])
+             (not (nil? first-sort-key)))
+      (println "afj-db95 composite reopen rebuild PASS")
+      (throw (str "composite reopen rebuild failed: "
+                  (json_str {"entries" entries
+                             "ordered" ordered
+                             "has-sort-key" (not (nil? first-sort-key))}))))))

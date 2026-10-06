@@ -2,6 +2,11 @@
 
 ## 1. 프로젝트 선언
 
+상용서비스 승격의 현재 상태와 묶음별 종료 조건은
+[`commercial-readiness-matrix.md`](commercial-readiness-matrix.md)를 정본으로
+사용한다. 이 문서의 기능 계획과 판정표의 실제 증거가 충돌하면 상용 판정은
+보수적으로 `BLOCKED`로 유지한다.
+
 `afj-db95`는 FreeLang Script의 공식 관계형 데이터베이스다.
 목표는 외부 DB에 의존하는 예제 라이브러리가 아니라, FreeLang 프로그램이
 직접 연결하고 운영할 수 있는 독립 DBMS를 제공하는 것이다.

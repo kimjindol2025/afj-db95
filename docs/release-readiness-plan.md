@@ -4,8 +4,13 @@
 - 기준 저장소: `kimjindol2025/afj-db95`
 - 추적 이슈: [#1 P0 복합 키 정확성 및 릴리스 게이트 회복](https://github.com/kimjindol2025/afj-db95/issues/1)
 - 원칙: 날짜가 아니라 실제 검수 결과로 단계 전환
+- 상용 판정 정본: [`commercial-readiness-matrix.md`](commercial-readiness-matrix.md)
+- 작업 방식: 개별 결함마다 상용 판정을 갱신하지 않고 A/B/C/D 묶음 종료 시 일괄 갱신
 
-## 현재 판정
+## 초기 판정 기록
+
+아래 내용은 2026-10-05 초기 실행 당시의 기록이다. 최신 상용 판정은
+[`commercial-readiness-matrix.md`](commercial-readiness-matrix.md)를 따른다.
 
 ### 개발용 — 현재 가능
 

@@ -1,0 +1,32 @@
+;; Operational metrics contract for the FreeLang TCP server.
+(load "../src/tcp-server.fls")
+(reset! afj-tcp-metrics {"queries" 0 "commits" 0 "rollbacks" 0 "errors" 0})
+(reset! engine-catalog {})
+(reset! engine-databases {})
+(reset! afj-tcp-sessions {})
+(reset! afj-tcp-transactions {})
+(swap! afj-tcp-sessions assoc "metrics" "root")
+(defn metric-query [statement]
+  (afj-tcp-query {"token" "metrics" "statement" statement}))
+(metric-query "CREATE TABLE metrics_users(id INT PRIMARY KEY)")
+(metric-query "INSERT INTO metrics_users VALUES (1)")
+(metric-query "START TRANSACTION")
+(metric-query "ROLLBACK")
+(let [response (afj-tcp-metrics-response)
+      values (get response "metrics")]
+  (if (and (get response "ok")
+           (= (get response "service") "afj-db95")
+           (>= (get values "queries") 4)
+           (>= (get values "commits") 2)
+           (>= (get values "rollbacks") 1)
+           (>= (get values "errors") 0))
+    (println "afj-db95 metrics contract PASS")
+    (throw (str "METRICS_CONTRACT_FAILED " (json_str response)))))
+
+(let [quiet (afj-tcp-metrics-alerts {"errors" 4})
+      noisy (afj-tcp-metrics-alerts {"errors" 5})]
+  (if (and (= quiet [])
+           (= noisy ["ERROR_RATE_HIGH"]))
+    (println "afj-db95 metrics alert contract PASS")
+    (throw (str "METRICS_ALERT_CONTRACT_FAILED "
+                (json_str {"quiet" quiet "noisy" noisy})))))

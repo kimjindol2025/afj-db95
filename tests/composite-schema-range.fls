@@ -1,0 +1,22 @@
+;; Batch A: schema-aware range traversal on a leading INTEGER component.
+(load "../src/engine.fls")
+(load "../src/sql-core.fls")
+
+(reset! engine-catalog {})
+(reset! engine-indexes {})
+(execute-ast (parse-sql
+               "CREATE TABLE composite_schema_range (code INTEGER, tenant TEXT, UNIQUE (code,tenant))"))
+(execute-ast {"type" "insert" "table" "composite_schema_range"
+              "rows" [{"code" "10" "tenant" "a"}
+                      {"code" "2" "tenant" "a"}
+                      {"code" "1" "tenant" "a"}]})
+
+(let [query (execute-ast
+              (parse-sql
+                "SELECT * FROM composite_schema_range WHERE code > 2 AND tenant = 'a'"))]
+  (if (and (= (get query "plan") "index-range-scan")
+           (= (count (get query "rows")) 1)
+           (= (get (first (get query "rows")) "code") "10"))
+    (println "afj-db95 schema-aware composite range PASS")
+    (throw (str "schema-aware composite range failed: "
+                (json_str query)))))

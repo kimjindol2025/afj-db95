@@ -1,0 +1,8 @@
+;; MariaDB wire charset boundary: only the UTF-8 contract is accepted.
+(load "../src/mariadb-wire.fls")
+(if (and (mariadb-wire-supported-charset? 33)
+         (mariadb-wire-supported-charset? 45)
+         (not (mariadb-wire-supported-charset? 8))
+         (not (mariadb-wire-supported-charset? 192)))
+  (println "afj-db95 MariaDB charset contract PASS")
+  (throw "MARIADB_CHARSET_CONTRACT_FAILED"))
