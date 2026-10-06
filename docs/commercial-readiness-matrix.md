@@ -42,7 +42,7 @@
 | 백업 | 운영 snapshot, 복원, 복원 후 무결성·절차 리허설 | PASS(검증 범위) | backup/restore/fault-injection gate 및 `backup-restore-runbook.md` | C |
 | 배포 | clean clone build/start/smoke/rollback 실제 실행 | BLOCKED | `.freelang` check/test/artifact/smoke/rollback 계약 추가; clean clone·실서버 실행 미완료 | D |
 | 관측 | canary, 알림, 장애 분류, rollback 판단 기준 | BLOCKED | 자동 테스트 로그 외 운영 관측 증거 없음 | D |
-| 재현성 | clean clone·고정 runtime·CI에서 동일 결과 | BLOCKED | isolated runtime과 원본 runtime 경계가 남아 있음 | D |
+| 재현성 | clean clone·고정 runtime·CI에서 동일 결과 | PASS(clean clone) | workspace clean clone `READY=YES`, 70-case gate 70 PASS / 0 FAIL | D |
 | 보안 리뷰 | 적대적 코드 리뷰, 데이터 손실·중복·오인 조회 검증 | BLOCKED | 일부 회귀만 존재; 독립 리뷰 보고서 없음 | D |
 | 문서·지원 | 지원/미지원 기능, 제한, 복구·롤백 절차 공개 | UNRESOLVED | `README`, `official-db-plan`, `release-readiness-plan` 시점 불일치 | D |
 

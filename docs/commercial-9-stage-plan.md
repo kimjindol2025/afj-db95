@@ -14,7 +14,7 @@
 | 4 | 연결·보안 | 인증·권한·TLS·charset 경계가 안전한가? | PASS(검증 범위) |
 | 5 | 운영 관측 | 상태·metrics·오류를 운영자가 볼 수 있는가? | PASS(계약 범위) |
 | 6 | 백업·복구 | 장애 후 다른 운영자가 복구할 수 있는가? | PASS(검증 범위) |
-| 7 | clean clone·클라우드 준비 | 새 환경에서 같은 artifact가 실행되는가? | BLOCKED |
+| 7 | clean clone·클라우드 준비 | 새 환경에서 같은 artifact가 실행되는가? | PASS(clean clone) / BLOCKED(cloud) |
 | 8 | 베타·canary·rollback | 작은 트래픽으로 배포하고 되돌릴 수 있는가? | BLOCKED |
 | 9 | 상용 출고 판정 | 모든 증거가 모여 실제 출시 가능한가? | BLOCKED |
 
@@ -77,8 +77,9 @@
 - artifact hash, runtime version, 환경변수 계약, 포트·WAL 경로를 고정한다.
 - 이 단계에서 처음 클라우드 실행 환경을 준비한다. 제품 계약이 고정되기
   전의 임시 클라우드 배포는 상용 증거로 인정하지 않는다.
-- `.freelang`에 check/test/artifact/smoke/rollback 계약을 추가했다. clean clone와
-  실제 배포 서버 실행 증거가 생기기 전까지는 BLOCKED다.
+- `.freelang` 계약을 추가했고 workspace clean clone에서 check, 전체 gate,
+  artifact hash, smoke, rollback artifact 선택을 PASS했다. 실제 클라우드
+  배포 권한·환경은 아직 없어 cloud 출구는 BLOCKED다.
 
 ### 8. 베타·canary·rollback
 

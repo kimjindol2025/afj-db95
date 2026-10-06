@@ -26,8 +26,10 @@ AFJ_BOOTSTRAP=/path/to/bootstrap.js .freelang/smoke.sh
 AFJ_BOOTSTRAP=/path/to/bootstrap.js .freelang/artifact.sh /tmp/afj-db95.tar.gz
 ```
 
-현재는 로컬 working tree에서 계약을 정의한 상태이며, remote clean clone과
-실제 배포 서버에서의 hash/start/rollback 실행은 아직 남아 있다.
+2026-10-07 workspace clean clone에서 `fl-tools start`가 `READY=YES`였고,
+전체 gate 70 PASS / 0 FAIL, artifact smoke, SHA-256, rollback artifact 선택까지
+재현했다. 실제 클라우드/배포 서버에서의 활성화는 별도 운영 권한이 필요한
+다음 경계다.
 
 release gate는 매 실행마다 임시 WAL/remediation/auth/audit 경로를 주입해 이전
 실행의 `/tmp`·docs 상태가 다음 검수에 섞이지 않도록 한다.
