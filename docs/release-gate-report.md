@@ -83,24 +83,53 @@
 
 ## Release gate status
 
-The following are the remaining release-gate conditions; passing regression cases
-do not waive an incomplete architectural condition:
+The authoritative recorded run for this report is `60 PASS / 11 FAIL` at
+`2026-10-06T16:24:11Z`; its overall result is **BLOCKED**. The case table above
+remains the source for the automated count. Failures are not removed from that
+count merely because an environment dependency or timeout may contribute.
 
-- Native TLS listener, external bind policy, CA/mTLS, certificate rotation and failure-injection regressions pass; no blocker remains in this area.
-- MariaDB wire-level support includes a native FreeLang Script listener for handshake, COM_QUERY and COM_STMT_PREPARE/EXECUTE/CLOSE; 32-bit capability intersection, max-packet-size/charset parsing, mysql_native_password SHA-1 challenge verification, standard-client and native prepared INT, NULL, string, and multi-parameter smoke pass. TLS/auth-plugin variants beyond mysql_native_password remain incomplete.
-- DDL/schema-level MVCC row/DDL merge and composite numeric/NULL type-order are
-  covered by dedicated regression cases; full composite compatibility for
-  collation and every mixed SQL type remains incomplete. Row-version WAL
-  replay, row-level DML merge, compound predicate candidate validation,
-  composite page-range recheck, multi-index intersection, range predicate
-  conflict, and TCP transaction process-kill recovery cases are covered above.
-  - TCP table-page manifest, page-backed B+Tree leaf-index persistence/reopen,
-    bounded pin/flush pool, lazy table eviction, lazy transaction snapshot and
-    durable row-version checkpoint recovery pass; page-level row execution and
-    multi-index/compound range validation and schema MVCC merge pass; full
-    composite collation/type compatibility remains incomplete.
-- Large-corpus, high-concurrency, and the reproducible 5-minute performance envelope pass with p95/max latency thresholds; unrestricted duration beyond the bounded envelope is not claimed as a guarantee.
+### Recorded FAIL cases
 
-The report must remain **BLOCKED** until each item has implementation evidence and a
-corresponding reproducible test. A nonzero automated failure or any BLOCKED case
-keeps the gate blocked.
+- **Case 9, local canary rollback:** `tcp-daemon.fls` calls `tcp-server-tls`, which
+  is undefined in the runtime (`Function not found: tcp-server-tls`). The canary
+  rollback case did not pass.
+- **Case 25, TCP 5m performance envelope:** failed with `soak request timeout:
+  login`; the bounded five-minute envelope is not a PASS in this run.
+- **Cases 60–62, native TLS listener, mTLS/reload, production integration:** FAIL;
+  the handoff records the same undefined `tcp-server-tls` runtime function.
+- **Case 63, TLS adapter handshake/reload:** FAIL; expected a pong response but
+  received an empty response.
+- **Case 64, MariaDB standard-client smoke:** FAIL because `mariadb` was absent
+  (`spawn mariadb ENOENT`). This is an environment dependency failure, not
+  evidence that the client smoke passed.
+- **Cases 67–69, standard-client/native MariaDB smoke and auth:** FAIL with
+  timeout or missing response in the recorded handoff. Product and environment
+  causes are not fully separated; retain FAIL pending isolated evidence.
+- **Case 71, native MariaDB prepared:** FAIL at the MariaDB client boundary.
+
+### Environment blockers and unverified causes
+
+The missing `mariadb` executable and sandbox/network-dependent timeouts prevent
+some integration outcomes from being cleanly attributed to product behavior.
+They do not convert those recorded FAIL cases to PASS. The separate post-merge
+`54 PASS / 17 FAIL` run was affected by sandbox `listen EPERM` and additional
+failures; it is not substituted for this report's preserved `60 PASS / 11 FAIL`
+run.
+
+### Structural work still incomplete
+
+- `tcp-server-tls` listener registration/definition is absent for the exercised
+  path. Native TLS listener, mTLS, certificate reload, and production integration
+  do not have passing implementation evidence.
+- MariaDB native wire handshake, standard-client and prepared paths have failing
+  or environment-blocked evidence. Requirements beyond `mysql_native_password`
+  are also explicitly incomplete.
+- Full composite collation and every mixed SQL type remain incomplete as stated
+  above, even though the listed MVCC, recovery, indexing, and composite-order
+  regressions passed.
+
+Passing regression cases remain valid and are not reopened by this correction.
+The report remains **BLOCKED** while any recorded case fails or a required
+structural condition lacks reproducible passing evidence. The internal deployment
+contract added at `8f171b6` covers development deployment only and is not evidence
+for commercial release-gate PASS.
