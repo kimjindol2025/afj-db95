@@ -1,7 +1,10 @@
 ;; Semantic regressions with a new retained WAL; never starts a server.
 (load "../src/tcp-server.fls")
+(define remediation-wal-env (env-get "AFJ_DB_REMEDIATION_WAL"))
 (define afj-tcp-wal
-  (str "../docs/remediation-" (uuid_short) ".wal"))
+  (if (nil? remediation-wal-env)
+    (str "../docs/remediation-" (uuid_short) ".wal")
+    remediation-wal-env))
 (reset! engine-catalog {})
 (reset! engine-databases {})
 (swap! afj-tcp-sessions assoc "regression-a" "root")

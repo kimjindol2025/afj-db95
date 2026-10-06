@@ -31,6 +31,7 @@ run_case() {
     "$case_number" "$case_timeout" "$label" >&2
   started_at="$(date +%s)"
   if AFJ_DB_WAL="$temp_dir/case-$case_number.wal" \
+     AFJ_DB_REMEDIATION_WAL="$temp_dir/case-$case_number.remediation.wal" \
      AFJ_DB_AUTH_STATE="$temp_dir/case-$case_number.auth.jsonl" \
      AFJ_DB_AUDIT_LOG="$temp_dir/case-$case_number.audit.jsonl" \
      timeout --foreground "${case_timeout}s" "$@" >"$log_file" 2>&1; then
