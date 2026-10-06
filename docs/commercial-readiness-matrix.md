@@ -40,7 +40,7 @@
 | TLS | 외부 bind, CA/mTLS, reload, 만료·오류·평문 우회 차단 | PASS(검증 범위) | native TLS를 상용 정본으로 고정; production integration/mTLS/reload/boundary PASS | C |
 | 운영 | health, metrics, 로그, 설정 검증, 용량·제한 | PASS(계약 범위) | health/metrics/threshold alert 및 `operations-runbook.md`; 외부 알림 연결은 배포 범위 | C |
 | 백업 | 운영 snapshot, 복원, 복원 후 무결성·절차 리허설 | PASS(검증 범위) | backup/restore/fault-injection gate 및 `backup-restore-runbook.md` | C |
-| 배포 | clean clone build/start/smoke/rollback 실제 실행 | BLOCKED | 프로젝트별 deploy contract 미고정 | D |
+| 배포 | clean clone build/start/smoke/rollback 실제 실행 | BLOCKED | `.freelang` check/test/artifact/smoke/rollback 계약 추가; clean clone·실서버 실행 미완료 | D |
 | 관측 | canary, 알림, 장애 분류, rollback 판단 기준 | BLOCKED | 자동 테스트 로그 외 운영 관측 증거 없음 | D |
 | 재현성 | clean clone·고정 runtime·CI에서 동일 결과 | BLOCKED | isolated runtime과 원본 runtime 경계가 남아 있음 | D |
 | 보안 리뷰 | 적대적 코드 리뷰, 데이터 손실·중복·오인 조회 검증 | BLOCKED | 일부 회귀만 존재; 독립 리뷰 보고서 없음 | D |

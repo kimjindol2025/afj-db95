@@ -77,7 +77,8 @@
 - artifact hash, runtime version, 환경변수 계약, 포트·WAL 경로를 고정한다.
 - 이 단계에서 처음 클라우드 실행 환경을 준비한다. 제품 계약이 고정되기
   전의 임시 클라우드 배포는 상용 증거로 인정하지 않는다.
-- 현재 `fl-tools`는 runner/entrypoint가 없어 BLOCKED다.
+- `.freelang`에 check/test/artifact/smoke/rollback 계약을 추가했다. clean clone와
+  실제 배포 서버 실행 증거가 생기기 전까지는 BLOCKED다.
 
 ### 8. 베타·canary·rollback
 
