@@ -15,7 +15,7 @@
 | 5 | 운영 관측 | 상태·metrics·오류를 운영자가 볼 수 있는가? | PASS(계약 범위) |
 | 6 | 백업·복구 | 장애 후 다른 운영자가 복구할 수 있는가? | PASS(검증 범위) |
 | 7 | clean clone·클라우드 준비 | 새 환경에서 같은 artifact가 실행되는가? | PASS(clean clone) / BLOCKED(cloud) |
-| 8 | 베타·canary·rollback | 작은 트래픽으로 배포하고 되돌릴 수 있는가? | BLOCKED |
+| 8 | 베타·canary·rollback | 작은 트래픽으로 배포하고 되돌릴 수 있는가? | PASS(local) / BLOCKED(cloud) |
 | 9 | 상용 출고 판정 | 모든 증거가 모여 실제 출시 가능한가? | BLOCKED |
 
 ## 단계별 출구 조건
@@ -87,6 +87,9 @@
 - metrics 임계치 초과, 오류율 증가, WAL/디스크 이상을 alert로 감지한다.
 - 이전 artifact로 실제 rollback하고 데이터 보존을 재검증한다.
 - 종료 조건: canary → 장애 주입 → 탐지 → rollback → 복구 보고서.
+- `.freelang/canary.sh`가 artifact hash, smoke, production native TLS,
+  이전 artifact 선택을 로컬에서 재현한다. 실제 cloud traffic canary와
+  외부 alert 연결은 운영 환경 권한이 필요하다.
 
 ### 9. 상용 출고 판정
 

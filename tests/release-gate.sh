@@ -61,6 +61,7 @@ run_case "MariaDB charset contract" node "$bootstrap" run "$repo_root/tests/mari
 run_case "COLLATE contract" node "$bootstrap" run "$repo_root/tests/collation-contract.fls"
 run_case "page/WAL smoke" env AFJ_DB_PAGE_CACHE_PAGES=2 node "$bootstrap" run "$repo_root/src/afj-db95.fls"
 run_case "metrics contract" node "$bootstrap" run "$repo_root/tests/metrics-contract.fls"
+run_case "local canary rollback" bash "$repo_root/.freelang/canary.sh"
 run_case "large corpus" node "$bootstrap" run "$repo_root/tests/large-corpus-soak.fls"
 run_case "TCP catalog pages" env AFJ_DB_WAL=/tmp/afj-db95-catalog-page-gate.wal AFJ_DB_CATALOG_PAGES=/tmp/afj-db95-catalog-page-gate.pages AFJ_DB_PAGE_POOL_PAGES=2 node "$bootstrap" run "$repo_root/tests/tcp-catalog-pages.fls"
 run_case "TCP lazy catalog eviction" env AFJ_DB_WAL=/tmp/afj-db95-lazy-catalog-gate.wal AFJ_DB_CATALOG_PAGES=/tmp/afj-db95-lazy-catalog-gate.pages AFJ_DB_LAZY_TABLES=true AFJ_DB_LAZY_TABLE_CACHE=1 node "$bootstrap" run "$repo_root/tests/tcp-lazy-catalog.fls"
