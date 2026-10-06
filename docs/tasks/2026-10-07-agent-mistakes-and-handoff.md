@@ -59,6 +59,7 @@
 - case 71 native MariaDB prepared는 MariaDB client 경계에서 실패했다.
 - case 10 및 나머지 다수 케이스는 최종 결과에 반영됐고, artifact 생성과 smoke는 PASS했다.
 - case 9는 단순히 재실행할 일이 아니라, `tcp-daemon.fls`가 호출하는 함수의 정의/등록/fixture 계약을 먼저 추적해야 한다.
+- merge 충돌 해결 후 재검수에서는 `54 PASS / 17 FAIL`이 관찰됐다. 이 실행은 sandbox `listen EPERM`이 TCP 계열을 연쇄 실패시켰고, lazy snapshot 및 schema-aware composite range도 별도로 실패했으므로, merge를 상용 PASS로 판정하지 않았다. 이 실행의 환경성 report 변경은 커밋하지 않고 보존된 `60 PASS / 11 FAIL` report와 분리했다.
 
 ### 2.2 실제 배포
 
