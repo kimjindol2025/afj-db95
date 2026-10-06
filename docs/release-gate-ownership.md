@@ -14,20 +14,24 @@
 
 | Case | 분류 | 1차 소유자 | 현재 근거 | 완료 조건 |
 |---|---|---|---|---|
-| 40, 41 | runtime 계약 | `/home/kim/kim/platform/freelang-afj` | `tcp-server-raw` handler가 event/conn/payload만 받아 peer 주소 없음 | remote address 전달 계약과 runtime test 추가 후 AFJ-DB95 IP rate-limit PASS |
-| 45, 46, 47 | runtime 계약 | `/home/kim/kim/platform/freelang-afj` | `tcp-server-tls` builtin 미등록. case 47은 `/tmp` 경계를 제거한 뒤 이 원인까지 도달 | TLS listener, mTLS, reload builtin과 runtime test가 PASS |
-| 48 | adapter integration | `afj-db95/tools/afj-tls-proxy.js` + test | TLS handshake 기대 응답이 빈 문자열 | adapter handshake/reload test가 실제 `pong`을 수신 |
-| 49, 52 | test environment | 실행 환경/CI image | `mariadb` executable이 PATH에 없음 | `mariadb --version`과 standard-client cases가 같은 clone에서 PASS |
-| 53, 54, 56 | 공동 진단 | `afj-db95` MariaDB adapter + runtime/환경 | listener, auth, prepared 경로가 각각 timeout/실행 실패 | 최소 native wire handshake → auth reject → prepared를 분리 재현한 뒤 소유자 확정 |
+| 9, 60–62 | runtime 계약 / 구조적 미완료 | `/home/kim/kim/platform/freelang-afj` | canary와 native TLS 경로에서 `tcp-server-tls` 미정의 | listener, mTLS, reload 정의·등록 및 runtime regressions PASS |
+| 25 | 성능 실행 FAIL / 원인 미확정 | AFJ-DB95 TCP soak + 실행 환경 | 5분 envelope에서 `soak request timeout: login` | 재현 가능한 동일 조건 실행에서 p95/max 기준 충족 |
+| 63 | adapter integration FAIL | `afj-db95/tools/afj-tls-proxy.js` + test | handshake/reload 응답이 빈 문자열 | adapter test가 기대 pong 응답을 수신 |
+| 64 | wire unit FAIL / 원인 미확정 | `afj-db95/tests/mariadb-wire-unit.js` | unit case 실패. 인수인계에 구체 원인 로그 없음 | 실패 로그 회수 후 원인 수정 및 unit PASS |
+| 67 | 환경 blocker | 실행 환경/CI image | `mariadb` 실행 파일 부재: `spawn mariadb ENOENT` | `mariadb --version` 및 standard-client smoke가 같은 환경에서 PASS |
+| 68–69, 71 | 공동 진단 / 구조적 미완료 | AFJ-DB95 MariaDB adapter + runtime/환경 | wire/auth/prepared 경로 timeout·응답 부재 또는 client boundary 실패; 원인 분리 증거 부족 | handshake → auth → prepared를 각각 분리 재현하고 각 요구 테스트 PASS |
+
+실패 수는 소유권 행의 그룹 수가 아니라 정본 report의 개별 case 표를 따른다.
+현재 기록된 11개 FAIL은 9, 25, 60–64, 67–69, 71이다.
 
 ## 실행 순서
 
 1. 환경 확인: `command -v mariadb mariadb-admin mariadbd`와 버전 기록.
-2. runtime 확인: `tcp-server-raw` peer metadata와 `tcp-server-tls` 존재 여부를
-   AFJ runtime 자체 테스트로 확정.
+2. case 9/60–62 runtime 확인: `tcp-server-tls` 정의·등록 여부를 AFJ runtime
+   자체 테스트로 확정.
 3. AFJ-DB95 test harness: case 48 adapter handshake를 단독 재현한다.
-4. native MariaDB 공동 진단: 53/54/56을 한 번씩 분리 실행하고 listener,
-   auth, client dependency를 각각 기록한다.
+4. MariaDB 진단은 case 64 unit log 확인 후 case 67 client dependency,
+   cases 68–69 wire/auth, case 71 prepared를 각각 분리해 기록한다.
 5. 소유자별 수정이 끝난 뒤에만 전체 release gate를 재실행한다.
 
 ## 중복 방지 규칙
