@@ -3,6 +3,9 @@
 프로젝트의 실행 계약은 `.freelang/`에 둔다. FreeLang Script 본체를 바꾸지
 않고, 외부 shell은 runtime 주입·검수·artifact 포장만 담당한다.
 
+`bin/fl-script-unified.js`는 같은 경계를 `fl-tools`의 SCRIPT runner 형식으로
+연결하는 어댑터일 뿐이며, SQL/DB 본체 구현에는 사용하지 않는다.
+
 ```text
 .freelang/check.sh     syntax/type check
 .freelang/test.sh      전체 release gate
