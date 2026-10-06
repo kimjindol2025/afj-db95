@@ -7,6 +7,7 @@
 (reset! engine-databases {})
 (reset! afj-tcp-commit-revision 0)
 (reset! afj-tcp-table-revisions {})
+(reset! afj-tcp-schema-revisions {})
 (reset! afj-tcp-row-versions {})
 
 (afj-tcp-commit-ast
@@ -30,10 +31,12 @@
 (reset! engine-indexes {})
 (reset! engine-databases {})
 (afj-tcp-recover)
-(let [chain (get (get (deref afj-tcp-row-versions) "recovery_accounts") "1")
+(let [schema-revision (get (deref afj-tcp-schema-revisions) "recovery_accounts" 0)
+      chain (get (get (deref afj-tcp-row-versions) "recovery_accounts") "1")
       rows (afj-tcp-versioned-rows "recovery_accounts" []
                                     (deref afj-tcp-commit-revision))]
   (if (and (>= (deref afj-tcp-commit-revision) 3)
+           (= schema-revision 1)
            (>= (count chain) 2)
            (= (get (first rows) "balance") "20"))
     (println "afj-db95 TCP row-version WAL recovery PASS")

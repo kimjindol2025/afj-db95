@@ -51,3 +51,37 @@
                                  "schema") "unique-groups")) 1))
     (println "afj-db95 compound unique index PASS")
     (throw "compound unique index failure")))
+
+;; Composite tokens are currently delimiter-joined. Distinct component pairs
+;; that serialize to the same token must still pass UNIQUE validation and
+;; equality lookup must recheck the actual row components.
+(execute-ast {"type" "insert" "table" "compound_users"
+              "row" {"tenant" "a|b" "email" "c"}})
+(execute-ast {"type" "insert" "table" "compound_users"
+              "row" {"tenant" "a" "email" "b|c"}})
+(let [left (execute-ast
+             (parse-sql
+               "SELECT * FROM compound_users WHERE tenant = 'a|b' AND email = 'c'"))
+      right (execute-ast
+              (parse-sql
+                "SELECT * FROM compound_users WHERE tenant = 'a' AND email = 'b|c'"))]
+  (if (and (= (count (get left "rows")) 1)
+           (= (get (first (get left "rows")) "tenant") "a|b")
+           (= (count (get right "rows")) 1)
+           (= (get (first (get right "rows")) "email") "b|c"))
+    (println "afj-db95 composite delimiter equality PASS")
+    (throw "composite equality confused delimiter-bearing values")))
+
+;; SQL UNIQUE indexes allow multiple rows when any component is NULL.
+(execute-ast {"type" "insert" "table" "compound_users"
+              "row" {"tenant" nil "email" "nullable@example.test"}})
+(execute-ast {"type" "insert" "table" "compound_users"
+              "row" {"tenant" nil "email" "nullable@example.test"}})
+(let [rows (get (get (deref engine-catalog) "compound_users") "rows")
+      nullable (filter (fn [row]
+                         (and (nil? (get row "tenant"))
+                              (= (get row "email") "nullable@example.test")))
+                       rows)]
+  (if (= (count nullable) 2)
+    (println "afj-db95 composite unique NULL semantics PASS")
+    (throw "composite UNIQUE rejected duplicate rows containing NULL")))

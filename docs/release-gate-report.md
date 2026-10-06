@@ -90,5 +90,5 @@ do not waive an incomplete architectural condition:
 - Large-corpus, high-concurrency, and the reproducible 5-minute performance envelope pass with p95/max latency thresholds; unrestricted duration beyond the bounded envelope is not claimed as a guarantee.
 
 The report must remain **BLOCKED** until each item has implementation evidence and a
-corresponding reproducible test. A nonzero automated failure also keeps the gate
-blocked.
+corresponding reproducible test. A nonzero automated failure or any BLOCKED case
+keeps the gate blocked.

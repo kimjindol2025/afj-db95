@@ -273,60 +273,6 @@
                []))
            (get node "children" [])))))
 
-(defn engine-composite-key-part [key index]
-  (get (json-parse key) index))
-
-(defn engine-btree-composite-child-may-match? [child operator value part]
-  (if (or (= operator "!=") (= operator "<>"))
-    true
-    (let [first-key (engine-composite-order-value
-                      (engine-composite-key-part
-                        (engine-btree-node-first-key child) part))
-          last-key (engine-composite-order-value
-                     (engine-composite-key-part
-                       (engine-btree-node-last-key child) part))
-          compare-value (engine-composite-order-value value)]
-      (if (= operator ">")
-        (> last-key compare-value)
-        (if (= operator ">=")
-          (>= last-key compare-value)
-          (if (= operator "<")
-            (< first-key compare-value)
-            (if (= operator "<=")
-              (<= first-key compare-value)
-              true)))))))
-
-(defn engine-btree-composite-range-entries [node operator value part]
-  ;; Composite page indexes are ordered by the complete token, but a range on
-  ;; a leading component can still prune whole child pages using that
-  ;; component's min/max key. The executor rechecks the complete predicate
-  ;; after row materialization, so equal-prefix and mixed-type edge cases stay
-  ;; semantically safe.
-  (if (get node "leaf")
-    (filter (fn [entry]
-              (let [component (engine-composite-order-value
-                                (engine-composite-key-part
-                                  (get entry "key") part))
-                    compare-value (engine-composite-order-value value)]
-                (if (= operator ">")
-                  (> component compare-value)
-                  (if (= operator ">=")
-                    (>= component compare-value)
-                    (if (= operator "<")
-                      (< component compare-value)
-                      (if (= operator "<=")
-                        (<= component compare-value)
-                        (not (= component compare-value))))))))
-            (get node "entries" []))
-    (arr_flatten
-      (map (fn [child]
-             (if (engine-btree-composite-child-may-match?
-                   child operator value part)
-               (engine-btree-composite-range-entries
-                 child operator value part)
-               []))
-           (get node "children" [])))))
-
 (defn engine-build-btree [rows column row-id root]
   (if (>= row-id (count rows))
     root
@@ -714,6 +660,12 @@
             (get right (get columns index)))
          (engine-row-matches-columns? left right columns (+ index 1)))))
 
+(defn engine-row-has-null-column? [row columns index]
+  (if (>= index (count columns))
+    false
+    (or (nil? (get row (get columns index)))
+        (engine-row-has-null-column? row columns (+ index 1)))))
+
 (defn engine-any-row-matches-columns? [rows row columns index]
   (if (= (count rows) 0)
     false
@@ -743,8 +695,9 @@
         (throw (str "UNIQUE_VIOLATION: " column))
         nil)))
   (doseq [columns (get schema "unique-groups" [])]
-    (let [duplicate (engine-any-row-matches-columns?
-                      existing row columns 0)]
+    (let [duplicate (and (not (engine-row-has-null-column? row columns 0))
+                         (engine-any-row-matches-columns?
+                           existing row columns 0))]
       (if duplicate
         (throw (str "UNIQUE_VIOLATION: "
                     (engine-index-group-name columns)))
@@ -897,9 +850,10 @@
                          (get predicate "equals"))))
         (let [token (engine-composite-key-token
                       (deref values-row) columns)
-              row-ids (if (not (nil? (get index "btree")))
-                        (engine-btree-root-get (get index "btree") token)
-                        (get (get index "buckets") token []))]
+              ;; Delimited composite tokens can collide when values contain
+              ;; the separator. Buckets preserve all candidates; exact row
+              ;; predicates are rechecked by execute-select.
+              row-ids (get (get index "buckets") token [])]
           (map (fn [row-id] (get (get table "rows") row-id)) row-ids)))
       (if (and (not (nil? index))
                (not (nil? (get index "btree")))
@@ -907,17 +861,14 @@
                   (first (get index "columns" [])))
                (has-key? first-predicate "operator"))
         (filter (fn [row]
-                  ;; Keep the page traversal as a candidate selector, but
-                  ;; always recheck both predicates before returning a row.
+                  ;; Composite key serialization is not yet type-preserving
+                  ;; or escaped. Recheck the true row values after scanning
+                  ;; index entries instead of pruning by an ambiguous token.
                   (and (engine-match? row first-predicate)
                        (engine-match? row second-predicate)))
                 (map (fn [entry] (get (get table "rows")
                                       (get entry "row-id")))
-                     (engine-btree-composite-range-entries
-                       (get index "btree")
-                       (get first-predicate "operator")
-                       (get first-predicate "value")
-                       0)))
+                     (engine-btree-entries (get index "btree"))))
         (let [first-index (get (deref engine-indexes)
                              (str name "." (get first-predicate "column")))
             second-index (get (deref engine-indexes)
@@ -973,6 +924,11 @@
                             first-key
                             second-key)))
                       (str (get ast "table") "." (get where "column"))))
+        index-definition (get (deref engine-indexes) index-key)
+        composite-range-full-scan? (and (not (nil? where))
+                                        (has-key? where "and")
+                                        (not (engine-all-equals? (get where "and") 0))
+                                        (not (nil? (get index-definition "columns"))))
         source-rows (if (nil? where)
                       (get table "rows")
                       (engine-index-rows-safe (get ast "table") table where))
@@ -1013,7 +969,9 @@
         {"ok" true "type" "select" "rows" aggregate-rows})
       (if (nil? (get ast "group-by"))
         {"ok" true "type" "select"
-         "plan" (if (and (not (nil? where))
+         "plan" (if composite-range-full-scan?
+                    "index-full-scan"
+                    (if (and (not (nil? where))
                          (not (nil? (get (deref engine-indexes)
                                         index-key)))
                     )
@@ -1024,7 +982,7 @@
                       (if (has-key? where "equals")
                         "index-scan"
                         "index-range-scan"))
-                    "full-scan")
+                    "full-scan"))
          "rows" (if (or (nil? (get ast "columns"))
                         (= (get ast "columns") ["*"]))
                    limited
