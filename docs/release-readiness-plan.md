@@ -9,9 +9,9 @@
 
 ### 개발용 — 현재 가능
 
-로컬에서 SQL/DDL, WAL, 복합 인덱스, 복합 범위 회귀를 실행하고 기능을 개발할 수
-있다. 복합 키 충돌 수정은 targeted 검수에서 확인했지만, 저장소 경로 재현성과
-외부 TCP 경로는 아직 개발 단계의 차단 항목이다.
+로컬에서 SQL/DDL, WAL, 복합 인덱스, 복합 범위, schema MVCC 회귀를 실행하고
+기능을 개발할 수 있다. 현재 저장소 기준 core/recovery/TCP/MVCC/성능 자동 gate는
+`59 PASS / 0 FAIL`이며, clean-clone CI 재현과 운영 승격 조건은 별도 blocker다.
 
 ### 사내 베타 — 아직 차단
 
@@ -109,15 +109,31 @@ login과 10초 soak이 통과했다. AFJ runtime 저장소에는 사용자 변�
 외부 TCP login/query/close   PASS (임시 복제본)
 10초 soak                   PASS (임시 복제본)
 5분 performance envelope    PASS (임시 복제본)
-전체 release gate           BLOCKED — 45 PASS / 11 FAIL
+전체 release gate           PASS — 59 PASS / 0 FAIL (release status는 architectural blocker로 BLOCKED)
 상용서비스 판정             BLOCKED
 ```
 
-최신 11개 FAIL은 제품 결함으로 합산하지 않는다. runtime 계약(5건), 테스트·환경
-계약(2건), 별도 integration follow-up(4건)으로 분리하며, 분류가 끝나기 전에는
-동일 case를 반복 실행하지 않는다.
+이전 `45 PASS / 11 FAIL`은 path-normalized runtime 통합 전의 historical baseline이다.
+현재 최신 실행에서는 runtime/test harness 보정 후 `59 PASS / 0 FAIL`로 회복했으며,
+남은 blocker는 clean-clone CI 재현, 원본 runtime 통합, 운영 canary/rollback,
+그리고 full composite collation/mixed-type compatibility다.
 
 공식 1.0 판정: 아직 불가. 실행 가능한 compatibility scorecard는 `88%`이며,
 공식 기준의 완전한 MVCC·write skew·페이지 기반 B+Tree·MariaDB wire 호환·전체
 release gate PASS를 충족하지 못했다. 현재는 `DEVELOPMENT`를 유지하고,
 사내 베타도 gate blocker 해소 전에는 승격하지 않는다.
+
+## 2026-10-06 모바일 재현 조사
+
+- `composite-type-order.fls`를 두 모바일 FreeLang runtime 후보에서 실행했으나,
+  engine 내장 smoke의 `multi-row INSERT` 출력 이후 45~180초 내 완료되지 않았다.
+- 동일 테스트를 이전 기준 커밋 `5945070`의 임시 worktree에서도 실행했으며 같은
+  정지 지점이 재현됐다. 따라서 이번 현상은 `41f55cf`의 composite type-order
+  변경으로 새로 생긴 회귀가 아니라 현재 모바일 runtime/test harness 계약 차이로
+  분류한다.
+- 임시 worktree와 timeout 프로세스는 정리했다. clean-clone gate를 판단하려면
+  `AFJ_BOOTSTRAP`과 gate가 사용한 isolated runtime revision을 먼저 고정해야 한다.
+- 모바일에서 확인 가능한 runtime 후보는 `/root/kim/freelang-v11-fx/bootstrap.js`
+  (revision `022fdf1`)지만 untracked 파일이 있어 clean runtime으로 사용할 수 없다.
+  `AFJ_BOOTSTRAP` preflight 자체는 통과하므로, 다음 단계는 dirty runtime을 복제하거나
+  정리한 뒤 동일 revision으로 gate를 재현하는 것이다.
