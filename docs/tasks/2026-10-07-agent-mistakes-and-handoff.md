@@ -54,8 +54,9 @@
 - case 25의 5분 성능 envelope는 `soak request timeout: login`으로 실패했다.
 - case 60~62의 native TLS listener/mTLS/production integration은 모두 같은 `tcp-server-tls` 미정의로 실패했다.
 - case 63의 TLS adapter handshake/reload는 기대한 `{"ok":true,"type":"pong"}` 대신 빈 응답을 받아 실패했다.
-- case 64는 `mariadb` 실행 파일이 없어 `spawn mariadb ENOENT`로 실패했다.
-- case 67~69는 standard-client/native MariaDB smoke/auth에서 timeout 또는 응답 부재로 실패했다.
+- case 64 (`MariaDB wire packet unit`)도 FAIL이지만, 인수인계에 구체 실패 원인이 기록되지 않았다.
+- `mariadb` 실행 파일 부재(`spawn mariadb ENOENT`)는 case 67 (`MariaDB standard-client smoke`)에 해당한다.
+- case 68~69 (`native MariaDB wire`, `native MariaDB auth rejection`)는 timeout 또는 응답 부재로 실패했다.
 - case 71 native MariaDB prepared는 MariaDB client 경계에서 실패했다.
 - case 10 및 나머지 다수 케이스는 최종 결과에 반영됐고, artifact 생성과 smoke는 PASS했다.
 - case 9는 단순히 재실행할 일이 아니라, `tcp-daemon.fls`가 호출하는 함수의 정의/등록/fixture 계약을 먼저 추적해야 한다.
