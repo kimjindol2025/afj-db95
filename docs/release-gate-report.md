@@ -99,12 +99,15 @@ count merely because an environment dependency or timeout may contribute.
   the handoff records the same undefined `tcp-server-tls` runtime function.
 - **Case 63, TLS adapter handshake/reload:** FAIL; expected a pong response but
   received an empty response.
-- **Case 64, MariaDB standard-client smoke:** FAIL because `mariadb` was absent
+- **Case 64, MariaDB wire packet unit:** FAIL. The handoff does not record a
+  specific cause for this unit-test failure; retain it as an unexplained test
+  failure until its log is recovered.
+- **Case 67, MariaDB standard-client smoke:** FAIL because `mariadb` was absent
   (`spawn mariadb ENOENT`). This is an environment dependency failure, not
   evidence that the client smoke passed.
-- **Cases 67–69, standard-client/native MariaDB smoke and auth:** FAIL with
-  timeout or missing response in the recorded handoff. Product and environment
-  causes are not fully separated; retain FAIL pending isolated evidence.
+- **Cases 68–69, native MariaDB wire and auth rejection:** FAIL with timeout or
+  missing response in the recorded handoff. Product and environment causes are
+  not fully separated; retain FAIL pending isolated evidence.
 - **Case 71, native MariaDB prepared:** FAIL at the MariaDB client boundary.
 
 ### Environment blockers and unverified causes
