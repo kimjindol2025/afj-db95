@@ -1,7 +1,9 @@
 # Release Gate 실패 소유권 매트릭스
 
 기준 gate: 2026-10-05, path-normalized 새 clone, `AFJ_BOOTSTRAP` 지정,
-네트워크 listen 권한 허용, `45 PASS / 11 FAIL`.
+네트워크 listen 권한 허용, 최신 결과 `59 PASS / 0 FAIL`.
+아래 소유권 표의 `45 PASS / 11 FAIL` 전제는 원인 분류를 위한 historical
+baseline이며, 현재 자동 gate 결과와 혼동하지 않는다.
 
 이 문서는 실패 수를 누적하지 않고, 어느 저장소·환경에서 계약을 완성해야
 하는지 고정한다. 소유자가 다른 영역의 코드를 추측 수정하지 않는다.

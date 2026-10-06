@@ -5,6 +5,8 @@
 (reset! engine-catalog {})
 (reset! engine-indexes {})
 (reset! afj-tcp-commit-revision 0)
+(reset! afj-tcp-table-revisions {})
+(reset! afj-tcp-schema-revisions {})
 (reset! afj-tcp-sessions {"mvcc-a" "root" "mvcc-b" "root"})
 (reset! afj-tcp-session-expiries {})
 (reset! afj-tcp-transactions {})
@@ -17,6 +19,14 @@
                 "schema" {"columns" [{"name" "id" "type" "INTEGER"
                                          "nullable" false "primary" true}]
                            "primary-key" "id" "unique-columns" []}}))
+
+(afj-tcp-commit-ast
+  {"type" "create-table" "table" "schema_guard"
+   "schema" {"columns" [{"name" "id" "type" "INTEGER"
+                            "nullable" false "primary" true}]
+              "primary-key" "id" "unique-columns" []}})
+(afj-tcp-commit-ast
+  {"type" "insert" "table" "schema_guard" "rows" [{"id" "1"}]})
 
 (afj-tcp-commit-ast
   {"type" "create-table" "table" "versioned_accounts"
@@ -110,3 +120,193 @@
            (= (count (get (get quota-b "result") "rows")) 0))
     (println "afj-db95 MVCC phantom/write-skew PASS")
     (throw "MVCC conflict validation failed")))
+
+;; A predicate read depends on the table definition as well as its rows.
+;; Schema changes have no row-version record, so the reader must not commit
+;; writes based on a stale schema snapshot.
+(swap! afj-tcp-sessions assoc "mvcc-schema-reader" "root")
+(swap! afj-tcp-sessions assoc "mvcc-schema-writer" "root")
+(afj-tcp-begin-level "mvcc-schema-reader" "REPEATABLE READ")
+(afj-tcp-begin-level "mvcc-schema-writer" "REPEATABLE READ")
+(let [read-before (afj-tcp-query
+                    {"token" "mvcc-schema-reader"
+                     "statement" "SELECT * FROM schema_guard WHERE id=1"})
+      drop (afj-tcp-query
+              {"token" "mvcc-schema-writer"
+               "statement" "DROP TABLE schema_guard"})
+      writer-commit (afj-tcp-commit "mvcc-schema-writer")
+      reader-write (afj-tcp-query
+                     {"token" "mvcc-schema-reader"
+                      "statement" "INSERT INTO quota_a (id) VALUES (2)"})
+      reader-commit (afj-tcp-commit "mvcc-schema-reader")]
+  (if (and (get read-before "ok") (get drop "ok")
+           (get writer-commit "ok") (get reader-write "ok")
+           (not (get reader-commit "ok"))
+           (= (get reader-commit "error") "TX_CONFLICT"))
+    (println "afj-db95 MVCC schema-read conflict PASS")
+    (throw "schema change did not invalidate stale predicate reader")))
+
+;; ALTER TABLE changes the schema without a row-version. A transaction whose
+;; predicate read used the old definition must still fail commit validation.
+(afj-tcp-commit-ast
+  {"type" "create-table" "table" "schema_alter_guard"
+   "schema" {"columns" [{"name" "id" "type" "INTEGER"
+                            "nullable" false "primary" true}]
+              "primary-key" "id" "unique-columns" []}})
+(afj-tcp-commit-ast
+  {"type" "insert" "table" "schema_alter_guard" "rows" [{"id" "1"}]})
+(swap! afj-tcp-sessions assoc "mvcc-alter-reader" "root")
+(swap! afj-tcp-sessions assoc "mvcc-alter-writer" "root")
+(afj-tcp-begin-level "mvcc-alter-reader" "REPEATABLE READ")
+(afj-tcp-begin-level "mvcc-alter-writer" "REPEATABLE READ")
+(let [read-before (afj-tcp-query
+                    {"token" "mvcc-alter-reader"
+                     "statement" "SELECT * FROM schema_alter_guard WHERE id=1"})
+      alter (afj-tcp-query
+              {"token" "mvcc-alter-writer"
+               "statement" "ALTER TABLE schema_alter_guard ADD COLUMN note TEXT"})
+      writer-commit (afj-tcp-commit "mvcc-alter-writer")
+      reader-write (afj-tcp-query
+                     {"token" "mvcc-alter-reader"
+                      "statement" "INSERT INTO quota_a (id) VALUES (3)"})
+      reader-commit (afj-tcp-commit "mvcc-alter-reader")]
+  (if (and (get read-before "ok") (get alter "ok")
+           (get writer-commit "ok") (get reader-write "ok")
+           (not (get reader-commit "ok"))
+           (= (get reader-commit "error") "TX_CONFLICT"))
+    (println "afj-db95 MVCC ALTER schema conflict PASS")
+    (throw "ALTER TABLE did not invalidate stale predicate reader")))
+
+;; `id` is not inherently unique in SQL. MVCC history must preserve repeated
+;; identifiers and physically duplicate rows when no PRIMARY KEY is declared.
+(afj-tcp-commit-ast
+  {"type" "create-table" "table" "versioned_unkeyed"
+   "schema" {"columns" [{"name" "id" "type" "INTEGER" "nullable" true}
+                           {"name" "note" "type" "TEXT" "nullable" true}]
+              "primary-key" nil "unique-columns" []}})
+(afj-tcp-commit-ast
+  {"type" "insert" "table" "versioned_unkeyed"
+   "rows" [{"id" "1" "note" "first"}
+           {"id" "1" "note" "second"}
+           {"id" "1" "note" "second"}]})
+(let [snapshot (deref afj-tcp-commit-revision)
+      before (afj-tcp-versioned-rows "versioned_unkeyed" [] snapshot)]
+  (afj-tcp-commit-ast
+    {"type" "update" "table" "versioned_unkeyed"
+     "where" {"column" "note" "equals" "first"}
+     "changes" {"note" "updated"}})
+  (let [after (afj-tcp-versioned-rows
+                "versioned_unkeyed" [] (deref afj-tcp-commit-revision))
+        historical (afj-tcp-versioned-rows "versioned_unkeyed" [] snapshot)]
+    (if (and (= (count before) 3)
+             (= (count after) 3)
+             (= (count historical) 3)
+             (any? (fn [row] (= (get row "note") "first")) historical)
+             (any? (fn [row] (= (get row "note") "updated")) after))
+      (println "afj-db95 MVCC duplicate unkeyed rows PASS")
+      (throw "MVCC collapsed rows without a declared unique key"))))
+
+;; Recreating a table with an identical schema must not hide an intervening
+;; DDL generation change from a repeatable-read predicate reader.
+(afj-tcp-commit-asts
+  [{"type" "create-table" "table" "schema_generation_guard"
+    "schema" {"columns" [{"name" "id" "type" "INTEGER"
+                             "nullable" false "primary" true}]
+               "primary-key" "id" "unique-columns" []}}
+   {"type" "insert" "table" "schema_generation_guard"
+    "rows" [{"id" "1"}]}])
+(swap! afj-tcp-sessions assoc "mvcc-generation-reader" "root")
+(swap! afj-tcp-sessions assoc "mvcc-generation-writer" "root")
+(afj-tcp-begin-level "mvcc-generation-reader" "REPEATABLE READ")
+(let [read-before (afj-tcp-query
+                    {"token" "mvcc-generation-reader"
+                     "statement" "SELECT * FROM schema_generation_guard WHERE id=1"})
+      dropped (afj-tcp-query
+                {"token" "mvcc-generation-writer"
+                 "statement" "DROP TABLE schema_generation_guard"})
+      recreated (afj-tcp-query
+                  {"token" "mvcc-generation-writer"
+                   "statement" "CREATE TABLE schema_generation_guard (id INTEGER PRIMARY KEY)"})
+      inserted (afj-tcp-query
+                 {"token" "mvcc-generation-writer"
+                  "statement" "INSERT INTO schema_generation_guard (id) VALUES (1)"})
+      reader-write (afj-tcp-query
+                     {"token" "mvcc-generation-reader"
+                      "statement" "INSERT INTO quota_a (id) VALUES (4)"})
+      reader-commit (afj-tcp-commit "mvcc-generation-reader")]
+  (if (and (get read-before "ok") (get dropped "ok")
+           (get recreated "ok") (get inserted "ok")
+           (get reader-write "ok") (not (get reader-commit "ok"))
+           (= (get reader-commit "error") "TX_CONFLICT"))
+    (println "afj-db95 MVCC recreated schema generation conflict PASS")
+    (throw "drop/recreate hid a schema generation change from stale reader")))
+
+;; A read in another table enables row-level merge. That must not permit DML
+;; planned against an old schema to merge into a table altered meanwhile.
+(afj-tcp-commit-ast
+  {"type" "create-table" "table" "schema_write_guard"
+   "schema" {"columns" [{"name" "id" "type" "INTEGER"
+                            "nullable" false "primary" true}]
+              "primary-key" "id" "unique-columns" []}})
+(afj-tcp-commit-ast
+  {"type" "insert" "table" "schema_write_guard" "rows" [{"id" "1"}]})
+(swap! afj-tcp-sessions assoc "mvcc-schema-write-reader" "root")
+(swap! afj-tcp-sessions assoc "mvcc-schema-write-ddl" "root")
+(afj-tcp-begin-level "mvcc-schema-write-reader" "REPEATABLE READ")
+(afj-tcp-begin-level "mvcc-schema-write-ddl" "REPEATABLE READ")
+(let [unrelated-read (afj-tcp-query
+                       {"token" "mvcc-schema-write-reader"
+                        "statement" "SELECT * FROM quota_b WHERE id=99"})
+      alter (afj-tcp-query
+              {"token" "mvcc-schema-write-ddl"
+               "statement" "ALTER TABLE schema_write_guard ADD COLUMN note TEXT"})
+      ddl-commit (afj-tcp-commit "mvcc-schema-write-ddl")
+      dml (afj-tcp-query
+            {"token" "mvcc-schema-write-reader"
+             "statement" "INSERT INTO schema_write_guard (id) VALUES (2)"})
+      stale-commit (afj-tcp-commit "mvcc-schema-write-reader")]
+  (if (and (get unrelated-read "ok") (get alter "ok") (get ddl-commit "ok")
+           (get dml "ok") (not (get stale-commit "ok"))
+           (= (get stale-commit "error") "TX_CONFLICT"))
+    (println "afj-db95 MVCC DDL/DML schema conflict PASS")
+    (throw (str "stale DML merged after schema change: "
+                (json_str stale-commit)))))
+
+;; Identical schema text does not mean the same table generation. A stale
+;; writer must not merge rows into a table dropped and recreated meanwhile.
+(afj-tcp-commit-asts
+  [{"type" "create-table" "table" "same_generation_guard"
+    "schema" {"columns" [{"name" "id" "type" "INTEGER" "nullable" false}]
+               "primary-key" "id" "unique-columns" [] "unique-groups" []
+               "foreign-keys" [] "checks" []}}
+   {"type" "insert" "table" "same_generation_guard" "rows" [{"id" "1"}]}])
+(swap! afj-tcp-sessions assoc "mvcc-generation-write-reader" "root")
+(swap! afj-tcp-sessions assoc "mvcc-generation-write-ddl" "root")
+(afj-tcp-begin-level "mvcc-generation-write-reader" "REPEATABLE READ")
+(afj-tcp-query
+  {"token" "mvcc-generation-write-reader"
+   "statement" "SELECT * FROM quota_b WHERE id=99"})
+(afj-tcp-begin-level "mvcc-generation-write-ddl" "REPEATABLE READ")
+(let [drop (afj-tcp-query
+             {"token" "mvcc-generation-write-ddl"
+              "statement" "DROP TABLE same_generation_guard"})
+      recreate (afj-tcp-query
+                 {"token" "mvcc-generation-write-ddl"
+                  "statement" "CREATE TABLE same_generation_guard (id INTEGER PRIMARY KEY)"})
+      seed (afj-tcp-query
+             {"token" "mvcc-generation-write-ddl"
+              "statement" "INSERT INTO same_generation_guard (id) VALUES (1)"})
+      ddl-commit (afj-tcp-commit "mvcc-generation-write-ddl")
+      dml (afj-tcp-query
+            {"token" "mvcc-generation-write-reader"
+             "statement" "INSERT INTO same_generation_guard (id) VALUES (2)"})
+      stale-commit (afj-tcp-commit "mvcc-generation-write-reader")
+      current-rows (get (get (deref engine-catalog) "same_generation_guard") "rows")]
+  (if (and (get drop "ok") (get recreate "ok") (get seed "ok")
+           (get ddl-commit "ok") (get dml "ok")
+           (not (get stale-commit "ok"))
+           (= (get stale-commit "error") "TX_CONFLICT")
+           (= (count current-rows) 1))
+    (println "afj-db95 MVCC same-schema generation write conflict PASS")
+    (throw (str "same-schema generation accepted a stale write: "
+                (json_str stale-commit)))))

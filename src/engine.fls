@@ -892,6 +892,12 @@
             (get right (get columns index)))
          (engine-row-matches-columns? left right columns (+ index 1)))))
 
+(defn engine-row-has-null-column? [row columns index]
+  (if (>= index (count columns))
+    false
+    (or (nil? (get row (get columns index)))
+        (engine-row-has-null-column? row columns (+ index 1)))))
+
 (defn engine-any-row-matches-columns? [rows row columns index]
   (if (= (count rows) 0)
     false
@@ -921,8 +927,9 @@
         (throw (str "UNIQUE_VIOLATION: " column))
         nil)))
   (doseq [columns (get schema "unique-groups" [])]
-    (let [duplicate (engine-any-row-matches-columns?
-                      existing row columns 0)]
+    (let [duplicate (and (not (engine-row-has-null-column? row columns 0))
+                         (engine-any-row-matches-columns?
+                           existing row columns 0))]
       (if duplicate
         (throw (str "UNIQUE_VIOLATION: "
                     (engine-index-group-name columns)))
@@ -1089,8 +1096,9 @@
                   (first (get index "columns" [])))
                (has-key? first-predicate "operator"))
         (filter (fn [row]
-                  ;; Keep the page traversal as a candidate selector, but
-                  ;; always recheck both predicates before returning a row.
+                  ;; Composite key serialization is not yet type-preserving
+                  ;; or escaped. Recheck the true row values after scanning
+                  ;; index entries instead of pruning by an ambiguous token.
                   (and (engine-match? row first-predicate)
                        (engine-match? row second-predicate)))
                 (map (fn [entry] (get (get table "rows")
@@ -1170,6 +1178,11 @@
                             first-key
                             second-key)))
                       (str (get ast "table") "." (get where "column"))))
+        index-definition (get (deref engine-indexes) index-key)
+        composite-range-full-scan? (and (not (nil? where))
+                                        (has-key? where "and")
+                                        (not (engine-all-equals? (get where "and") 0))
+                                        (not (nil? (get index-definition "columns"))))
         source-rows (if (nil? where)
                       (get table "rows")
                       (engine-index-rows-safe (get ast "table") table where))
@@ -1211,7 +1224,9 @@
         {"ok" true "type" "select" "rows" aggregate-rows})
       (if (nil? (get ast "group-by"))
         {"ok" true "type" "select"
-         "plan" (if (and (not (nil? where))
+         "plan" (if composite-range-full-scan?
+                    "index-full-scan"
+                    (if (and (not (nil? where))
                          (not (nil? (get (deref engine-indexes)
                                         index-key)))
                     )
@@ -1222,7 +1237,7 @@
                       (if (has-key? where "equals")
                         "index-scan"
                         "index-range-scan"))
-                    "full-scan")
+                    "full-scan"))
          "rows" (if (or (nil? (get ast "columns"))
                         (= (get ast "columns") ["*"]))
                    limited

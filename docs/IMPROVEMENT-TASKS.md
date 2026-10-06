@@ -297,6 +297,10 @@
     단일 fsync 경로를 적용한 동일 harness가 300초 동안 `writes=464`,
     `throughput=1.55/s`, `p95=5909ms`, `max=7266ms`를 기록했다. 동일한
     p95/max envelope를 통과했으며, 이전 측정 대비 누적 지연이 줄었다.
+  - 후속 300초 검증: 현재 runtime candidate와 전체 DB 변경 상태에서 같은
+    `tests/tcp-long-soak.js`를 다시 실행해 `writes=1408`, `throughput=4.69/s`,
+    `p95=1962ms`, `max=2415ms`를 기록했다. p95 15000ms/max 20000ms 경계를 통과했고,
+    종료 후 테스트 daemon 프로세스와 포트가 남지 않은 것을 확인했다.
   - 추가 증거: TCP catalog page 경로에 bounded page pool을 연결했다.
     `AFJ_DB_PAGE_POOL_PAGES` 상한, pin된 page 보호, dirty→flushed 전환과
     unpinned LRU eviction을 `tests/tcp-catalog-pages.fls`에서 검증했고,
@@ -359,7 +363,22 @@
     lock, stale second commit 회귀를 `tests/tcp-mvcc-conflicts.fls`에서
     검증했다. DML은 snapshot 대비 변경 row 집합을 비교해 겹치지 않는 동시
     변경을 병합하고, 같은 row는 `TX_CONFLICT`로 거부한다. predicate/index range
-    validation도 별도 회귀로 검증한다. DDL/schema 변경의 세분화는 남은 제한이다.
+    validation도 별도 회귀로 검증한다. 추가 재현에서 predicate reader가 읽은
+    테이블을 다른 트랜잭션이 DROP해도 stale reader의 write가 커밋되는 결함을
+    확인했다. `afj-tcp-predicate-conflict?`가 row-version 이력뿐 아니라 snapshot과
+    현재 카탈로그의 테이블 존재 여부·schema를 비교하도록 수정했고,
+    `tests/tcp-mvcc-conflicts.fls`의 DROP TABLE 및 ALTER TABLE ADD COLUMN 뒤 stale
+    reader commit 동시성 회귀에서 `TX_CONFLICT`를 검증했다. 복합 DDL 배치·테이블
+    세대 및 더 넓은 스키마 동시성 매트릭스 검증은 아직 남아 있어 DDL/schema
+    MVCC 완료로 간주하지 않는다.
+  - 복합 인덱스 범위 조회에서 decimal INTEGER 문자열 정렬과 `|` 구분자 충돌로
+    행이 누락되는 문제를 재현했다. 복합키 토큰의 타입·이스케이프·정렬 규약이
+    확정되기 전에는 안전한 페이지 pruning을 할 수 없어, 복합 범위 조건은 B+Tree
+    전체 엔트리를 후보로 삼고 원본 행의 전체 predicate를 재검증하도록 바꿨다.
+    실행 계획도 `index-full-scan`으로 표시한다. `tests/compound-range.fls`가
+    100행 numeric 범위의 98개 결과, 구분자 포함 TEXT, 다중 페이지 결과를 검증한다.
+    이는 정확성을 보장하는 보수 경로이며 복합 범위 최적화 완료를 뜻하지 않는다.
+    타입 태깅·이스케이프·collation 및 composite-key 순서 계약은 후속 차단 항목이다.
   - 추가 증거: `src/mvcc.fls`에 commit revision과 transaction snapshot을
     연결한 immutable row version, update 시 구버전 tombstone·신버전 생성,
     rollback 시 미커밋 version 제거를 구현했다. `tests/mvcc-row-version.fls`에서
@@ -408,17 +427,21 @@
     composite bucket과 page-index leaf를 재구성하고, 두 equality predicate의
     `AND` 조회에 `index-scan` 계획을 사용한다. `tests/compound-index.fls`가
     composite lookup, 동일 pair 거부와 서로 다른 tenant의 동일 email 허용을
-    `PASS`로 검증했다.
+    `PASS`로 검증했다. 구분자 연결 토큰이 같은 서로 다른 pair도 UNIQUE로
+    허용되고 각각의 equality lookup이 원본 컬럼을 재검증하는 회귀를 추가했다.
+    복합키에 NULL 구성요소가 포함된 중복 행은 허용하는 SQL UNIQUE 의미도
+    `tests/compound-index.fls`로 확인한다.
   - 추가 range 증거: 내부 B+Tree node의 최소·최대 키로 불필요한 child를
     건너뛰는 bounded range traversal을 연결했다. `tests/btree-range.fls`가
     `>`, `<=`, `<>` 결과와 경계 key를 재귀 tree fixture에서 검증한다.
   - 추가 복합 predicate 증거: SQL parser가 두 개의 `AND` predicate에서
     equality와 range 연산자를 함께 보존하고, executor가 사용 가능한 단일
     인덱스 후보를 먼저 좁힌 뒤 전체 predicate를 재검증한다. `tests/compound-range.fls`
-    에서 `id > 1 AND tenant = 'a'`와 역순 조건의 `index-range-scan`, 결과 행,
-    경계 조건을 검증한다. 서로 다른 두 단일 인덱스 후보의 row-id 교집합과
-    두 leaf page를 가진 composite B+Tree의 leading-component child pruning도
-    같은 회귀에서 검증한다.
+    에서 단일 인덱스 조건의 `index-range-scan`, 결과 행, 경계 조건, 서로 다른
+    두 단일 인덱스 후보의 row-id 교집합을 검증한다. Composite range는 delimiter와
+    numeric ordering을 안전하게 처리할 수 없어 현재 전체 index-entry scan 후
+    predicate 재검증을 사용하며, 계획에 `index-full-scan`을 표시한다. 두 leaf
+    page에 걸친 결과의 정확성은 검증하지만 child pruning 성능은 주장하지 않는다.
   - 추가 durable 증거: catalog page checkpoint의 table page에 immutable
     `row-version-history`와 manifest의 `commit-revision`·`table-revisions`를
     함께 저장하고, recovery가 WAL tail 없이도 이전 snapshot과 최신 snapshot을
@@ -455,9 +478,14 @@
     그러나 MariaDB production hardening, DDL/schema 단위의 완전한 MVCC 세분화,
     executor lazy catalog eviction을
     명시적으로 감지해 release status를 `BLOCKED`로 유지한다.
-  - 최신 실행 기록: `2026-10-04T01:35:57Z`, 자동 케이스 `54 PASS, 0 FAIL`.
-    범위 predicate conflict와 durable row-version checkpoint 회귀도 통과했지만, 위 구조적 차단 항목 때문에
-    exit status 2와 `Release status: BLOCKED`를 유지했다.
+  - 최신 실행 기록: `docs/release-gate-report.md`의 2026-10-04 UTC 실행,
+    자동 케이스 `56 PASS, 0 FAIL, 0 BLOCKED`. MariaDB 10.11 CLI를 임시로 추출해
+    wire unit, standard-client, native wire 3개 케이스를 실제 loopback으로 통과시켰다.
+    시스템 패키지는 설치하지 않았다. matrix soak는 1초이고, 별도 300초 soak는
+    `writes=1408`, `4.69/s`, p95 `1962ms`, max `2415ms`로 통과했다. MariaDB CLI
+    부재 blocker는 해소했지만, DDL/schema MVCC 전체 매트릭스와 composite-key
+    type/order compatibility, 원본 runtime tree에 반영되지 않은 native patch 및
+    clean-checkout 재현성은 남아 `Release status: BLOCKED`가 정확하다.
 
 ### P3 — 문서와 릴리스 추적
 

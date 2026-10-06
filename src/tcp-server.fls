@@ -64,6 +64,7 @@
 (define afj-tcp-transactions (atom {}))
 (define afj-tcp-commit-revision (atom 0))
 (define afj-tcp-table-revisions (atom {}))
+(define afj-tcp-schema-revisions (atom {}))
 (define afj-tcp-row-versions (atom {}))
 (define afj-tcp-locks (atom {}))
 (define afj-tcp-wait-for (atom {}))
@@ -566,6 +567,7 @@
              "wal-prefix" (sha256 raw)
              "commit-revision" (deref afj-tcp-commit-revision)
              "table-revisions" (deref afj-tcp-table-revisions)
+             "schema-revisions" (deref afj-tcp-schema-revisions)
              "tables" (vals (deref tables))
              "table-index" table-index
              "databases" (deref engine-databases)}))))))
@@ -672,6 +674,7 @@
     (reset! engine-databases {})
     (reset! afj-tcp-commit-revision 0)
     (reset! afj-tcp-table-revisions {})
+    (reset! afj-tcp-schema-revisions {})
     (reset! afj-tcp-row-versions {})
     (let [checkpoint (if (and (not (nil? afj-tcp-catalog-page-path))
                               (file_exists afj-tcp-catalog-page-path))
@@ -695,6 +698,8 @@
                   (get checkpoint "commit-revision" 0))
           (reset! afj-tcp-table-revisions
                   (get checkpoint "table-revisions" {}))
+          (reset! afj-tcp-schema-revisions
+                  (get checkpoint "schema-revisions" {}))
           (afj-tcp-restore-row-version-history (deref engine-catalog))
           (afj-tcp-rebuild-all-indexes)
           (afj-tcp-record-row-versions (deref engine-catalog) 0))
@@ -802,16 +807,50 @@
 
 (defn afj-tcp-mark-table-revisions [asts revision]
   (doseq [ast asts]
-    (let [table (get ast "table")]
+    (let [table (get ast "table")
+          type (get ast "type")]
       (if (nil? table)
         nil
-        (swap! afj-tcp-table-revisions assoc table revision))))
+        (do
+          (swap! afj-tcp-table-revisions assoc table revision)
+          (if (or (= type "create-table")
+                  (= type "drop-table")
+                  (= type "alter-table"))
+            (swap! afj-tcp-schema-revisions assoc table revision)
+            nil)))))
   true)
 
-(defn afj-tcp-row-version-key [row]
-  (if (has-key? row "id")
-    (str (get row "id"))
-    (json_str row)))
+(defn afj-tcp-row-base-key [row schema]
+  (let [primary (get schema "primary-key")]
+    (if (nil? primary)
+      (json_str row)
+      (str (get row primary)))))
+
+(defn afj-tcp-row-unique-key [base occurrence attempt reserved used]
+  (let [key (str "__afj_internal_row_v1__"
+                 (json_str [base occurrence attempt]))]
+    (if (or (has-key? reserved key) (has-key? used key))
+      (afj-tcp-row-unique-key base occurrence (+ attempt 1) reserved used)
+      key)))
+
+(defn afj-tcp-row-insert-key [base row occurrence attempt reserved chains]
+  (let [key (if (and (= occurrence 0) (= attempt 0))
+              base
+              (str "__afj_internal_row_v1__"
+                   (json_str [base occurrence attempt])))
+        chain (get chains key [])
+        latest (if (= (count chain) 0) nil (last chain))
+        active (and (not (nil? latest)) (nil? (get latest "deleted")))
+        same (and active (= (json_str (get latest "row")) (json_str row)))
+        reserved-key (and (not (and (= occurrence 0) (= attempt 0)))
+                          (has-key? reserved key))]
+    (if reserved-key
+      (afj-tcp-row-insert-key base row occurrence (+ attempt 1) reserved chains)
+      (if same
+        (afj-tcp-row-insert-key base row (+ occurrence 1) 0 reserved chains)
+        (if active
+          (afj-tcp-row-insert-key base row occurrence (+ attempt 1) reserved chains)
+          key)))))
 
 (defn afj-tcp-close-row-version [version revision]
   (if (nil? (get version "deleted"))
@@ -825,9 +864,8 @@
 
 (defn afj-tcp-record-table-row-versions [table rows revision]
   (let [old-chain (get (deref afj-tcp-row-versions) table {})
-        current (atom {})]
-    (doseq [row rows]
-      (swap! current assoc (afj-tcp-row-version-key row) row))
+        schema (get (get (deref engine-catalog) table {}) "schema" {})
+        current (afj-tcp-row-map rows schema)]
     ;; Rows that disappeared become tombstones at this commit revision.
     (doseq [key (keys old-chain)]
       (if (nil? (get (deref current) key))
@@ -855,18 +893,25 @@
     true))
 
 (defn afj-tcp-append-insert-row-versions [table rows revision]
-  (doseq [row rows]
-    (let [key (afj-tcp-row-version-key row)
-          table-chains (get (deref afj-tcp-row-versions) table {})
-          chain (get table-chains key [])
-          latest (if (= (count chain) 0) nil (last chain))
-          closed (if (nil? latest)
-                   chain
-                   (map (fn [version]
-                          (afj-tcp-close-row-version version revision)) chain))]
-      (swap! afj-tcp-row-versions assoc table
-             (assoc (get (deref afj-tcp-row-versions) table {}) key
-                    (conj closed {"row" row "created" revision "deleted" nil})))))
+  (let [definition (get (deref engine-catalog) table {})
+        schema (get definition "schema" {})
+        chains (atom (get (deref afj-tcp-row-versions) table {}))
+        reserved (atom {})]
+    (doseq [row rows]
+      (reset! reserved
+              (assoc (deref reserved) (afj-tcp-row-base-key row schema) true)))
+    (doseq [row rows]
+      (let [base (afj-tcp-row-base-key row schema)
+            key (afj-tcp-row-insert-key base row 0 0
+                                        (deref reserved) (deref chains))
+            chain (get (deref chains) key [])
+            closed (if (= (count chain) 0)
+                     chain
+                     (map (fn [version]
+                            (afj-tcp-close-row-version version revision)) chain))]
+        (swap! chains assoc key
+               (conj closed {"row" row "created" revision "deleted" nil}))))
+    (swap! afj-tcp-row-versions assoc table (deref chains)))
   true)
 
 (defn afj-tcp-record-row-versions [catalog revision]
@@ -907,7 +952,6 @@
                asts)]
     (count results)
     true))
-
 (defn afj-tcp-replay-commit-body [body]
   (let [asts (if (has-key? body "asts")
                (get body "asts")
@@ -977,28 +1021,56 @@
 
 (defn afj-tcp-predicate-conflict? [tx-state]
   (let [snapshot (get tx-state "read-revisions")
+        schema-snapshot (get tx-state "read-schema-revisions")
+        snapshot-catalog (get tx-state "snapshot")
+        current-catalog (deref engine-catalog)
         conflict (atom false)]
     (doseq [ast (get tx-state "read-predicates")]
       (let [table (get ast "table")
             table-snapshot (get snapshot table 0)
-            table-revision (get (deref afj-tcp-table-revisions) table 0)]
+            table-revision (get (deref afj-tcp-table-revisions) table 0)
+            old-definition (get snapshot-catalog table)
+            current-definition (get current-catalog table)
+            schema-changed (or
+              (not (= (get schema-snapshot table 0)
+                      (get (deref afj-tcp-schema-revisions) table 0)))
+              (not (= (nil? old-definition) (nil? current-definition)))
+              (and (not (nil? old-definition))
+                   (not (nil? current-definition))
+                   (not (= (get old-definition "schema")
+                           (get current-definition "schema")))))]
         (if (not (= table-snapshot table-revision))
-          (if (afj-tcp-row-version-predicate-conflict?
-                table (get ast "where") table-snapshot)
+          (if (or schema-changed
+                  (afj-tcp-row-version-predicate-conflict?
+                    table (get ast "where") table-snapshot))
             (reset! conflict true)
             nil)
           nil)))
     (deref conflict)))
 
-(defn afj-tcp-row-map [rows]
-  (let [result (atom {})]
+(defn afj-tcp-row-map [rows schema]
+  (let [reserved (atom {})
+        seen (atom {})
+        used (atom {})
+        result (atom {})]
     (doseq [row rows]
-      (swap! result assoc (afj-tcp-row-version-key row) row))
+      (reset! reserved
+              (assoc (deref reserved) (afj-tcp-row-base-key row schema) true)))
+    (doseq [row rows]
+      (let [base (afj-tcp-row-base-key row schema)
+            occurrence (get (deref seen) base 0)
+            key (if (or (> occurrence 0) (has-key? (deref used) base))
+                  (afj-tcp-row-unique-key base occurrence 0
+                                          (deref reserved) (deref used))
+                  base)]
+        (swap! seen assoc base (+ occurrence 1))
+        (swap! used assoc key true)
+        (swap! result assoc key row)))
     (deref result)))
 
-(defn afj-tcp-row-diff-keys [base rows]
-  (let [base-map (afj-tcp-row-map base)
-        row-map (afj-tcp-row-map rows)
+(defn afj-tcp-row-diff-keys [base rows schema]
+  (let [base-map (afj-tcp-row-map base schema)
+        row-map (afj-tcp-row-map rows schema)
         changed (atom [])]
     (doseq [key (keys base-map)]
       (if (or (nil? (get row-map key))
@@ -1068,6 +1140,7 @@
         working-catalog (get tx-state "working-catalog")
         current-catalog (deref engine-catalog)
         snapshot-revisions (get tx-state "read-revisions")
+        schema-snapshot (get tx-state "read-schema-revisions")
         conflict (atom false)]
     (doseq [ast (get tx-state "asts")]
       (let [table-name (get ast "table")
@@ -1075,22 +1148,31 @@
             working-table (get working-catalog table-name)
             current-table (get current-catalog table-name)
             stale (not (= (get snapshot-revisions table-name 0)
-                          (get (deref afj-tcp-table-revisions) table-name 0)))]
+                          (get (deref afj-tcp-table-revisions) table-name 0)))
+            schema-generation-changed
+              (not (= (get schema-snapshot table-name 0)
+                      (get (deref afj-tcp-schema-revisions) table-name 0)))]
         (if (not stale)
           nil
           (if (and (afj-tcp-row-write-ast? ast)
                    (not (nil? snapshot-table))
                    (not (nil? working-table))
                    (not (nil? current-table)))
-            (if (afj-tcp-row-key-overlap?
-                  (afj-tcp-row-diff-keys
-                    (get snapshot-table "rows" [])
-                    (get current-table "rows" []))
-                  (afj-tcp-row-diff-keys
-                    (get snapshot-table "rows" [])
-                    (get working-table "rows" [])))
+            (if (or schema-generation-changed
+                    (not (= (get snapshot-table "schema")
+                            (get current-table "schema"))))
               (reset! conflict true)
-              nil)
+              (if (afj-tcp-row-key-overlap?
+                    (afj-tcp-row-diff-keys
+                      (get snapshot-table "rows" [])
+                      (get current-table "rows" [])
+                      (get snapshot-table "schema" {}))
+                    (afj-tcp-row-diff-keys
+                      (get snapshot-table "rows" [])
+                      (get working-table "rows" [])
+                      (get snapshot-table "schema" {})))
+                (reset! conflict true)
+                nil))
             (if (and (afj-tcp-schema-write-ast? ast)
                      (afj-tcp-schema-same? snapshot-table current-table))
               nil
@@ -1114,10 +1196,10 @@
           nil)))
     (deref eligible)))
 
-(defn afj-tcp-merge-table-rows [base current working]
-  (let [merged (atom (afj-tcp-row-map current))
-        base-map (afj-tcp-row-map base)
-        working-map (afj-tcp-row-map working)]
+(defn afj-tcp-merge-table-rows [base current working schema]
+  (let [merged (atom (afj-tcp-row-map current schema))
+        base-map (afj-tcp-row-map base schema)
+        working-map (afj-tcp-row-map working schema)]
     (doseq [key (keys base-map)]
       (let [before (get base-map key)
             after (get working-map key)]
@@ -1148,10 +1230,11 @@
           (let [base (get (get snapshot-catalog table-name) "rows" [])
                 current (get (get (deref merged-catalog) table-name) "rows" [])
                 working (get (get working-catalog table-name) "rows" [])
-                definition (get (deref merged-catalog) table-name)]
+                definition (get (deref merged-catalog) table-name)
+                schema (get (get snapshot-catalog table-name) "schema" {})]
             (swap! merged-catalog assoc table-name
                    (assoc definition "rows"
-                          (afj-tcp-merge-table-rows base current working)))
+                          (afj-tcp-merge-table-rows base current working schema)))
             (if (nil? (get (deref touched) table-name))
               (swap! touched conj table-name)
               nil))
@@ -1354,6 +1437,8 @@
                 "working-indexes" (afj-tcp-copy (deref engine-indexes))
                 "base-revision" (deref afj-tcp-commit-revision)
                 "read-revisions" (afj-tcp-copy (deref afj-tcp-table-revisions))
+                "read-schema-revisions"
+                  (afj-tcp-copy (deref afj-tcp-schema-revisions))
                 "read-predicates" []
                 "isolation-level" level
                 "savepoints" {}
