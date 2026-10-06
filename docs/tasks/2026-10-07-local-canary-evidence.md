@@ -6,3 +6,4 @@
   선택 계약을 실행한다.
 - cloud traffic canary, 외부 alert webhook, 실제 서비스 전환은 cloud 운영
   권한이 없어 아직 상용 PASS로 올리지 않는다.
+- 전체 release gate의 local canary/rollback case도 71 PASS / 0 FAIL로 통과했다.

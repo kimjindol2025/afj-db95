@@ -1,8 +1,8 @@
 # AFJ-016 Release Gate Report
 
-- Generated: 2026-10-06T14:37:33Z
+- Generated: 2026-10-06T15:26:56Z
 - Repository: afj-db95
-- Automated cases: 70 PASS, 0 FAIL
+- Automated cases: 71 PASS, 0 FAIL
 - Release status: **BLOCKED**
 
 ## Automated evidence
@@ -17,6 +17,7 @@
 | COLLATE contract | PASS |
 | page/WAL smoke | PASS |
 | metrics contract | PASS |
+| local canary rollback | PASS |
 | large corpus | PASS |
 | TCP catalog pages | PASS |
 | TCP lazy catalog eviction | PASS |

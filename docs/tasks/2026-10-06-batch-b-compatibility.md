@@ -48,7 +48,7 @@
 
 ## B 종료 판정
 
-- **PASS(제한 프로파일)**: 70-case release gate 70 PASS / 0 FAIL.
+- **PASS(제한 프로파일)**: 71-case release gate 71 PASS / 0 FAIL.
 - `COLLATE` 제한 계약과 `UNSUPPORTED_SQL` 오류 매핑 targeted test PASS.
 - 전체 MariaDB 수치 오류코드 동치와 미지원 SQL 확장은 1차 상용 프로파일
   밖으로 명시했으며, 다음 프로파일의 별도 범위다.

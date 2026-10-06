@@ -15,7 +15,7 @@
 1.0          BLOCKED
 ```
 
-현재 release gate는 `70 PASS / 0 FAIL`이다. 이는 자동 회귀 관문 결과이며,
+현재 release gate는 `71 PASS / 0 FAIL`이다. 이는 자동 회귀 관문 결과이며,
 아래 운영·호환성·장애·배포 조건을 통과했다는 뜻이 아니다.
 
 ## 판정 규칙
@@ -34,7 +34,7 @@
 | 저장·복구 | 정상/강제종료/손상 WAL 후 커밋 데이터 보존 | PASS(범위 내) | `tests/release-gate.sh`, WAL·backup 회귀 | A |
 | 트랜잭션 | ACID, lost update, dirty read, phantom, write skew | PASS(검증 범위) | MVCC·격리·phantom/write-skew·강제종료 회귀 및 전체 gate | A |
 | 인덱스 | 정렬·복합키·NULL·타입·재오픈 결과 일치 | PASS(바이너리 정렬 범위) | schema-aware equality/range·혼합 타입·구형 재구축 회귀 및 전체 gate | A |
-| SQL 호환 | 제한 프로파일의 문법·자료형·오류 토큰 및 differential 결과 | PASS(제한 프로파일) | 70-case gate, `COLLATE` 제한 계약, `UNSUPPORTED_SQL`/AFJ 오류 토큰 | B |
+| SQL 호환 | 제한 프로파일의 문법·자료형·오류 토큰 및 differential 결과 | PASS(제한 프로파일) | 71-case gate, `COLLATE` 제한 계약, `UNSUPPORTED_SQL`/AFJ 오류 토큰 | B |
 | 프로토콜 | 지원 client, prepared, 오류·charset·capability 계약 | PASS(검증 범위) | MariaDB standard/native client, prepared, UTF-8 ID 33/45, mysql_native_password | B |
 | 인증·권한 | 권한 우회·세션 만료·lockout·감사 로그 | PASS(검증 범위) | release gate auth/session cases | C |
 | TLS | 외부 bind, CA/mTLS, reload, 만료·오류·평문 우회 차단 | PASS(검증 범위) | native TLS를 상용 정본으로 고정; production integration/mTLS/reload/boundary PASS | C |
@@ -42,7 +42,7 @@
 | 백업 | 운영 snapshot, 복원, 복원 후 무결성·절차 리허설 | PASS(검증 범위) | backup/restore/fault-injection gate 및 `backup-restore-runbook.md` | C |
 | 배포 | clean clone build/start/smoke/rollback 실제 실행 | BLOCKED | `.freelang` check/test/artifact/smoke/rollback 계약 추가; clean clone·실서버 실행 미완료 | D |
 | 관측 | canary, 알림, 장애 분류, rollback 판단 기준 | BLOCKED | 자동 테스트 로그 외 운영 관측 증거 없음 | D |
-| 재현성 | clean clone·고정 runtime·CI에서 동일 결과 | PASS(clean clone) | workspace clean clone `READY=YES`, 70-case gate 70 PASS / 0 FAIL | D |
+| 재현성 | clean clone·고정 runtime·CI에서 동일 결과 | PASS(clean clone) | workspace clean clone `READY=YES`, 71-case gate 71 PASS / 0 FAIL | D |
 | 보안 리뷰 | 적대적 코드 리뷰, 데이터 손실·중복·오인 조회 검증 | BLOCKED | 일부 회귀만 존재; 독립 리뷰 보고서 없음 | D |
 | 문서·지원 | 지원/미지원 기능, 제한, 복구·롤백 절차 공개 | UNRESOLVED | `README`, `official-db-plan`, `release-readiness-plan` 시점 불일치 | D |
 
@@ -107,6 +107,6 @@ rollback rehearsal: PASS
 상용 판정을 갱신하지 않는다. 묶음 종료 시에만 전체 상태표와 증거를 갱신한다.
 
 현재 실행 위치는 `C 진입`이다. B는 제한 상용 프로파일과 미지원 오류 계약을
-70-case gate로 닫았으며, 다음은 C의 운영·보안 출구 조건이다. 각 묶음의
+71-case gate로 닫았으며, 다음은 C의 운영·보안 출구 조건이다. 각 묶음의
 담당 파일·명령·예상 산출물은
 이 문서와 [`docs/roadmap.md`](roadmap.md)에 기록한다.

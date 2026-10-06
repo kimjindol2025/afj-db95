@@ -15,7 +15,7 @@ AFJ-DB95를 “기능이 동작하는 개발용 DB”에서 “재현 가능한 
 
 ## 2. 현재 기준선
 
-- AFJ-DB95 공식 문서 기준: 실제 listen 환경 전체 gate는 `70 PASS / 0 FAIL`.
+- AFJ-DB95 공식 문서 기준: 실제 listen 환경 전체 gate는 `71 PASS / 0 FAIL`.
 - DB core, WAL, MVCC, 인덱스, 복구 case는 대부분 PASS.
 - 격리 FreeLang runtime에서 TLS listener, mTLS, reload, production TLS integration, TLS adapter는 targeted PASS.
 - 기존 MariaDB 5건은 client 부재와 fixture의 scheduler/bind race를 각각 수정·검증해 해소했다.
@@ -217,7 +217,7 @@ Phase 2 초기 결과:
 - large corpus는 gate의 45초 제한에서는 timeout이었지만 120초 단독 실행에서 PASS. 이는 기능 FAIL이 아닌 gate timeout 설정 문제로 분류한다.
 - MariaDB client core를 비-root 임시 경로에 준비해 표준-client 검수를 재현했고, native MariaDB daemon에는 `fl-yield` scheduler loop와 prepared port probe를 추가했다.
 - composite NULL ordering 회귀를 추가하고 전체 gate에 편입했다.
-- 최종 전체 gate를 `AFJ_GATE_CASE_TIMEOUT_SEC=120`, `AFJ_GATE_SOAK_TIMEOUT_SEC=360`으로 재실행해 `70 PASS / 0 FAIL`을 기록했다.
+- 최종 전체 gate를 `AFJ_GATE_CASE_TIMEOUT_SEC=120`, `AFJ_GATE_SOAK_TIMEOUT_SEC=360`으로 재실행해 `71 PASS / 0 FAIL`을 기록했다.
 
 ## 6. 금지 사항
 

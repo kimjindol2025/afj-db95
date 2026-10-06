@@ -27,7 +27,7 @@ AFJ_BOOTSTRAP=/path/to/bootstrap.js .freelang/artifact.sh /tmp/afj-db95.tar.gz
 ```
 
 2026-10-07 workspace clean clone에서 `fl-tools start`가 `READY=YES`였고,
-전체 gate 70 PASS / 0 FAIL, artifact smoke, SHA-256, rollback artifact 선택까지
+전체 gate 71 PASS / 0 FAIL, artifact smoke, SHA-256, rollback artifact 선택까지
 재현했다. 실제 클라우드/배포 서버에서의 활성화는 별도 운영 권한이 필요한
 다음 경계다.
 

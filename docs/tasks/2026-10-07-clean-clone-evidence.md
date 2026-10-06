@@ -5,7 +5,7 @@
 - clone 위치: `/home/kim/kim/projects/.afj-db95-clean.*`
 - Git: clean, branch `main`
 - `fl-tools start`: `READY=YES`
-- `fl-tools check`: 70 PASS / 0 FAIL
+- `fl-tools check`: 71 PASS / 0 FAIL
 - remediation regression: PASS 25/25
 - production TLS boundary: PASS
 - artifact smoke: PASS
