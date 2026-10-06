@@ -107,9 +107,10 @@ afj-db95 → SQL/트랜잭션/WAL/복구/호환성의 검증 기준선
 - 프로세스 재시작 persistence: FX native + v11 interpreter에서 row 재조회 검증
 - Script capability 통합: `--allow-db[=name,...]` 구현 및 실제 거부/허용 검증
 - Script conformance: CRUD·statement-array transaction·권한 범위·위조 handle·재시작 persistence·동시 writer 실제 검증
+- FX native 최소 동시 writer: WAL + `sqlite3_busy_timeout(5000)` 및 SQL 오류 예외 전파를 실제 C gate에서 검증
 - 검수: 기존 AFJ-DB95 릴리스 게이트는 DB 엔진 자체의 증거이며,
   `db` 통합의 증거로 간주하지 않음
 
-다음 구현 단위는 FX native 호출 경로의 WAL·복구·동시 접근 회귀와
+다음 구현 단위는 FX native 호출 경로의 WAL 복구·장시간 동시 접근 회귀와
 상용 운영 release gate(백업·metrics/alert·clean clone·artifact smoke/rollback)
 검증이다. 원격 DB 자동 연결은 범위에 포함하지 않는다.
