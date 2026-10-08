@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -u
+set -euo pipefail
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 bootstrap="${AFJ_BOOTSTRAP:-}"

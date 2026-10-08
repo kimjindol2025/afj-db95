@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -u
+set -euo pipefail
 
 previous="${1:-}"
 if [[ -z "$previous" || ! -f "$previous" ]]; then
