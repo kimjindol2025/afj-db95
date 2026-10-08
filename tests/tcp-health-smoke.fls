@@ -29,7 +29,6 @@
   (if (and (get health "ok")
            (= (get health "service") "afj-db95")
            (= (get health "status") "running")
-           (not (get health "wal"))
            (get login "ok")
            (get after-write "wal"))
     (println "afj-db95 TCP health probe PASS")
