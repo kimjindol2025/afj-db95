@@ -927,28 +927,44 @@
   true)
 
 (defn afj-tcp-record-row-versions-for-asts [catalog asts revision]
-  (let [results
+  (let [created-tables (atom {})
+        results
           (map (fn [ast]
                  (let [table (get ast "table")
+                       type (get ast "type")
                        definition (if (nil? table) nil (get catalog table))]
                    (if (or (nil? table) (nil? definition))
                      true
-                     (if (= (get ast "type") "insert")
-                       (if (has-key? ast "values")
-                         ;; Positional INSERT values are materialized by the
-                         ;; engine against the table schema. Record the
-                         ;; resulting rows, not the raw value vectors, so a
-                         ;; later transaction snapshot sees the same rows.
+                     (if (= type "create-table")
+                       (do
+                         ;; The final catalog already contains rows inserted
+                         ;; later in the same CREATE+INSERT WAL batch. Record
+                         ;; that final state once; appending the INSERT AST
+                         ;; again would create a phantom duplicate version.
+                         (swap! created-tables assoc table true)
                          (afj-tcp-record-table-row-versions
-                           table (get definition "rows" []) revision)
-                         (afj-tcp-append-insert-row-versions
-                           table
-                           (if (has-key? ast "rows")
-                             (get ast "rows")
-                             [(get ast "row")])
-                           revision))
-                       (afj-tcp-record-table-row-versions
-                         table (get definition "rows" []) revision)))))
+                           table (get definition "rows" []) revision))
+                       (if (and (= type "insert")
+                                (get (deref created-tables) table))
+                         true
+                         (if (= type "insert")
+                           (if (has-key? ast "values")
+                             ;; Positional INSERT values are materialized by
+                             ;; the engine against the table schema. Record
+                             ;; the resulting rows, not the raw value vectors,
+                             ;; so a later transaction snapshot sees the same
+                             ;; rows.
+                             (afj-tcp-record-table-row-versions
+                               table (get definition "rows" []) revision)
+                             (afj-tcp-append-insert-row-versions
+                               table
+                               (if (has-key? ast "rows")
+                                 (get ast "rows")
+                                 [(get ast "row")])
+                               revision))
+                           (afj-tcp-record-table-row-versions
+                             table (get definition "rows" []) revision))))))
+               )
                asts)]
     (count results)
     true))
@@ -1976,11 +1992,10 @@
                 (afj-tcp-send conn {"ok" false "error" "UNKNOWN_REQUEST"}))))))))))))))))
 
 (defn afj-db-tcp-handler [event conn payload peer]
-  (if (= event "connect")
-    ;; tcp-server-raw/tls runtime contract is handler(event, conn, payload, peer).
-    ;; Keep the peer address on the connection so multiple sockets from one
-    ;; source share the same request budget.
-    (swap! afj-tcp-peer-addresses assoc conn peer)
+  (do
+    (if (or (nil? $peer) (= $peer ""))
+      nil
+      (swap! afj-tcp-peer-addresses assoc conn $peer))
     (if (= event "data")
     (let [combined (str (get (deref afj-tcp-buffers) conn "") payload)]
       (afj-tcp-process-buffer conn combined))
