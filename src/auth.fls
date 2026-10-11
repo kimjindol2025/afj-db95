@@ -18,6 +18,14 @@
                (= afj-root-password-env "development-only"))
         (throw "AFJ_DB_ROOT_PASSWORD_INSECURE")
         afj-root-password-env))))
+(define afj-read-user-env (env-get "AFJ_DB_READ_USER"))
+(define afj-read-password-env (env-get "AFJ_DB_READ_PASSWORD"))
+(if (or (and (not (nil? afj-read-user-env))
+             (nil? afj-read-password-env))
+        (and (nil? afj-read-user-env)
+             (not (nil? afj-read-password-env))))
+  (throw "AFJ_DB_READ_CREDENTIALS_INCOMPLETE")
+  nil)
 (define afj-audit-log (env-get "AFJ_DB_AUDIT_LOG"))
 (if (and (= afj-db-mode "production") (nil? afj-audit-log))
   (throw "AFJ_DB_AUDIT_LOG_REQUIRED")
@@ -55,6 +63,10 @@
         (if (and (number? parsed) (>= parsed 8) (<= parsed 256))
           parsed
           (throw "AFJ_DB_PASSWORD_POLICY_INVALID"))))))
+(if (and (not (nil? afj-read-password-env))
+         (< (count afj-read-password-env) afj-auth-password-min-length))
+  (throw "AFJ_DB_READ_PASSWORD_TOO_SHORT")
+  nil)
 
 (defn audit-safe-user [value]
   (if (string? value) value "unknown"))
@@ -106,6 +118,24 @@
                       "password-hash" (sha256 password) "role" role})
   (audit-event "create-user" name role)
   name)
+
+(defn ensure-read-user []
+  (if (nil? afj-read-user-env)
+    nil
+    (do
+      (if (nil? (get (deref roles) "read-only"))
+        (create-role "read-only")
+        nil)
+      (if (not (contains? (get (get (deref roles) "read-only") "permissions") "db.read"))
+        (grant "read-only" "db.read")
+        nil)
+      (if (nil? (get (deref users) afj-read-user-env))
+        (create-user afj-read-user-env afj-read-password-env "read-only")
+        nil)
+      (if (authorize afj-read-user-env "db.write")
+        (throw "AFJ_DB_READ_USER_WRITE_PERMISSION")
+        nil)
+      afj-read-user-env)))
 
 (defn rotate-password [name new-password]
   (let [user (get (deref users) name)]
@@ -241,6 +271,7 @@
 (if (nil? (get (deref users) "root"))
   (create-user "root" afj-root-password "admin")
   nil)
+(ensure-read-user)
 
 (if (and (get (authenticate "root" afj-root-password) "ok")
          (authorize "root" "db.write")

@@ -44,6 +44,8 @@ TCP 운영 인스턴스는 환경변수로 인스턴스별 WAL 위치와 root �
 AFJ_DB_MODE=production
 AFJ_DB_WAL=/var/lib/afj-db95/catalog.wal
 AFJ_DB_ROOT_PASSWORD=<운영용-비밀번호>
+AFJ_DB_READ_USER=<read-only-사용자>
+AFJ_DB_READ_PASSWORD=<read-only-비밀번호>
 AFJ_DB_AUDIT_LOG=/var/log/afj-db95/audit.jsonl
 AFJ_DB_AUTH_STATE=/var/lib/afj-db95/auth-state.jsonl
 AFJ_DB_PORT=43995
@@ -74,6 +76,11 @@ JSON Lines로 기록하고, 인증 상태 파일은 역할·권한·비밀번호
 같이 접근권한을 제한해야 합니다. `/tmp` 기본 WAL 경로와 `development-only` 기본 비밀번호는 개발
 모드에서만 허용됩니다. 외부 bind 주소가 필요하면 운영 네트워크 주소를
 명시적으로 지정하고 방화벽·TLS·접근제어를 함께 구성해야 합니다.
+`AFJ_DB_READ_USER`와 `AFJ_DB_READ_PASSWORD`를 함께 지정하면 시작 시
+`read-only` role과 `db.read` 전용 사용자를 auth state에 부트스트랩합니다.
+해당 사용자는 SELECT만 허용되며 INSERT/UPDATE/DDL은 `PERMISSION_DENIED`로
+거부됩니다. 기존 auth state에 사용자가 있으면 비밀번호를 자동 교체하지 않으므로
+rotation은 별도 운영 절차로 수행해야 합니다.
 동시 세션 수는 `AFJ_DB_MAX_SESSIONS`로 제한하며 허용 범위는 1~4096입니다.
 사용자별 반복 인증 실패는 `AFJ_DB_MAX_AUTH_FAILURES` 횟수 후
 `AUTH_LOCKED`로 차단하며 허용 범위는 1~100입니다. 시간 기반 해제와 IP별
