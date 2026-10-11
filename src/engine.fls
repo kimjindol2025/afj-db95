@@ -1182,7 +1182,9 @@
         composite-range-full-scan? (and (not (nil? where))
                                         (has-key? where "and")
                                         (not (engine-all-equals? (get where "and") 0))
-                                        (not (nil? (get index-definition "columns"))))
+                                        (not (nil? (get index-definition "columns")))
+                                        (not (engine-btree-has-sort-key?
+                                               (get index-definition "btree"))))
         source-rows (if (nil? where)
                       (get table "rows")
                       (engine-index-rows-safe (get ast "table") table where))
