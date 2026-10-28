@@ -1,0 +1,18 @@
+;; Denied shutdown calls must not schedule stop/exit work.
+(load "../src/tcp-server.fls")
+(create-role "shutdown-reader")
+(grant "shutdown-reader" "db.read")
+(create-user "shutdown-reader" "shutdown-reader-password" "shutdown-reader")
+(reset! afj-tcp-sessions {"read-token" "shutdown-reader"})
+(reset! afj-tcp-session-expiries {"read-token" (+ (now_ms) 60000)})
+(let [before (timer_count)
+      result (afj-tcp-shutdown {"token" "read-token"})]
+  (if (and (= (get result "error") "PERMISSION_DENIED")
+           (= (get result "permission") "db.admin")
+           (= before (timer_count)))
+    (println "afj-db95 shutdown authorization PASS")
+    (throw "non-admin shutdown scheduled stop")))
+(let [result (afj-tcp-shutdown {"token" "missing-token"})]
+  (if (= (get result "error") "AUTH_REQUIRED")
+    true
+    (throw "unauthenticated shutdown accepted")))

@@ -7,8 +7,10 @@ set -u
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 source "$repo_root/tests/bootstrap-path.sh"
 bootstrap="$(resolve_afj_bootstrap)" || exit 2
-wal="/tmp/afj-db95-fault-injection.wal"
-log_file="$(mktemp /tmp/afj-db95-fault-injection.XXXXXX.log)"
+scratch="${AFJ_DB_TEST_TMP:-$(mktemp -d /tmp/afj-db95-fault-injection.XXXXXX)}"
+mkdir -p "$scratch"
+wal="$scratch/fault-injection.wal"
+log_file="$scratch/fault-injection.log"
 writer_pid=""
 
 cleanup() {

@@ -2,7 +2,7 @@
 ;; First invocation writes a committed row and a prepare-only row, then waits.
 ;; The harness kills that process. The next invocation recovers the same WAL.
 
-(define fi-wal "/tmp/afj-db95-fault-injection.wal")
+(define fi-wal (str (env-or "AFJ_DB_TEST_TMP" "/tmp/afj-db95-fault-injection") "/fault-injection.wal"))
 (define fi-catalog (atom {}))
 
 (defn fi-append [event]

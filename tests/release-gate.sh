@@ -29,8 +29,10 @@ run_case() {
   fi
   printf '[release-gate] START case=%s timeout=%ss label=%s\n' \
     "$case_number" "$case_timeout" "$label" >&2
+  mkdir -p "$temp_dir/case-$case_number"
   started_at="$(date +%s)"
-  if AFJ_DB_WAL="$temp_dir/case-$case_number.wal" \
+  if AFJ_DB_TEST_TMP="$temp_dir/case-$case_number" \
+     AFJ_DB_WAL="$temp_dir/case-$case_number.wal" \
      AFJ_DB_REMEDIATION_WAL="$temp_dir/case-$case_number.remediation.wal" \
      AFJ_DB_AUTH_STATE="$temp_dir/case-$case_number.auth.jsonl" \
      AFJ_DB_AUDIT_LOG="$temp_dir/case-$case_number.audit.jsonl" \
@@ -63,8 +65,8 @@ run_case "page/WAL smoke" env AFJ_DB_PAGE_CACHE_PAGES=2 node "$bootstrap" run "$
 run_case "metrics contract" node "$bootstrap" run "$repo_root/tests/metrics-contract.fls"
 run_case "local canary rollback" bash "$repo_root/.freelang/canary.sh"
 run_case "large corpus" node "$bootstrap" run "$repo_root/tests/large-corpus-soak.fls"
-run_case "TCP catalog pages" env AFJ_DB_WAL=/tmp/afj-db95-catalog-page-gate.wal AFJ_DB_CATALOG_PAGES=/tmp/afj-db95-catalog-page-gate.pages AFJ_DB_PAGE_POOL_PAGES=2 node "$bootstrap" run "$repo_root/tests/tcp-catalog-pages.fls"
-run_case "TCP lazy catalog eviction" env AFJ_DB_WAL=/tmp/afj-db95-lazy-catalog-gate.wal AFJ_DB_CATALOG_PAGES=/tmp/afj-db95-lazy-catalog-gate.pages AFJ_DB_LAZY_TABLES=true AFJ_DB_LAZY_TABLE_CACHE=1 node "$bootstrap" run "$repo_root/tests/tcp-lazy-catalog.fls"
+run_case "TCP catalog pages" env AFJ_DB_CATALOG_PAGES="$temp_dir/case-catalog.pages" AFJ_DB_PAGE_POOL_PAGES=2 node "$bootstrap" run "$repo_root/tests/tcp-catalog-pages.fls"
+run_case "TCP lazy catalog eviction" env AFJ_DB_LAZY_TABLES=true AFJ_DB_LAZY_TABLE_CACHE=1 node "$bootstrap" run "$repo_root/tests/tcp-lazy-catalog.fls"
 run_case "persistent recursive B+Tree" node "$bootstrap" run "$repo_root/tests/persistent-btree.fls"
 run_case "bounded B+Tree range" node "$bootstrap" run "$repo_root/tests/btree-range.fls"
 run_case "compound unique index" node "$bootstrap" run "$repo_root/tests/compound-index.fls"
@@ -93,8 +95,8 @@ run_case "isolation levels" node "$bootstrap" run "$repo_root/tests/tcp-isolatio
 run_case "MVCC conflicts" node "$bootstrap" run "$repo_root/tests/tcp-mvcc-conflicts.fls"
 run_case "range predicate conflict" node "$bootstrap" run "$repo_root/tests/tcp-range-predicate.fls"
 run_case "row-version MVCC core" node "$bootstrap" run "$repo_root/tests/mvcc-row-version.fls"
-run_case "row-version WAL recovery" env AFJ_DB_WAL=/tmp/afj-db95-row-version-recovery.wal node "$bootstrap" run "$repo_root/tests/tcp-row-version-recovery.fls"
-run_case "row-version catalog checkpoint" env AFJ_DB_WAL=/tmp/afj-db95-row-version-checkpoint.wal AFJ_DB_CATALOG_PAGES=/tmp/afj-db95-row-version-checkpoint.pages node "$bootstrap" run "$repo_root/tests/tcp-row-version-checkpoint.fls"
+run_case "row-version WAL recovery" node "$bootstrap" run "$repo_root/tests/tcp-row-version-recovery.fls"
+run_case "row-version catalog checkpoint" env AFJ_DB_CATALOG_PAGES="$temp_dir/case-checkpoint.pages" node "$bootstrap" run "$repo_root/tests/tcp-row-version-checkpoint.fls"
 run_case "savepoint" node "$bootstrap" run "$repo_root/tests/tcp-savepoint.fls"
 run_case "deadlock" node "$bootstrap" run "$repo_root/tests/tcp-deadlock.fls"
 run_case "lock timeout" env AFJ_DB_LOCK_WAIT_TIMEOUT_MS=1000 node "$bootstrap" run "$repo_root/tests/tcp-lock-timeout.fls"
@@ -102,8 +104,10 @@ run_case "prepared JSON adapter" node "$bootstrap" run "$repo_root/tests/tcp-pre
 run_case "request limits" node "$bootstrap" run "$repo_root/tests/request-limits.fls"
 run_case "slow request timeout" env AFJ_DB_REQUEST_TIMEOUT_MS=100 node "$bootstrap" run "$repo_root/tests/tcp-slow-timeout.fls"
 run_case "auth lockout" node "$bootstrap" run "$repo_root/tests/auth-lockout.fls"
+run_case "TCP shutdown authorization" node "$bootstrap" run "$repo_root/tests/tcp-shutdown-authorization.fls"
 run_case "auth lockout reset" env AFJ_DB_AUTH_LOCKOUT_MS=1000 node "$bootstrap" run "$repo_root/tests/auth-lockout-reset.fls"
-run_case "auth state recovery" env AFJ_DB_AUTH_STATE=/tmp/afj-db95-auth-state-test.jsonl node "$bootstrap" run "$repo_root/tests/auth-state-recovery.fls"
+run_case "auth state recovery" node "$bootstrap" run "$repo_root/tests/auth-state-recovery.fls"
+run_case "password KDF security" node "$bootstrap" run "$repo_root/tests/auth-security.fls"
 run_case "session cleanup" node "$bootstrap" run "$repo_root/tests/session-cleanup.fls"
 run_case "session TTL" env AFJ_DB_SESSION_TTL_MS=1000 node "$bootstrap" run "$repo_root/tests/session-ttl.fls"
 run_case "connection rate limit" env AFJ_DB_RATE_MAX_REQUESTS=2 node "$bootstrap" run "$repo_root/tests/connection-rate-limit.fls"

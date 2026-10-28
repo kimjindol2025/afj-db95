@@ -2,7 +2,7 @@
 (load "../src/afj-db95.fls")
 (load "../src/btree.fls")
 
-(let [path "/tmp/afj-db95-recursive-btree.page"
+(let [path (str (env-or "AFJ_DB_TEST_TMP" "/tmp/afj-db95-btree") "/recursive-btree.page")
       tree (loop [index 0 value (btree-root [])]
              (if (>= index 20)
                value

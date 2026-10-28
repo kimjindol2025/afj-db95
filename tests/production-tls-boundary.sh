@@ -4,9 +4,10 @@ set -u
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 source "$repo_root/tests/bootstrap-path.sh"
 bootstrap="$(resolve_afj_bootstrap)" || exit 2
-log_file="/tmp/afj-db95-production-tls-boundary.log"
-runtime_dir="$(mktemp -d "$repo_root/.release-gate-runtime.XXXXXX")"
-trap 'rm -f "$log_file"; rm -rf "$runtime_dir"' EXIT
+runtime_dir="${AFJ_DB_TEST_TMP:-$(mktemp -d /tmp/afj-db95-tls-boundary.XXXXXX)}"
+mkdir -p "$runtime_dir"
+log_file="$runtime_dir/production-tls-boundary.log"
+trap 'rm -f "$log_file"' EXIT
 
 if env AFJ_DB_MODE=production \
   AFJ_DB_ROOT_PASSWORD=release-test-password \

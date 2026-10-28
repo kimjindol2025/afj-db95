@@ -1,0 +1,21 @@
+;; Password KDF, policy and restart replay contract.
+(load "../src/auth.fls")
+(defn assert-security [label condition]
+  (if condition true (throw (str "AUTH_SECURITY_FAILED " label))))
+(create-role "security-test")
+(grant "security-test" "db.read")
+(if (try (do (create-user "short-user" "x" "security-test") false)
+          (catch [error] (= (error_message error) "AUTH_PASSWORD_POLICY")))
+  true
+  (throw "one-character password accepted"))
+(create-user "security-a" "long-test-password" "security-test")
+(create-user "security-b" "long-test-password" "security-test")
+(let [hash-a (get (get (deref users) "security-a") "password-hash")
+      hash-b (get (get (deref users) "security-b") "password-hash")]
+  (assert-security "unique scrypt salts" (and (not= hash-a hash-b)
+    (str_starts_with hash-a "$scrypt$"))))
+(assert-security "valid login" (get (authenticate "security-a" "long-test-password") "ok"))
+(rotate-password "security-a" "replacement-password")
+(assert-security "rotated password" (get (authenticate "security-a" "replacement-password") "ok"))
+(assert-security "old password rejected" (not (get (authenticate "security-a" "long-test-password") "ok")))
+(println "afj-db95 password KDF security PASS")

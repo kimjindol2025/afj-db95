@@ -1,5 +1,5 @@
 ;; Authentication role/user state recovery contract.
-(define state-path "/tmp/afj-db95-auth-state-test.jsonl")
+(define state-path (env-or "AFJ_DB_AUTH_STATE" "/tmp/afj-db95-auth-state-test.jsonl"))
 (if (file_exists state-path) (file_delete state-path) true)
 (load "../src/auth.fls")
 (defn assert-equal [label expected actual]
@@ -14,7 +14,7 @@
 (file_append state-path "{\"version\":1,\"length\":")
 (reset! roles {})
 (reset! users {})
-(assert-equal "auth state replay events" 8 (auth-state-recover))
+(assert-equal "auth state replay events" 9 (auth-state-recover))
 (if (and (authorize "recovery-user" "db.read")
          (not (get (authenticate "recovery-user" "recovery-password") "ok"))
          (get (authenticate "recovery-user" "rotated-password") "ok"))

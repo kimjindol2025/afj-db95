@@ -14,10 +14,11 @@
         (backup-soak-rounds (+ index 1) total source backup restored manifest)
         (throw "backup soak restore mismatch")))))
 
-(let [source "/tmp/afj-db95-backup-soak.source"
-      backup "/tmp/afj-db95-backup-soak.backup"
-      restored "/tmp/afj-db95-backup-soak.restored"
-      manifest "/tmp/afj-db95-backup-soak.manifest"]
+(let [scratch (env-or "AFJ_DB_TEST_TMP" "/tmp/afj-db95-backup-soak")
+      source (str scratch "/source")
+      backup (str scratch "/backup")
+      restored (str scratch "/restored")
+      manifest (str scratch "/manifest")]
   (backup-soak-rounds 0 12 source backup restored manifest)
   (println "afj-db95 backup restore soak PASS rounds=12")
   (file_delete source)
