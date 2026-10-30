@@ -1,0 +1,137 @@
+;; Native in-process entry: database-owned replay, commit boundary and I/O failure state.
+;; Requires fx checked binary I/O and recursive atom guards. Does not start a server.
+(if (nil? (env-get "AFJ_DB_WAL")) (throw "AFJ_DB_WAL_REQUIRED") nil)
+(load "../src/tcp-server.fls")
+;; The bundled recursive WAL reader can restart replay after enough records.
+;; Keep db95's validation and replay functions while walking records iteratively.
+(defn afj-tcp-recover-lines [lines start prepared final-newline]
+  (reduce
+    (fn [index line]
+      (let [last-line (= index (- (count lines) 1))
+            event (if (> (count line) afj-tcp-wal-record-limit)
+                    (throw "WAL_RECORD_TOO_LARGE")
+                    (if last-line
+                      (try (json-parse line) (catch [error] nil))
+                      (json-parse line)))]
+        (if (nil? event)
+          (if (and last-line (not final-newline))
+            (+ index 1) (throw "WAL_CORRUPT"))
+          (let [tx (get event "tx")]
+            (if (= (get event "type") "prepare")
+              (let [saved (swap! prepared assoc tx event)]
+                (+ index 1))
+              (if (= (get event "type") "commit")
+                (let [pending (get (deref prepared) tx)
+                      body (if (nil? pending) nil (get pending "body"))
+                      valid (and (not (nil? body))
+                                 (afj-tcp-wal-record-valid? pending body)
+                                 (afj-tcp-wal-record-valid? event body))]
+                  (if valid
+                    (let [applied (afj-tcp-replay-commit-body body)]
+                      (+ index 1))
+                    (+ index 1)))
+                (+ index 1)))))))
+    start (drop start lines)))
+(afj-tcp-recover)
+
+;; Catalog validation, publication and WAL commit share one database boundary.
+;; The recursive guard also covers reads made by a commit's validation path.
+(define afj-native-operation-guard (atom nil))
+(define afj-native-recovery-required (atom false))
+(define afj-native-wal-phase (atom nil))
+(define afj-native-wal-boundary-checked (atom false))
+(defn afj-native-commit-may-have-succeeded? []
+  (and (deref afj-native-recovery-required)
+       (or (= (deref afj-native-wal-phase) "commit")
+           (= (deref afj-native-wal-phase) "durable"))))
+(define afj-native-execute-unlocked execute-ast)
+(define afj-native-commit-unlocked afj-tcp-commit-asts)
+;; Recovery has already validated every complete record. Before the first new
+;; append, preserve the full raw input durably and repair only its final frame.
+(defn afj-native-wal-raw [path]
+  (let [result (file-read-result path)]
+    (if (get result "ok") (get result "data")
+      (throw "WAL_RECOVERY_READ_FAILED"))))
+(defn afj-native-wal-backup [raw]
+  (let [path (str afj-tcp-wal ".recovery-" (sha256 raw))]
+    ;; A prior repair may have stopped after preserving the input. Verify its
+    ;; actual open file before syncing both it and its retained parent again.
+    (if (file_exists path)
+      (let [fd (fd-open-with-parent path "r")]
+        (try
+          (let [saved (fd-read-bytes fd (bytes-count raw))]
+            (if (and (= (fd-seek fd) (bytes-count raw))
+                     (= (bytes-count saved) (bytes-count raw))
+                     (= (sha256 saved) (sha256 raw)))
+              (do (fd-fsync fd) (fd-sync-parent fd))
+              (throw "WAL_RECOVERY_BACKUP_MISMATCH")))
+          (finally (fd-close fd))))
+      (let [fd (fd-create path)]
+        (try
+          (do (fd-write-bytes fd raw) (fd-fsync fd) (fd-sync-parent fd))
+          (finally (fd-close fd)))))
+    (let [saved (afj-native-wal-raw path)]
+      (if (and (= (bytes-count saved) (bytes-count raw))
+               (= (sha256 saved) (sha256 raw))) true
+        (throw "WAL_RECOVERY_BACKUP_MISMATCH")))))
+(defn afj-native-wal-check-boundary []
+  (if (deref afj-native-wal-boundary-checked) nil
+    (do
+      (if (file_exists afj-tcp-wal)
+        (let [raw (afj-native-wal-raw afj-tcp-wal)
+              size (bytes-count raw)]
+          (if (and (> size 0) (not (= (bytes-slice raw (- size 1) size) "\n")))
+            (let [boundary (loop [offset size]
+                             (if (= offset 0) 0
+                               (if (= (bytes-slice raw (- offset 1) offset) "\n")
+                                 offset (recur (- offset 1)))))
+                  tail (bytes-slice raw boundary size)
+                  complete (try (not (nil? (json-parse tail)))
+                             (catch [error] false))]
+              (afj-native-wal-backup raw)
+              (let [fd (fd_open afj-tcp-wal "a")]
+                (try
+                  (do
+                    (if complete (fd-write-bytes fd "\n")
+                      (fd-truncate fd boundary))
+                    (fd-fsync fd))
+                  (finally (fd_close fd))))) nil)) nil)
+      (reset! afj-native-wal-boundary-checked true))))
+(defn afj-tcp-wal-append-sync [event sync?]
+  (reset! afj-native-wal-phase (get event "type"))
+  (afj-native-wal-check-boundary)
+  (let [encoded (json_str event)]
+    (if (> (count encoded) afj-tcp-wal-record-limit)
+      (throw "WAL_RECORD_TOO_LARGE") nil)
+    (let [fd (fd_open afj-tcp-wal "a")]
+      (try
+        (do
+          (fd_write fd (str encoded "\n"))
+          (if sync? (fd_fsync fd) nil)
+          (if (and sync? (= (get event "type") "commit"))
+            (reset! afj-native-wal-phase "durable") nil)
+          event)
+        (finally (fd_close fd))))))
+(defn execute-ast [ast]
+  (with-atom-lock afj-native-operation-guard
+    (fn []
+      (if (deref afj-native-recovery-required) (throw "DB_RECOVERY_REQUIRED")
+        (apply afj-native-execute-unlocked [ast])))))
+(defn afj-tcp-commit-asts [asts]
+  (with-atom-lock afj-native-operation-guard
+    (fn []
+      (if (deref afj-native-recovery-required) (throw "DB_RECOVERY_REQUIRED") nil)
+      (reset! afj-native-wal-phase nil)
+      (try (apply afj-native-commit-unlocked [asts])
+        (catch [error]
+          (if (nil? (deref afj-native-wal-phase)) (throw error)
+            (do
+              ;; A failed fsync cannot prove whether an appended commit survived.
+              (reset! afj-native-recovery-required true)
+              (throw
+                (if (= (deref afj-native-wal-phase) "commit")
+                  "DB_COMMIT_UNCERTAIN_RESTART_REQUIRED"
+                  (if (= (deref afj-native-wal-phase) "durable")
+                    "DB_COMMITTED_RESTART_REQUIRED"
+                    "DB_WRITE_ABORTED_RESTART_REQUIRED"))))))))))
+
