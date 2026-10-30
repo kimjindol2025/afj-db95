@@ -1,0 +1,25 @@
+(load "../src/tcp-server.fls")
+(afj-tcp-recover)
+(define phase (env-get "L05_TAIL_PHASE"))
+(defn require-proof [condition label] (if condition (println label) (throw (str "DB95_TAIL_ASSERT " label))))
+(if (= phase "seed")
+  (do
+    (afj-tcp-commit-ast {"type" "create-table" "table" "l05_records"
+      "schema" {"columns" [{"name" "id" "type" "TEXT" "nullable" false "primary" true}
+                            {"name" "value" "type" "TEXT" "nullable" false}]
+                "primary-key" "id" "unique-columns" []}})
+    (afj-tcp-commit-ast {"type" "insert" "table" "l05_records" "row" {"id" "first" "value" "첫🙂"}})
+    (println "DB95_TAIL_SEED=PASS"))
+  (if (= phase "interrupted")
+    (let [body {"version" 1 "asts" [{"type" "insert" "table" "l05_records" "row" {"id" "never" "value" "미완료"}}]}
+          encoded (json_str body)]
+      (afj-tcp-wal-append-sync {"type" "prepare" "tx" "l05-interrupted" "version" 1
+                                "body" body "length" (count encoded) "checksum" (sha256 encoded)} false)
+      (println "DB95_TAIL_INTERRUPTED=PASS"))
+    (do
+      (if (= phase "resume")
+        (afj-tcp-commit-ast {"type" "insert" "table" "l05_records" "row" {"id" "second" "value" "둘🙂"}}) nil)
+      (let [rows (get (execute-ast {"type" "select" "table" "l05_records"}) "rows")]
+        (require-proof (= (count rows) 2) "DB95_TAIL_ROWS=PASS")
+        (require-proof (= (count (filter (fn [r] (and (= (get r "id") "first") (= (get r "value") "첫🙂"))) rows)) 1) "DB95_TAIL_FIRST=PASS")
+        (require-proof (= (count (filter (fn [r] (and (= (get r "id") "second") (= (get r "value") "둘🙂"))) rows)) 1) "DB95_TAIL_SECOND=PASS")))))

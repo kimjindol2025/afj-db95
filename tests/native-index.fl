@@ -1,0 +1,37 @@
+;; L05 baseline: load only the approved database; never app/store or blog tables.
+(load "../src/tcp-server.fls")
+(afj-tcp-recover)
+(defn require-proof [condition label]
+  (if condition (println label) (throw (str "DB95_INDEX_ASSERT " label))))
+(defn selected [column value]
+  (execute-ast {"type" "select" "table" "l05_records" "where" {"column" column "equals" value}}))
+(defn require-index [column value ids label]
+  (let [r (selected column value)]
+    (require-proof (and (= (get r "plan") "index-scan")
+                        (= (map (fn [row] (get row "id")) (get r "rows")) ids)) label)))
+(if (= (env-get "L05_INDEX_PHASE") "write")
+  (do
+    (afj-tcp-commit-ast {"type" "create-table" "table" "l05_records"
+      "schema" {"columns" [{"name" "id" "type" "TEXT" "nullable" false "primary" true}
+                            {"name" "slug" "type" "TEXT" "nullable" false}]
+                "primary-key" "id" "unique-columns" ["slug"]}})
+    (afj-tcp-commit-asts [{"type" "insert" "table" "l05_records" "row" {"id" "r1" "slug" "처음🙂"}}
+                          {"type" "insert" "table" "l05_records" "row" {"id" "r2" "slug" "old2"}}])
+    (require-index "slug" "처음🙂" ["r1"] "DB95_INDEX_INITIAL=PASS")
+    (afj-tcp-commit-asts [{"type" "update" "table" "l05_records" "where" {"column" "id" "equals" "r1"} "changes" {"slug" "새🙂"}}
+                          {"type" "delete" "table" "l05_records" "where" {"column" "id" "equals" "r2"}}
+                          {"type" "insert" "table" "l05_records" "row" {"id" "r2" "slug" "new2"}}])
+    (let [before (sha256 (get (file-read-result afj-tcp-wal) "data"))
+          rejected (try
+            (do (afj-tcp-commit-asts [{"type" "insert" "table" "l05_records" "row" {"id" "r3" "slug" "third"}}
+                                      {"type" "insert" "table" "l05_records" "row" {"id" "r1" "slug" "duplicate"}}]) false)
+            (catch [e] true))]
+      (require-proof (and rejected (= before (sha256 (get (file-read-result afj-tcp-wal) "data")))) "DB95_INDEX_ROLLBACK_WAL=PASS"))) nil)
+(require-index "id" "r1" ["r1"] "DB95_INDEX_PRIMARY=PASS")
+(require-index "slug" "새🙂" ["r1"] "DB95_INDEX_UPDATED=PASS")
+(require-index "slug" "처음🙂" [] "DB95_INDEX_OLD_REMOVED=PASS")
+(require-index "slug" "new2" ["r2"] "DB95_INDEX_REINSERTED=PASS")
+(require-index "slug" "old2" [] "DB95_INDEX_DELETED_REMOVED=PASS")
+(require-index "id" "r3" [] "DB95_INDEX_ROLLBACK_PRIMARY=PASS")
+(require-index "slug" "third" [] "DB95_INDEX_ROLLBACK_SECONDARY=PASS")
+(require-proof (= (count (get (execute-ast {"type" "select" "table" "l05_records"}) "rows")) 2) "DB95_INDEX_FULL_SCAN_COUNT=PASS")
