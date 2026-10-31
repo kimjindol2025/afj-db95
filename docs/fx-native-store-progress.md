@@ -31,3 +31,7 @@ NODE=0 NPM=0 NPX=0 JS=0 PYTHON=0
 이 결과는 운영 영속성·트랜잭션·네트워크 서버의 완성을 뜻하지 않는다. 긴 WAL·다중 작업자/과정·I/O 장애·실제 crash 내구성과 블로그에서 보정을 제거한 통합 회귀가 남아 있다. 새 native runtime의 전체 언어 회귀/bootstrap도 별도로 진행 중이다. L05 전체 완료가 아니다.
 
 Forgejo 목적지 주소는 확인 대기이며 이 DB 가지는 아직 어느 원격에도 푸시하지 않았다. 기존 submodule checkout/main·운영 자료는 변경하지 않았다. 서버 23·25·운영 WAL/이미지/설정 접근·백업 원본 삭제·합치기·배포·강제 푸시·새 TS/수작업 JS/Python·fl-build.sh 사용은 없다.
+
+## 목적지 결정 해소
+
+2026-10-31 사용자가 D07의 Forgejo kim/afj-db95 목적지를 제공했다. 읽기 전용 ls-remote와 main fetch로 실제 저장소와 공통 이력을 확인했다. 기존 native-store 코드·정답은 바꾸지 않고 feat/fx-native-store 가지를 Forgejo → GitHub 순서로 일반 푸시한다. 실제 두 원격 HEAD는 후속 블로그 체크포인트 보고에 기록하며 이 목적지 확인을 앱 적용·전체 저장소 인수 통과로 확대하지 않는다. main 합치기·배포·운영 자료 접근/변경은 하지 않는다.
