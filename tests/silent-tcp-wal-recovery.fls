@@ -16,16 +16,15 @@
               " hash=" before-hash))
 (afj-tcp-record-asts asts)
 (define committed (file_read afj-tcp-wal))
-(file_write afj-tcp-wal "")
-(doseq [id (range 0 3200)]
-  (let [body {"version" 1 "asts" []}
-        encoded (json_str body)]
-    (file_append afj-tcp-wal
-      (str (json_str
-             {"type" "prepare" "tx" "pending"
-              "version" 1 "length" (count encoded)
-              "body" body "checksum" (sha256 encoded)}) "\n"))))
-(file_append afj-tcp-wal committed)
+(let [body {"version" 1 "asts" []}
+      encoded (json_str body)
+      padding (json_str
+                {"type" "prepare" "tx" "pending"
+                 "version" 1 "length" (count encoded)
+                 "body" body "checksum" (sha256 encoded)})]
+  (file_write afj-tcp-wal
+    (str (str_join_lines (map (fn [id] padding) (range 0 3200)))
+         "\n" committed)))
 (afj-tcp-recover)
 (let [rows (get (engine-table "silent_tcp_rows") "rows")]
   (println (str "DB95_TCP_WAL_AFTER count=" (count rows)
