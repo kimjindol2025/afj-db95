@@ -1,0 +1,10 @@
+;; The current FreeLang TCP event loop calls handlers with three arguments.
+;; A missing optional peer must not prevent subsequent requests from working.
+(load "../src/tcp-server.fls")
+
+(afj-db-tcp-handler "accept" "db95-2-probe" "")
+(if (= (afj-tcp-rate-key "db95-2-probe") "db95-2-probe")
+  (println "PASS db95-2-runtime-callback")
+  (throw "DB95_RUNTIME_CALLBACK_FAILED"))
+
+(afj-db-tcp-handler "close" "db95-2-probe" "")
