@@ -47,16 +47,26 @@
   (reset! engine-catalog
     (assoc (deref engine-catalog) "silent_index_users"
       (assoc table "page-indexes" (afj-tcp-page-indexes-for-table table)))))
+(define stale-indexes
+  (get (engine-table "silent_index_users") "page-indexes"))
 (execute-ast {"type" "create-table" "table" "silent_revision_bump"})
 (reset! afj-tcp-sessions {"silent-tx" "root"})
 (reset! afj-tcp-session-expiries {})
 (afj-tcp-begin "silent-tx")
-(afj-tcp-query {"token" "silent-tx"
-                "statement" "SELECT * FROM silent_index_users WHERE id=1"})
-(afj-tcp-query {"token" "silent-tx"
-                "statement" "UPDATE silent_index_users SET name='merged-a' WHERE id=1"})
-(afj-tcp-query {"token" "silent-tx"
-                "statement" "UPDATE silent_index_users SET name='merged-b' WHERE id=2"})
+(afj-tcp-execute-active
+  "silent-tx" (get (deref afj-tcp-transactions) "silent-tx")
+  {"type" "select" "table" "silent_index_users"
+   "where" {"column" "id" "equals" 1}})
+(afj-tcp-execute-active
+  "silent-tx" (get (deref afj-tcp-transactions) "silent-tx")
+  {"type" "update" "table" "silent_index_users"
+   "where" {"column" "id" "equals" 1}
+   "changes" {"name" "merged-a"}})
+(afj-tcp-execute-active
+  "silent-tx" (get (deref afj-tcp-transactions) "silent-tx")
+  {"type" "update" "table" "silent_index_users"
+   "where" {"column" "id" "equals" 2}
+   "changes" {"name" "merged-b"}})
 (afj-tcp-commit-ast
   {"type" "insert" "table" "silent_revision_bump" "row" {"id" 1}})
 (let [commit (afj-tcp-commit "silent-tx")
@@ -77,3 +87,15 @@
            (= (json_str index-rows) (json_str scan-rows)))
     (println "PASS silent-merged-batch-index")
     (throw "INDEX_MISMATCH")))
+
+(try
+  (do
+    (engine-rebuild-table-indexes
+      "silent_index_users"
+      (assoc (engine-table "silent_index_users")
+             "page-indexes" stale-indexes))
+    (throw "INDEX_MISMATCH_NOT_RAISED"))
+  (catch [error]
+    (if (str_ends_with (error_message error) "INDEX_MISMATCH")
+      (println "PASS silent-index-mismatch-error")
+      (throw error))))
