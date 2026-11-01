@@ -7,7 +7,7 @@
   (map (fn [id] {"id" id "value" (str "value-" id)})
        (range 0 3200)))
 (define expected-hash (sha256 (json_str expected-rows)))
-(define events
+(define fixture-events
   (concat
     [{"op" "create-table" "name" "silent_wal_rows"
       "columns" {"id" "INTEGER" "value" "TEXT"}}]
@@ -23,7 +23,7 @@
                              "length" (count encoded)
                              "checksum" (sha256 encoded)
                              "body" event})))
-              events)) "\n"))
+              fixture-events)) "\n"))
 
 (try
   (do
@@ -37,9 +37,12 @@
       (println (str "DB95_WAL_RECOVER_ERROR=" (error_message error)))
       (throw error))))
 
-(let [events (load-wal-events path)
+(let [loaded-events (load-wal-events path)
       rows (select-all "silent_wal_rows")]
-  (if (and (= (count events) 3201)
+  (println (str "DB95_WAL_COUNTS events=" (count loaded-events)
+                " rows=" (count rows)
+                " first=" (get (first rows) "value")))
+  (if (and (= (count loaded-events) 3201)
            (= (count rows) 3200)
            (= (sha256 (json_str rows)) expected-hash)
            (= (get (first rows) "value") "value-0"))
