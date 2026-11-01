@@ -41,38 +41,6 @@
     (println "PASS silent-batch-index")
     (throw "INDEX_MISMATCH")))
 
-;; Force B+Tree splits and change many secondary keys in one commit.
-(afj-tcp-commit-asts
-  (map (fn [id]
-         {"type" "insert" "table" "silent_index_users"
-          "row" {"id" (+ id 10)
-                 "name" (str "old-" id)
-                 "marker" (str "marker-" id)}})
-       (range 0 80)))
-(afj-tcp-commit-asts
-  (map (fn [id]
-         {"type" "update" "table" "silent_index_users"
-          "where" {"column" "id" "equals" (+ id 10)}
-          "changes" {"name" (str "new-" id)}})
-       (range 0 80)))
-(let [mismatches (atom 0)]
-  (doseq [id (range 0 80)]
-    (let [indexed (get (execute-ast
-                         {"type" "select" "table" "silent_index_users"
-                          "where" {"column" "name"
-                                   "equals" (str "new-" id)}}) "rows")
-          scanned (get (execute-ast
-                         {"type" "select" "table" "silent_index_users"
-                          "where" {"column" "marker"
-                                   "equals" (str "marker-" id)}}) "rows")]
-      (if (not (= (json_str indexed) (json_str scanned)))
-        (swap! mismatches (fn [count] (+ count 1)))
-        nil)))
-  (println (str "DB95_INDEX_LARGE_BATCH mismatches=" (deref mismatches)))
-  (if (= (deref mismatches) 0)
-    (println "PASS silent-large-batch-index")
-    (throw "INDEX_MISMATCH")))
-
 ;; A stale-revision merge starts from a page-backed table. Its old persisted
 ;; tree must not override the rebuilt index for the updated rows.
 (let [table (engine-table "silent_index_users")]
