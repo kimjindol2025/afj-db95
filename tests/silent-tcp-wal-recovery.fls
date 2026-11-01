@@ -58,3 +58,22 @@
     (if (str_ends_with (error_message error) "WAL_CORRUPT")
       (println "PASS silent-tcp-wal-blank-record")
       (throw error))))
+
+(file_write afj-tcp-wal
+  (str (json_str {"type" "unknown" "tx" "bad"}) "\n"))
+(try
+  (do (afj-tcp-recover) (throw "WAL_CORRUPT_NOT_RAISED"))
+  (catch [error]
+    (if (str_ends_with (error_message error) "WAL_CORRUPT")
+      (println "PASS silent-tcp-wal-unknown-record")
+      (throw error))))
+
+(file_write afj-tcp-wal
+  (str (json_str {"type" "commit" "tx" "missing"
+                  "version" 1 "length" 0 "checksum" "bad"}) "\n"))
+(try
+  (do (afj-tcp-recover) (throw "WAL_CORRUPT_NOT_RAISED"))
+  (catch [error]
+    (if (str_ends_with (error_message error) "WAL_CORRUPT")
+      (println "PASS silent-tcp-wal-orphan-commit")
+      (throw error))))
