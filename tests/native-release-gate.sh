@@ -10,7 +10,7 @@ mkdir -p "$log_root"
 
 runtime_sources=(
   core.c collection.c io.c math.c error.c process.c json.c aliases.c
-  user-fns.c gc.c http.c websocket.c sqlite.c mariadb.c debug.c
+  user-fns.c gc.c http.c raw_tcp.c websocket.c sqlite.c mariadb.c debug.c
   http_client.c regex.c smtp.c sse.c
 )
 
