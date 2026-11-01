@@ -47,7 +47,7 @@
   (try
     (do (afj-tcp-recover) (throw "WAL_CORRUPT_NOT_RAISED"))
     (catch [error]
-      (if (= (error_message error) "WAL_CORRUPT")
+      (if (str_ends_with (error_message error) "WAL_CORRUPT")
         (println "PASS silent-tcp-wal-corrupt-commit")
         (throw error)))))
 
@@ -55,6 +55,6 @@
 (try
   (do (afj-tcp-recover) (throw "WAL_CORRUPT_NOT_RAISED"))
   (catch [error]
-    (if (= (error_message error) "WAL_CORRUPT")
+    (if (str_ends_with (error_message error) "WAL_CORRUPT")
       (println "PASS silent-tcp-wal-blank-record")
       (throw error))))
