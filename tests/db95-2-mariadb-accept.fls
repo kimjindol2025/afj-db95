@@ -1,0 +1,13 @@
+;; FreeLang's raw TCP listener emits "accept" when a connection opens.
+;; MariaDB must create the handshake session for that event.
+(load "../src/mariadb-wire.fls")
+
+(reset! mariadb-wire-sessions {})
+(try
+  (mariadb-wire-handler "accept" "db95-2-probe" "" nil)
+  (catch [error] nil))
+
+(if (= (get (get (deref mariadb-wire-sessions) "db95-2-probe") "phase")
+       "handshake")
+  (println "PASS db95-2-mariadb-accept")
+  (throw "DB95_MARIADB_ACCEPT_MISSING"))
