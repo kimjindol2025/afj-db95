@@ -53,7 +53,7 @@ if [[ "${1:-}" == "--worker" ]]; then
       for name in "${runtime_sources[@]}"; do
         sources+=("$fx_root/runtime/$name")
       done
-      gcc -O2 -w -Werror=implicit-function-declaration \
+      gcc -O2 -w -rdynamic -Werror=implicit-function-declaration \
         -I "$fx_root/runtime" -o "$case_dir/case-bin" \
         "$case_dir/case.c" "${sources[@]}" \
         -lm -lpthread -ldl -lsqlite3 -lssl -lcrypto -lcurl || exit 1
