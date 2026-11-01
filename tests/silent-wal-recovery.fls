@@ -1,0 +1,54 @@
+;; A long WAL must replay once, in order, without losing committed rows.
+(load "../src/afj-db95.fls")
+
+(define path (env-get "DB95_TEST_WAL"))
+(if (nil? path) (throw "DB95_TEST_WAL_REQUIRED") nil)
+(file_write path "")
+(open-store path)
+(create-table "silent_wal_rows" {"id" "INTEGER" "value" "TEXT"})
+(doseq [id (range 0 3200)]
+  (insert-row "silent_wal_rows"
+              {"id" id "value" (str "value-" id)}))
+(define expected-hash (sha256 (json_str (select-all "silent_wal_rows"))))
+(let [rows (select-all "silent_wal_rows")]
+  (println (str "DB95_WAL_BEFORE count=" (count rows)
+                " hash=" expected-hash)))
+(close-store)
+
+(try
+  (do
+    (open-store path)
+    (let [rows (select-all "silent_wal_rows")]
+      (println (str "DB95_WAL_AFTER count=" (count rows)
+                    " hash=" (sha256 (json_str rows)))))
+    (close-store))
+  (catch [error]
+    (do
+      (println (str "DB95_WAL_RECOVER_ERROR=" (error_message error)))
+      (throw error))))
+
+(let [events (load-wal-events path)
+      rows (select-all "silent_wal_rows")]
+  (if (and (= (count events) 3201)
+           (= (count rows) 3200)
+           (= (sha256 (json_str rows)) expected-hash)
+           (= (get (first rows) "value") "value-0")
+    (println "PASS silent-wal-recovery")
+    (throw "WAL_REPLAY_MISMATCH")))
+
+;; Complete invalid records, including the final line, are never torn tails.
+(let [valid (file_read path)]
+  (file_append path "{\"version\":1,\"body\":{}}\n")
+  (try
+    (do (open-store path) (throw "WAL_CORRUPT_NOT_RAISED"))
+    (catch [error]
+      (if (= (error_message error) "WAL_CORRUPT")
+        (println "PASS silent-wal-corrupt-tail")
+        (throw error))))
+  (file_write path (str "not-json\n" valid))
+  (try
+    (do (open-store path) (throw "WAL_CORRUPT_NOT_RAISED"))
+    (catch [error]
+      (if (= (error_message error) "WAL_CORRUPT")
+        (println "PASS silent-wal-corrupt-middle")
+        (throw error)))))
