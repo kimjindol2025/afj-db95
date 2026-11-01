@@ -613,38 +613,37 @@
           (throw "CATALOG_PAGE_CORRUPT"))))))
 
 (defn afj-tcp-recover-lines [lines index prepared final-newline]
-  (if (>= index (count lines))
-    true
-    (let [line (get lines index)
-          last-line (= index (- (count lines) 1))
-          _size-check (if (> (count line) afj-tcp-wal-record-limit)
-                        (throw "WAL_RECORD_TOO_LARGE")
-                        true)
-          event (if last-line
-                  (try (json-parse line) (catch [error] nil))
-                  (json-parse line))]
-      (if (nil? event)
-        (if (and last-line (not final-newline))
-          true
-          (throw "WAL_CORRUPT"))
-        (let [tx (get event "tx")]
-          (do
-            (if (= (get event "type") "prepare")
-              (swap! prepared assoc tx event)
-              (if (= (get event "type") "commit")
+  (loop [cursor index]
+    (if (>= cursor (count lines))
+      true
+      (let [line (get lines cursor)
+            last-line (= cursor (- (count lines) 1))
+            _size-check (if (> (count line) afj-tcp-wal-record-limit)
+                          (throw "WAL_RECORD_TOO_LARGE")
+                          true)
+            event (try (json-parse line) (catch [error] nil))]
+        (if (nil? event)
+          (if (and last-line (not final-newline))
+            true
+            (throw "WAL_CORRUPT"))
+          (let [tx (get event "tx")
+                kind (get event "type")]
+            (if (nil? tx) (throw "WAL_CORRUPT") nil)
+            (if (= kind "prepare")
+              (if (afj-tcp-wal-record-valid? event (get event "body"))
+                (swap! prepared assoc tx event)
+                (throw "WAL_CORRUPT"))
+              (if (= kind "commit")
                 (let [pending (get (deref prepared) tx)
                       body (if (nil? pending) nil (get pending "body"))]
-                (if (not (nil? body))
-                  (if (afj-tcp-wal-record-valid? pending body)
-                    (if (afj-tcp-wal-record-valid? event body)
-                      (do
-                        (afj-tcp-replay-commit-body body)
-                        true)
-                      nil)
-                    nil)
-                  nil))
-                nil))
-            (afj-tcp-recover-lines lines (+ index 1) prepared final-newline)))))))
+                  (if (and (not (nil? body))
+                           (afj-tcp-wal-record-valid? pending body)
+                           (afj-tcp-wal-record-valid? event body))
+                    (do (afj-tcp-replay-commit-body body)
+                        (swap! prepared dissoc tx))
+                    (throw "WAL_CORRUPT")))
+                (throw "WAL_CORRUPT")))
+            (recur (+ cursor 1))))))))
 
 (defn afj-tcp-rebuild-all-indexes []
   (reset! engine-indexes {})
@@ -707,10 +706,13 @@
       (if (or (> (count raw) replay-start)
               (and (= (count raw) 0) (not prefix-ok)))
         (try
-          (afj-tcp-recover-lines
-            (filter (fn [line] (not (= (str_trim line) "")))
-                    (str_lines (str-slice raw replay-start (count raw))))
-            0 (atom {}) (str_ends_with raw "\n"))
+          (let [tail (str-slice raw replay-start (count raw))
+                split (str_lines tail)
+                lines (if (str_ends_with tail "\n")
+                        (take (- (count split) 1) split)
+                        split)]
+            (afj-tcp-recover-lines lines 0 (atom {})
+                                   (str_ends_with tail "\n")))
           (catch [error] (throw "WAL_CORRUPT")))
         nil)
       ;; Keep rebuild as the final value of the recovery let-block so its
@@ -1249,7 +1251,7 @@
                 definition (get (deref merged-catalog) table-name)
                 schema (get (get snapshot-catalog table-name) "schema" {})]
             (swap! merged-catalog assoc table-name
-                   (assoc definition "rows"
+                   (assoc (dissoc definition "page-indexes") "rows"
                           (afj-tcp-merge-table-rows base current working schema)))
             (if (nil? (get (deref touched) table-name))
               (swap! touched conj table-name)
@@ -1265,7 +1267,7 @@
             (let [current-table (get (deref merged-catalog) table-name)
                   working-table (get working-catalog table-name)]
               (swap! merged-catalog assoc table-name
-                     (assoc (assoc current-table
+                     (assoc (assoc (dissoc current-table "page-indexes")
                                    "columns" (get working-table "columns" []))
                             "schema" (get working-table "schema" {})
                             "rows" (afj-tcp-merge-schema-rows

@@ -302,28 +302,28 @@
          (= (get record "checksum") (sha256 encoded)))))
 
 (defn load-wal-events-at [lines index final-newline events]
-  (if (>= index (count lines))
-    events
-    (let [line (get lines index)
-          last-line (= index (- (count lines) 1))
-          parsed (try
-                   (json-parse line)
-                   (catch [error] nil))]
-      (if (nil? parsed)
-        (if (and last-line (not final-newline))
-          events
-          (throw "WAL_CORRUPT"))
-        (if (not (valid-wal-envelope? parsed))
-          (throw "WAL_CORRUPT")
-          (load-wal-events-at lines (+ index 1) final-newline
-                              (conj events (get parsed "body"))))))))
+  (loop [cursor index result events]
+    (if (>= cursor (count lines))
+      result
+      (let [line (get lines cursor)
+            last-line (= cursor (- (count lines) 1))
+            parsed (try (json-parse line) (catch [error] nil))]
+        (if (nil? parsed)
+          (if (and last-line (not final-newline))
+            result
+            (throw "WAL_CORRUPT"))
+          (if (not (valid-wal-envelope? parsed))
+            (throw "WAL_CORRUPT")
+            (recur (+ cursor 1) (conj result (get parsed "body")))))))))
 
 (defn load-wal-events [path]
   (if (not (file_exists path))
     []
     (let [raw (file_read path)
-          lines (filter (fn [line] (not (= (str_trim line) "")))
-                        (str_lines raw))]
+          split (if (= raw "") [] (str_lines raw))
+          lines (if (str_ends_with raw "\n")
+                  (take (- (count split) 1) split)
+                  split)]
       (load-wal-events-at lines 0 (str_ends_with raw "\n") []))))
 
 (defn open-store [path]
@@ -331,7 +331,11 @@
     (file_write path "")
     true)
   (reset! storage-path path)
-  (replay-wal (load-wal-events path))
+  (try
+    (replay-wal (load-wal-events path))
+    (catch [error]
+      (do (reset! replaying false)
+          (throw "WAL_CORRUPT"))))
   path)
 
 (defn close-store []

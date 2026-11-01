@@ -529,16 +529,24 @@
       nil))
   true)
 
+(defn engine-assert-index-matches-rows [persisted rebuilt]
+  (if (= (json_str (engine-btree-entries persisted))
+         (json_str (engine-btree-entries rebuilt)))
+    true
+    (throw "INDEX_MISMATCH")))
+
 (defn engine-rebuild-table-indexes [name table]
   (do
     (engine-drop-table-indexes name)
     (doseq [column (engine-index-columns table)]
       (let [persisted (get (get table "page-indexes" {}) column)
+            rebuilt (engine-build-btree
+                      (get table "rows") column 0
+                      {"leaf" true "entries" []})
             tree (if (nil? persisted)
-                   (engine-build-btree
-                     (get table "rows") column 0
-                     {"leaf" true "entries" []})
-                   persisted)]
+                   rebuilt
+                   (do (engine-assert-index-matches-rows persisted rebuilt)
+                       persisted))]
         (reset! engine-indexes
                 (assoc (deref engine-indexes) (str name "." column)
                        {"table" name
@@ -549,15 +557,15 @@
     (doseq [columns (engine-index-groups table)]
       (let [index-name (engine-index-group-name columns)
             persisted (get (get table "page-indexes" {}) index-name)
+            rebuilt (engine-build-composite-btree-with-schema
+                      (get table "rows") columns (get table "schema" {}) 0
+                      {"leaf" true "entries" []})
             tree (if (nil? persisted)
-                   (engine-build-composite-btree-with-schema
-                     (get table "rows") columns (get table "schema" {}) 0
-                     {"leaf" true "entries" []})
+                   rebuilt
                    (if (engine-btree-has-sort-key? persisted)
-                     persisted
-                     (engine-build-composite-btree-with-schema
-                       (get table "rows") columns (get table "schema" {}) 0
-                       {"leaf" true "entries" []})))]
+                     (do (engine-assert-index-matches-rows persisted rebuilt)
+                         persisted)
+                     rebuilt))]
         (reset! engine-indexes
                 (assoc (deref engine-indexes) (str name "." index-name)
                        {"table" name
