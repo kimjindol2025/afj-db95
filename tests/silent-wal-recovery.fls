@@ -32,7 +32,7 @@
   (if (and (= (count events) 3201)
            (= (count rows) 3200)
            (= (sha256 (json_str rows)) expected-hash)
-           (= (get (first rows) "value") "value-0")
+           (= (get (first rows) "value") "value-0"))
     (println "PASS silent-wal-recovery")
     (throw "WAL_REPLAY_MISMATCH")))
 
