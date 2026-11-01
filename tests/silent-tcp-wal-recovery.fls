@@ -1,0 +1,61 @@
+;; Thousands of WAL records must not restart traversal or hide bad commits.
+(load "../src/tcp-server.fls")
+
+(if (file_exists afj-tcp-wal) (file_delete afj-tcp-wal) nil)
+(define asts
+  [{"type" "create-table" "table" "silent_tcp_rows"
+    "schema" {"columns" [{"name" "id" "type" "INTEGER"
+                             "nullable" false "primary" true}]
+               "primary-key" "id" "unique-columns" []}}
+   {"type" "insert" "table" "silent_tcp_rows"
+    "row" {"id" 1 "value" "kept"}}])
+(doseq [ast asts] (execute-ast ast))
+(define before-rows (get (engine-table "silent_tcp_rows") "rows"))
+(define before-hash (sha256 (json_str before-rows)))
+(println (str "DB95_TCP_WAL_BEFORE count=" (count before-rows)
+              " hash=" before-hash))
+(afj-tcp-record-asts asts)
+(define committed (file_read afj-tcp-wal))
+(file_write afj-tcp-wal "")
+(doseq [id (range 0 3200)]
+  (let [body {"version" 1 "asts" []}
+        encoded (json_str body)]
+    (file_append afj-tcp-wal
+      (str (json_str
+             {"type" "prepare" "tx" (str "pending-" id)
+              "version" 1 "length" (count encoded)
+              "body" body "checksum" (sha256 encoded)}) "\n"))))
+(file_append afj-tcp-wal committed)
+(afj-tcp-recover)
+(let [rows (get (engine-table "silent_tcp_rows") "rows")]
+  (println (str "DB95_TCP_WAL_AFTER count=" (count rows)
+                " hash=" (sha256 (json_str rows))))
+  (if (and (= (count rows) (count before-rows))
+           (= (sha256 (json_str rows)) before-hash))
+    (println "PASS silent-tcp-wal-recovery")
+    (throw "WAL_REPLAY_MISMATCH")))
+
+(let [body {"version" 1 "asts" asts}
+      encoded (json_str body)
+      prepare {"type" "prepare" "tx" "broken"
+               "version" 1 "length" (count encoded)
+               "body" body "checksum" "wrong"}
+      commit {"type" "commit" "tx" "broken"
+              "version" 1 "length" (count encoded)
+              "checksum" "wrong"}]
+  (file_write afj-tcp-wal
+    (str (json_str prepare) "\n" (json_str commit) "\n"))
+  (try
+    (do (afj-tcp-recover) (throw "WAL_CORRUPT_NOT_RAISED"))
+    (catch [error]
+      (if (= (error_message error) "WAL_CORRUPT")
+        (println "PASS silent-tcp-wal-corrupt-commit")
+        (throw error)))))
+
+(file_write afj-tcp-wal "\n")
+(try
+  (do (afj-tcp-recover) (throw "WAL_CORRUPT_NOT_RAISED"))
+  (catch [error]
+    (if (= (error_message error) "WAL_CORRUPT")
+      (println "PASS silent-tcp-wal-blank-record")
+      (throw error))))
