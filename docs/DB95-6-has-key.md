@@ -114,7 +114,14 @@ STRACE_TEST_EXIT=0
 NODE=0 NPM=0 NPX=0 JS_PY_SCRIPT=0 PYTHON=0
 ```
 
-시작 HEAD 대비 새 JS·TS·Python 소스는 0줄이다. 코드와 보고서 변경분의 민감 정보 검사는 커밋 직전에 수행한다. v11 최종 구현 HEAD는 `c3dd95a57c7a5d29a6359c198675098e432cd6ba`이며, 두 저장소의 원격 HEAD는 푸시 뒤 채팅 보고에 원문으로 적는다.
+시작 HEAD 대비 새 JS·TS·Python 소스는 0줄이다. 코드와 보고서 변경분의 민감 정보 검사에서 비밀값·인증 URL·절대 로컬 경로는 0건이었다. `__fl_wrap_token_at`은 실패 로그의 함수 이름이며 열쇠 값이 아니다. v11 최종 구현 HEAD는 `c3dd95a57c7a5d29a6359c198675098e432cd6ba`이다.
+
+| 첫 푸시 확인 | Forgejo HEAD | GitHub HEAD |
+| --- | --- | --- |
+| v11 `feat/db95-native-peer` | `c3dd95a57c7a5d29a6359c198675098e432cd6ba` | `c3dd95a57c7a5d29a6359c198675098e432cd6ba` |
+| db95 `native-run` | `7704f2d8e259129fd29be3e591d879d19ab11ed5` | `7704f2d8e259129fd29be3e591d879d19ab11ed5` |
+
+두 저장소 모두 Forgejo에 먼저, GitHub에 다음으로 푸시했다. 이 보고서의 최종 점수 갱신 커밋은 같은 순서로 반영하고 최종 HEAD와 깨끗한 작업 트리는 채팅에 원문으로 기록한다. [db95 GitHub 보고서](https://github.com/kimjindol2025/afj-db95/blob/native-run/docs/DB95-6-has-key.md), [v11 GitHub 가지](https://github.com/kimjindol2025/freelang-v11-fx/tree/feat/db95-native-peer).
 
 ## 5. 남은 71건 첫 오류 묶음
 
@@ -138,4 +145,4 @@ NODE=0 NPM=0 NPX=0 JS_PY_SCRIPT=0 PYTHON=0
 | `Uncaught error (line 41): compatibility scorecard failure` | 1 | 28 |
 | `[CGC-ERR] unsupported literal type=unknown` | 1 | 71 |
 
-DB95_SUMMARY=4/5
+DB95_SUMMARY=5/5
