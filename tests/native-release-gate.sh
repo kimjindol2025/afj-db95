@@ -86,7 +86,7 @@ safe_path="$log_root/native-path"
 mkdir -p "$safe_path"
 for name in bash sh dirname pwd mktemp rm cp cat grep sed awk sha256sum \
             head tail seq sleep timeout env tr sort wc openssl mkdir touch \
-            basename readlink date tee find cut rg; do
+            basename readlink date tee find cut rg tar; do
   command_path="$(command -v "$name" || true)"
   if [[ "$command_path" == /* && -x "$command_path" ]]; then
     ln -s "$command_path" "$safe_path/$name" 2>/dev/null || true
