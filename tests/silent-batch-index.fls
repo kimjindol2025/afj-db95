@@ -72,3 +72,40 @@
   (if (= (deref mismatches) 0)
     (println "PASS silent-large-batch-index")
     (throw "INDEX_MISMATCH")))
+
+;; A stale-revision merge starts from a page-backed table. Its old persisted
+;; tree must not override the rebuilt index for the updated rows.
+(let [table (engine-table "silent_index_users")]
+  (reset! engine-catalog
+    (assoc (deref engine-catalog) "silent_index_users"
+      (assoc table "page-indexes" (afj-tcp-page-indexes-for-table table)))))
+(execute-ast {"type" "create-table" "table" "silent_revision_bump"})
+(reset! afj-tcp-sessions {"silent-tx" "root"})
+(reset! afj-tcp-session-expiries {})
+(afj-tcp-begin "silent-tx")
+(afj-tcp-query {"token" "silent-tx"
+                "statement" "SELECT * FROM silent_index_users WHERE id=1"})
+(afj-tcp-query {"token" "silent-tx"
+                "statement" "UPDATE silent_index_users SET name='merged-a' WHERE id=1"})
+(afj-tcp-query {"token" "silent-tx"
+                "statement" "UPDATE silent_index_users SET name='merged-b' WHERE id=2"})
+(afj-tcp-commit-ast
+  {"type" "insert" "table" "silent_revision_bump" "row" {"id" 1}})
+(let [commit (afj-tcp-commit "silent-tx")
+      indexed (execute-ast
+                {"type" "select" "table" "silent_index_users"
+                 "where" {"column" "name" "equals" "merged-a"}})
+      scanned (execute-ast
+                {"type" "select" "table" "silent_index_users"
+                 "where" {"column" "marker" "equals" "a"}})
+      index-rows (get indexed "rows")
+      scan-rows (get scanned "rows")]
+  (println (str "DB95_INDEX_MERGE commit=" (get commit "ok")
+                " index=" (count index-rows)
+                " scan=" (count scan-rows)
+                " index_hash=" (sha256 (json_str index-rows))
+                " scan_hash=" (sha256 (json_str scan-rows))))
+  (if (and (get commit "ok")
+           (= (json_str index-rows) (json_str scan-rows)))
+    (println "PASS silent-merged-batch-index")
+    (throw "INDEX_MISMATCH")))
