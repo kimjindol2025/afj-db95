@@ -3,17 +3,27 @@
 
 (define path (env-get "DB95_TEST_WAL"))
 (if (nil? path) (throw "DB95_TEST_WAL_REQUIRED") nil)
-(file_write path "")
-(open-store path)
-(create-table "silent_wal_rows" {"id" "INTEGER" "value" "TEXT"})
-(doseq [id (range 0 3200)]
-  (insert-row "silent_wal_rows"
-              {"id" id "value" (str "value-" id)}))
-(define expected-hash (sha256 (json_str (select-all "silent_wal_rows"))))
-(let [rows (select-all "silent_wal_rows")]
-  (println (str "DB95_WAL_BEFORE count=" (count rows)
-                " hash=" expected-hash)))
-(close-store)
+(define expected-rows
+  (map (fn [id] {"id" id "value" (str "value-" id)})
+       (range 0 3200)))
+(define expected-hash (sha256 (json_str expected-rows)))
+(define events
+  (concat
+    [{"op" "create-table" "name" "silent_wal_rows"
+      "columns" {"id" "INTEGER" "value" "TEXT"}}]
+    (map (fn [row] {"op" "insert" "name" "silent_wal_rows"
+                    "row" row}) expected-rows)))
+(println (str "DB95_WAL_BEFORE count=" (count expected-rows)
+              " hash=" expected-hash))
+(file_write path
+  (str (str_join_lines
+         (map (fn [event]
+                (let [encoded (json_str event)]
+                  (json_str {"version" afj-wal-version
+                             "length" (count encoded)
+                             "checksum" (sha256 encoded)
+                             "body" event})))
+              events)) "\n"))
 
 (try
   (do
