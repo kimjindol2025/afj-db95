@@ -1,0 +1,124 @@
+db95_name	db95_first_ref	fx_status	fx_ref_or_search
+and	src/tcp-server.fls:14	있음	self/cgc-main.fl:591
+any?	src/engine.fls:865	있음	self/cgc-main.fl:1136
+append	src/engine.fls:169	다름	self/cgc-main.fl:1121
+arr_flatten	src/query-ops.fls:10	없음	exact-name search:0
+arr_sort_by	src/engine.fls:1163	없음	exact-name search:0
+assoc	src/transaction.fls:26	있음	self/cgc-main.fl:1054
+atom	src/transaction.fls:3	있음	self/cgc-main.fl:764
+bit-and	src/sha1.fls:22	있음	self/cgc-main.fl:1227
+bit_and	src/sha1.fls:45	다름	runtime/runtime.h:313
+bit_not	src/sha1.fls:45	없음	exact-name search:0
+bit_or	src/sha1.fls:45	다름	runtime/runtime.h:314
+bit_rotate_left	src/sha1.fls:39	없음	exact-name search:0
+bit_shl	src/mariadb-wire.fls:265	다름	runtime/runtime.h:315
+bit_shr	src/sha1.fls:22	다름	runtime/runtime.h:316
+bit_xor	src/sha1.fls:33	다름	runtime/runtime.h:312
+boolean?	src/tcp-server.fls:1850	있음	self/cgc-main.fl:1104
+buf-concat	src/sha1.fls:13	없음	exact-name search:0
+buf-from-binary	src/mariadb-wire.fls:470	없음	exact-name search:0
+buf-len	src/sha1.fls:79	없음	exact-name search:0
+buf-read-str	src/mariadb-wire.fls:11	없음	exact-name search:0
+buf-read-u8	src/sha1.fls:16	없음	exact-name search:0
+buf-slice	src/sha1.fls:81	없음	exact-name search:0
+buf-str	src/sha1.fls:111	없음	exact-name search:0
+buf-to-binary	src/mariadb-wire.fls:312	없음	exact-name search:0
+buf-u8	src/sha1.fls:13	없음	exact-name search:0
+catch	src/engine.fls:1477	있음	self/cgc-main.fl:332
+ceil	src/mariadb-wire.fls:330	있음	self/cgc-main.fl:1157
+concat	src/sql-core.fls:416	있음	self/cgc-main.fl:1078
+conj	src/transaction.fls:26	있음	self/cgc-main.fl:1145
+contains?	src/sql-core.fls:341	있음	self/cgc-main.fl:1055
+count	src/transaction.fls:32	있음	self/cgc-main.fl:762
+define	src/transaction.fls:3	있음	self/cgc-main.fl:1001
+defn	src/protocol.fls:6	있음	self/cgc-main.fl:1000
+deref	src/transaction.fls:13	있음	self/cgc-main.fl:540
+dissoc	src/tcp-server.fls:1254	있음	self/cgc-main.fl:1065
+do	src/transaction-engine.fls:44	있음	self/cgc-main.fl:589
+doseq	src/http-server.fls:43	있음	self/cgc-main.fl:1320
+drop	src/sql-core.fls:432	있음	self/cgc-main.fl:763
+env-get	src/mariadb-wire.fls:85	있음	self/cgc-main.fl:1205
+env-or	src/tcp-server.fls:34	없음	exact-name search:0
+error_message	src/tcp-server.fls:373	없음	exact-name search:0
+fd_close	src/tcp-server.fls:383	없음	exact-name search:0
+fd_fsync	src/tcp-server.fls:382	없음	exact-name search:0
+fd_open	src/durable-store.fls:8	없음	exact-name search:0
+fd_write	src/tcp-server.fls:381	없음	exact-name search:0
+file-mkdir	src/tcp-server.fls:542	있음	self/cgc-main.fl:1192
+file_append	src/http-server.fls:38	다름	runtime/runtime.h:334
+file_copy	src/backup.fls:6	다름	runtime/runtime.h:337
+file_delete	src/persistent-index.fls:18	다름	runtime/runtime.h:336
+file_exists	src/http-server.fls:31	있음	self/cgc-main.fl:1184
+file_mtime	src/backup.fls:18	없음	exact-name search:0
+file_read	src/tcp-server.fls:457	다름	runtime/runtime.h:129
+file_size	src/backup.fls:17	다름	runtime/runtime.h:339
+file_write	src/http-server.fls:84	다름	runtime/runtime.h:130
+filter	src/tcp-server.fls:360	있음	self/cgc-main.fl:1119
+first	src/indexed-engine.fls:33	있음	self/cgc-main.fl:761
+fl-yield	src/tcp-server.fls:303	없음	exact-name search:0
+floor	src/mariadb-wire.fls:264	있음	self/cgc-main.fl:1156
+fn	src/indexed-engine.fls:15	있음	self/cgc-main.fl:499
+get	src/mariadb-wire.fls:164	있음	self/cgc-main.fl:761
+has-key?	src/protocol.fls:33	없음	exact-name search:0
+if	src/transaction.fls:14	있음	self/cgc-main.fl:756
+integer?	src/engine.fls:858	있음	self/cgc-main.fl:1105
+json-parse	src/transaction-engine.fls:10	있음	self/cgc-main.fl:1232
+json-stringify	src/engine.fls:20	있음	self/cgc-main.fl:1233
+json_str	src/transaction-engine.fls:10	없음	exact-name search:0
+keys	src/engine.fls:526	있음	self/cgc-main.fl:761
+last	src/mvcc.fls:95	있음	self/cgc-main.fl:761
+let	src/transaction.fls:7	있음	self/cgc-main.fl:999
+load	src/transaction-engine.fls:5	있음	self/cgc-main.fl:2503
+loop	src/tcp-server.fls:616	있음	self/cgc-main.fl:341
+map	src/tcp-server.fls:877	있음	self/cgc-main.fl:1118
+nil?	src/index.fls:8	있음	self/cgc-main.fl:1151
+not	src/protocol.fls:36	있음	self/cgc-main.fl:765
+now_ms	src/tcp-server.fls:314	다름	runtime/runtime.h:246
+number?	src/tcp-server.fls:14	있음	self/cgc-main.fl:1103
+obj-merge	src/http-server.fls:125	있음	self/cgc-main.fl:1081
+or	src/transaction-engine.fls:80	있음	self/cgc-main.fl:594
+println	src/transaction.fls:65	있음	self/cgc-main.fl:1030
+process-exit	src/tcp-server.fls:1622	없음	exact-name search:0
+range	src/tcp-server.fls:440	있음	self/cgc-main.fl:762
+recur	src/tcp-server.fls:646	있음	self/cgc-main.fl:1116
+regex_match	src/tcp-server.fls:362	있음	runtime/runtime.h:666
+regex_match_i	src/tcp-server.fls:362	없음	exact-name search:0
+regex_split	src/sql-core.fls:63	있음	runtime/runtime.h:672
+rem	src/sha1.fls:8	없음	exact-name search:0
+repeat	src/backup.fls:385	있음	self/cgc-main.fl:1140
+reset!	src/transaction-engine.fls:15	있음	self/cgc-main.fl:1038
+rest	src/tcp-server.fls:175	있음	self/cgc-main.fl:762
+reverse	src/engine.fls:1223	있음	self/cgc-main.fl:762
+route	src/http-server.fls:194	있음	self/cgc-main.fl:349
+server-json	src/http-server.fls:138	있음	self/cgc-main.fl:1255
+set-timeout	src/tcp-server.fls:304	없음	exact-name search:0
+sha256	src/http-server.fls:144	있음	self/cgc-main.fl:1328
+str	src/http-server.fls:23	있음	self/cgc-main.fl:1032
+str-index-of	src/tcp-server.fls:1376	있음	self/cgc-main.fl:1097
+str-replace	src/tcp-server.fls:1854	있음	self/cgc-main.fl:1163
+str-replace-in	src/tcp-server.fls:1854	없음	exact-name search:0
+str-slice	src/tcp-server.fls:418	있음	self/cgc-main.fl:1091
+str-to-num	src/tcp-server.fls:13	있음	self/cgc-main.fl:1100
+str-trim	src/sql-core.fls:33	있음	self/cgc-main.fl:1094
+str_ends_with	src/tcp-server.fls:711	있음	runtime/runtime.h:417
+str_join	src/sql-core.fls:432	다름	runtime/runtime.h:349
+str_join_lines	src/afj-db95.fls:347	없음	exact-name search:0
+str_lines	src/tcp-server.fls:457	없음	exact-name search:0
+str_lower	src/tcp-server.fls:40	있음	runtime/runtime.h:415
+str_slice	src/tcp-server.fls:1388	있음	runtime/runtime.h:463
+str_starts_with	src/tcp-server.fls:87	있음	runtime/runtime.h:416
+str_to_num	src/engine.fls:34	다름	runtime/runtime.h:189
+str_trim	src/tcp-server.fls:456	있음	runtime/runtime.h:413
+str_upper	src/tcp-server.fls:1432	있음	runtime/runtime.h:414
+string?	src/engine.fls:78	있음	self/cgc-main.fl:1047
+swap!	src/http-server.fls:59	있음	self/cgc-main.fl:1039
+take	src/transaction.fls:41	있음	self/cgc-main.fl:763
+tcp-drop	src/tcp-server.fls:1362	없음	exact-name search:0
+tcp-server-raw	src/tcp-server.fls:2033	없음	exact-name search:0
+tcp-server-stop	src/tcp-server.fls:2043	없음	exact-name search:0
+tcp-server-tls	src/tcp-server.fls:2030	없음	exact-name search:0
+tcp-write	src/tcp-server.fls:1593	없음	exact-name search:0
+throw	src/transaction.fls:15	있음	self/cgc-main.fl:335
+try	src/tcp-server.fls:459	있음	self/cgc-main.fl:329
+uuid_short	src/tcp-server.fls:724	없음	exact-name search:0
+vals	src/tcp-server.fls:562	있음	self/cgc-main.fl:761

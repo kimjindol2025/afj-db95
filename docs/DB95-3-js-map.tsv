@@ -1,0 +1,19 @@
+file	kind	freelang_port_target	delete_now	delete_condition
+bin/fl-script-unified.js	실행기	네이티브 실행 셸 진입점	아니오	네이티브 실행·검사·시험 동등성 확인 후
+tests/ip-rate-limit-runtime.js	시험	접속자 IP 통합 시험 .fls와 셸	아니오	동등한 실제 소켓 시험 통과 후
+tests/mariadb-wire-prepared.js	시험	MariaDB prepared 프로토콜 시험 .fls	아니오	동등 시험 통과 후
+tests/mariadb-wire-smoke.js	시험	MariaDB 표준 클라이언트 통합 셸 시험	아니오	동등 시험 통과 후
+tests/mariadb-wire-unit.js	시험	wire 단위 시험 .fls	아니오	동등 시험 통과 후
+tests/native-mariadb-auth.js	시험	인증 거부 통합 시험 .fls와 셸	아니오	동등 시험 통과 후
+tests/native-mariadb-prepared.js	시험	prepared 통합 시험 .fls와 셸	아니오	동등 시험 통과 후
+tests/native-mariadb-smoke.js	시험	네이티브 wire 통합 시험 .fls와 셸	아니오	동등 시험 통과 후
+tests/native-tls-policy-smoke.js	시험	mTLS·갱신 통합 시험 .fls와 셸	아니오	동등 시험 통과 후
+tests/native-tls-smoke.js	시험	TLS 소켓 통합 시험 .fls와 셸	아니오	동등 시험 통과 후
+tests/production-native-tls.js	시험	운영 TLS 통합 시험 .fls와 셸	아니오	동등 시험 통과 후
+tests/runtime-path.js	시험	네이티브 시험 실행기 경로 셸 헬퍼	아니오	모든 의존 시험 이식 후
+tests/tcp-concurrency-smoke.js	시험	TCP 동시성 시험 .fls와 셸	아니오	동등 시험 통과 후
+tests/tcp-long-soak.js	시험	5분 부하 시험 .fls와 셸	아니오	원래 시간·문턱값으로 동등 시험 통과 후
+tests/tcp-transaction-kill-recovery.js	시험	프로세스 강제 종료 복구 셸 시험	아니오	동등 시험 통과 후
+tests/tls-proxy-smoke.js	시험	TLS 프록시 통합 시험 .fls와 셸	아니오	동등 시험 통과 후
+tools/afj-mariadb-wire.js	도구	FreeLang wire 어댑터·네이티브 소켓	아니오	표준 클라이언트·prepared 통과 후
+tools/afj-tls-proxy.js	도구	네이티브 TLS 또는 OS TLS 라이브러리 연결	아니오	TLS·mTLS·갱신·실패 시험 통과 후
