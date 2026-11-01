@@ -52,3 +52,25 @@
       (if (= (error_message error) "WAL_CORRUPT")
         (println "PASS silent-wal-corrupt-middle")
         (throw error)))))
+
+(file_write path "\n")
+(try
+  (do (open-store path) (throw "WAL_CORRUPT_NOT_RAISED"))
+  (catch [error]
+    (if (= (error_message error) "WAL_CORRUPT")
+      (println "PASS silent-wal-blank-record")
+      (throw error))))
+
+(let [body {"op" "unknown"}
+      encoded (json_str body)]
+  (file_write path
+    (str (json_str {"version" afj-wal-version
+                    "length" (count encoded)
+                    "checksum" (sha256 encoded)
+                    "body" body}) "\n"))
+  (try
+    (do (open-store path) (throw "WAL_CORRUPT_NOT_RAISED"))
+    (catch [error]
+      (if (= (error_message error) "WAL_CORRUPT")
+        (println "PASS silent-wal-unknown-operation")
+        (throw error)))))
