@@ -1,0 +1,42 @@
+;; A batch that changes indexed values must leave the index equivalent to a scan.
+(load "../src/tcp-server.fls")
+
+(reset! engine-catalog {})
+(reset! engine-indexes {})
+(execute-ast
+  {"type" "create-table" "table" "silent_index_users"
+   "schema" {"columns" [{"name" "id" "type" "INTEGER"
+                            "nullable" false "primary" true}
+                           {"name" "name" "type" "TEXT" "nullable" true}
+                           {"name" "marker" "type" "TEXT" "nullable" true}]
+              "primary-key" "id" "unique-columns" ["name"]}})
+(afj-tcp-commit-asts
+  [{"type" "insert" "table" "silent_index_users"
+    "row" {"id" 1 "name" "before-a" "marker" "a"}}
+   {"type" "insert" "table" "silent_index_users"
+    "row" {"id" 2 "name" "before-b" "marker" "b"}}])
+(afj-tcp-commit-asts
+  [{"type" "update" "table" "silent_index_users"
+    "where" {"column" "id" "equals" 1}
+    "changes" {"name" "after-a"}}
+   {"type" "update" "table" "silent_index_users"
+    "where" {"column" "id" "equals" 2}
+    "changes" {"name" "after-b"}}])
+
+(let [indexed (execute-ast
+                {"type" "select" "table" "silent_index_users"
+                 "where" {"column" "name" "equals" "after-a"}})
+      scanned (execute-ast
+                {"type" "select" "table" "silent_index_users"
+                 "where" {"column" "marker" "equals" "a"}})
+      index-rows (get indexed "rows")
+      scan-rows (get scanned "rows")]
+  (println (str "DB95_INDEX_BATCH index=" (count index-rows)
+                " scan=" (count scan-rows)
+                " index_hash=" (sha256 (json_str index-rows))
+                " scan_hash=" (sha256 (json_str scan-rows))))
+  (if (and (= (get indexed "plan") "index-scan")
+           (= (get scanned "plan") "full-scan")
+           (= (json_str index-rows) (json_str scan-rows)))
+    (println "PASS silent-batch-index")
+    (throw "INDEX_MISMATCH")))
