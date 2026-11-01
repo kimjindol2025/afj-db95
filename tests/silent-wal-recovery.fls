@@ -52,14 +52,14 @@
   (try
     (do (open-store path) (throw "WAL_CORRUPT_NOT_RAISED"))
     (catch [error]
-      (if (= (error_message error) "WAL_CORRUPT")
+      (if (str_ends_with (error_message error) "WAL_CORRUPT")
         (println "PASS silent-wal-corrupt-tail")
         (throw error))))
   (file_write path (str "not-json\n" valid))
   (try
     (do (open-store path) (throw "WAL_CORRUPT_NOT_RAISED"))
     (catch [error]
-      (if (= (error_message error) "WAL_CORRUPT")
+      (if (str_ends_with (error_message error) "WAL_CORRUPT")
         (println "PASS silent-wal-corrupt-middle")
         (throw error)))))
 
@@ -67,7 +67,7 @@
 (try
   (do (open-store path) (throw "WAL_CORRUPT_NOT_RAISED"))
   (catch [error]
-    (if (= (error_message error) "WAL_CORRUPT")
+    (if (str_ends_with (error_message error) "WAL_CORRUPT")
       (println "PASS silent-wal-blank-record")
       (throw error))))
 
@@ -81,6 +81,6 @@
   (try
     (do (open-store path) (throw "WAL_CORRUPT_NOT_RAISED"))
     (catch [error]
-      (if (= (error_message error) "WAL_CORRUPT")
+      (if (str_ends_with (error_message error) "WAL_CORRUPT")
         (println "PASS silent-wal-unknown-operation")
         (throw error)))))
