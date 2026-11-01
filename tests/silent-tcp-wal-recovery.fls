@@ -22,7 +22,7 @@
         encoded (json_str body)]
     (file_append afj-tcp-wal
       (str (json_str
-             {"type" "prepare" "tx" (str "pending-" id)
+             {"type" "prepare" "tx" "pending"
               "version" 1 "length" (count encoded)
               "body" body "checksum" (sha256 encoded)}) "\n"))))
 (file_append afj-tcp-wal committed)
