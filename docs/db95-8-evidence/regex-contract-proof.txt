@@ -1,0 +1,10 @@
+BRANCH=peer PROBE=regex-order EXIT=0
+PATTERN_FIRST=true
+TEXT_FIRST=false
+BRANCH=peer PROBE=regex-type EXIT=1
+Uncaught error: regex_match_i: string arguments required
+BRANCH=mainline PROBE=regex-order EXIT=0
+PATTERN_FIRST=false
+TEXT_FIRST=true
+BRANCH=mainline PROBE=regex-type EXIT=0
+NIL_MATCH=true
