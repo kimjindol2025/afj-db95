@@ -1,0 +1,7 @@
+Private validation artifact SHA-256 (raw artifacts remain outside the repository)
+DB95 after gate log: 12dad56766c4421cb12ef42dfd0cc6c00c8c8a3bbaf798e383ec38efa9d68aed
+Sanitized DB95 after first-error TSV source: bd691b5f56c3fbc1c0c478b5273c6167547eee4cc2ce2c132fe1325893ef4b59
+Pre-implementation process_exit log: 69fd16032ff92cd9024460ce945f3b909980731db879cf05cc1989e7a5ab572f
+Final process_exit log: 78ccafdaddeffe56d91f7a149bbde83baf10e1165499bae771cad05407fdf036
+Full native regression log: e0024abd6b3da8e6022f4c432c8b2aca16984286552eca3bbbe99c80b2b6a1d9
+Static bootstrap audit log: 57bf13259a6393dad120ca8f7c30038ffeb8ddb2586620fb1ed6164fb2ea51bc

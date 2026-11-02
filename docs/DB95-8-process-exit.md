@@ -1,95 +1,99 @@
 # DB95-8 본줄기 병합·process_exit
 
-접수번호: RUN-20261102-06. DB95 창. 경로·주소·키·인증정보: <가림>.
+접수번호: RUN-20261102-06. 실행 중 경로·주소·키·인증정보는 `<가림>` 처리했다.
 
-## 출발점과 병합 후보
+## 1. 본줄기 병합 및 E09·E10·J-1
 
-시작 FX feat/db95-native-peer HEAD: 985824f4b60a3131e33a94ef0bab6a253b0d8fe5
-시작 afj-db95 native-run HEAD: 5e77c7237eb55f97c360ebe85f000d3191113e43
-두 HEAD가 지시값과 일치하고 양쪽 작업 트리가 CLEAN임을 확인했다.
+출발점은 지시값과 같았고, 시작 시 양 저장소 모두 CLEAN이었다.
 
-E09·E10·J-1이 포함된 본줄기 후보는 feat/blog-platform-completion이다.
-Forgejo·GitHub에서 조회·fetch한 최신 HEAD는 모두 02176817d44f4d998a3f0b8ac04cec4373e04a7f.
-E09 8bd0d3d5d8bd93b991aca2c081f229e35dae9271,
-E10 7379dd85c5960893becb9eecfbb67ee77dda0990,
-J-1 39b9bbcfef60911b43a20638b8f8dd7c24d953f7을 포함하는지 ancestry를 확인했다.
-현재 master의 1d217f53a8aade8a288c0dcad0a1ba23b610f102는 이 기능들을 포함한 본줄기 후보가 아니다.
+- FX `feat/db95-native-peer`: `985824f4b60a3131e33a94ef0bab6a253b0d8fe5`
+- afj-db95 `native-run`: `5e77c7237eb55f97c360ebe85f000d3191113e43`
+- E09·E10·J-1 본줄기 후보: `02176817d44f4d998a3f0b8ac04cec4373e04a7f` (Forgejo·GitHub 조회값 일치)
+- 병합 base: `1d217f53a8aade8a288c0dcad0a1ba23b610f102`
+- 사전 tree: `f432dd1a6e75b4e84116df7726fd13bc79c6b427`
+- 병합 커밋: `5887ac203a439f4aa2fa2ba84607fef6500e0244`, 부모 `985824f4b60a3131e33a94ef0bab6a253b0d8fe5` 및 `02176817d44f4d998a3f0b8ac04cec4373e04a7f`
 
-병합 전에 git merge-tree --write-tree --name-only로 검사했다.
-실제 merge·rebase·reset은 하지 않았다. MERGE_HEAD 없음, MERGE_STARTED=0.
-사전 검사 종료 1, 충돌 파일 3개:
+병합 전 충돌 파일은 `runtime/http.c`, `runtime/runtime.h`, `scripts/verify-native-bootstrap.sh` 3개였다. HTTP 본줄기의 요청·폼·미들웨어·TLS 구현을 보존하고 peer 소켓 주소 추출 및 `peer-address` 결과를 합쳤다. 헤더에는 두 API 계열 선언을 함께 두었다. Bootstrap 검증 목록에는 본줄기의 raw TCP 항목도 합쳤고 비교 조건은 유지했다.
 
-- runtime/http.c
-- runtime/runtime.h
-- scripts/verify-native-bootstrap.sh
+정규식 인자 순서는 두 문자열 인자만으로 자동 호환할 수 없는 실제 계약 충돌이었다. 사용자 승인 후 본줄기 underscore API의 text-first 계약을 보존하고, DB95 고정 fixture는 이미 존재하는 kebab-case native API로 호출 이름만 옮겼다. 고정 정답은 그대로 두었다. Strict native map 검사도 본줄기의 `has-key?` 호환 동작과 분리해 `map-has-key?` 이름으로 유지하고 DB6 fixture 호출만 옮겼다. DB7 `regex-match-i.expected`를 포함한 기대 출력·오류 값은 바꾸지 않았다. 구 raw TCP fixture는 기존 `fl-tcp-*`/`fl-yield` 이름을 사용하도록 정리했고, 현대 API 및 양쪽 구현은 유지했다.
 
-부모·base·충돌 목록 원문은 merge-preflight.txt. 원래 preview 로그는 비공개로 보존하고 해시를 기록했다.
-단순 텍스트 충돌 외에 아래 공개 API 약속 충돌을 확인해 실제 병합 전에 멈췄다.
+첫 병합 검사에서 `HAS_KEY_EXIT=1` (compatibility 경로가 strict 결과를 가림), 두 번째에서 `HAS_KEY_EXIT=1` (새 별칭이 파생 native 심볼 목록에 없었음)이 발생했다. 두 로그를 보존하고 native-symbols metadata를 재생성한 세 번째 검사에서 모두 통과했다. 같은 관문이 세 번 실패한 일은 없다.
 
-## 양쪽 기능·고정 정답의 충돌
+세 번째 병합 관문 결과: `BUILD_EXIT=0`, `HAS_KEY_EXIT=0`, `REGEX_EXIT=0`, `J1_LEAKS_EXIT=0`, `J1_MEASURE_EXIT=0`, `CHROME_http_EXIT=0`, `CHROME_cancel_EXIT=0`, `MERGE_GATES=PASS`.
 
-같은 두 probe를 각 브랜치의 native compiler와 해당 브랜치 runtime으로 빌드·실행했다.
-무거운 실행 전 ps를 기록하고 공통 flock 아래 실행했다. JS·TS·Python이나 node 러너를 사용하지 않았다.
-원문은 regex-contract-proof.txt.
+- E09 실제 Chrome: `L01_BROWSER_HTTP_PASS=20 FAIL=0`, `L01_BROWSER_CODE=COMPILER_GENERATED`, `L01_BROWSER_INJECTED_JS=0`.
+- E10 실제 Chrome: `L01_BROWSER_CANCEL_PASS=20 FAIL=0`; 취소 후 콜백 `0`, 정상 완료 콜백 `4`, 취소된 캡처 `0`, memory 검사 `PASS`.
+- J-1 기존 JSON fixture: `JSON_FAILURE_CASES=18 FAIL=0`; ASan/UBSan/LSan `PASS`. 실패 주입 누수 fixture는 각 API별 9종, 각각 100회 통과했다.
+- J-1 측정 조건은 `VM_LIMIT_KIB=2097152`, `TIME_LIMIT_SECONDS=120` 그대로다. 1,000/10,000/100,000 항목 순서로 legacy parse 초는 `0.000120595`, `0.000883703`, `0.009872328`; v11은 `0.000404218`, `0.003858817`, `0.037337678`. 최대 RSS KiB는 legacy `4828`, `5440`, `8892`, v11 `4828`, `5280`, `10632`. `VALUES=PASS` 모두.
+
+## 2. process_exit 정답 선고정 및 구현
+
+고정 시험을 구현보다 먼저 커밋했다: `8cc71558128e9b7db1e3742324f0777aeffe4f13`. 0·1·37 종료 코드 각각에 대해 FreeLang builtin 및 legacy native C ABI, 종료 직전 버퍼 출력, arena cleanup, atexit 관찰을 검사한다. 기대 stdout/status 파일은 `process-exit.expected.tsv`이며 변경하지 않았다.
+
+선행 실행 `process-before.log`에서 FreeLang 경로 3건은 통과했다. native C 확인은 `-Werror=implicit-function-declaration`에서 다음 첫 오류로 실패했다: `process_exit` 선언이 없음 (`process-exit-probe.c:21:5`). 시험 fixture의 첫 초안은 존재하지 않는 `to_number`도 사용했으나 구현 전에 기존 `str-to-num`으로 고쳤다 (`fcd99fe61ec56d7b9b7e49fd3f733d1f4d78960f`). 기대값은 그대로다. 최초 오라클 커밋 `8cc715...`부터 수정 후 커밋까지는 테스트 코드 정정뿐이며, 런타임 구현은 그 뒤에 했다.
+
+구현 커밋 `bac7be8a8ff12fd0f14029f3ce222d2161053d39`는 공개 native C 선언과 호환 wrapper를 추가해 기존 v11 `process-exit` handler로 위임한다. 새 종료 엔진이나 종료 코드 범위 규칙을 추가하지 않았다. 기존 handler의 유효성 검사, shutdown 예약 및 C 종료/정리 의미를 공유한다. 최종 compiler로 재실행한 `PROCESS_EXIT_PASS=6 FAIL=0 TOTAL=6`; 코드 0·1·37 각각 status와 출력이 정확히 일치하고 cleanup/atexit 검사가 통과했다.
+
+**이번에 언어에서 새로 생기거나 고쳐진 것:** legacy native generated-C 소비자를 위한 `process_exit(FLValue)` 선언 및 wrapper가 추가되어 기존 언어 handler를 호출한다. 이는 기존 `.fl` builtin의 신규 구현이 아니다. 본줄기 병합으로 DB95 branch에서 접근 가능해진 기존 HTTP·정규식·JSON·타이머 구현도 새로 작성한 것으로 세지 않는다.
+
+## 3. DB95 71건 재실행
+
+수정 전 기준은 DB95-7 `after.log`: `NATIVE_GATE_PASS=0 FAIL=71 TIMEOUT=0 SKIP=0 TOTAL=71`; 첫 오류 최대 묶음 `process_exit` 27건이었다. 병합 후·process ABI 구현 후 native gate 실행은 node 없이 완료했다: `NATIVE_GATE_PASS=15 FAIL=56 TIMEOUT=0 SKIP=0 TOTAL=71`.
+
+| 첫 오류/결과 묶음 | DB95-7 전 | DB95-8 후 |
+|---|---:|---:|
+| process_exit 첫 오류 | 27 | 0 |
+| `compiler:undeclared:peer` | 0 | 27 |
+| PASS | 0 | 15 |
+| `compiler:unsupported-literal` | 11 | 11 |
+| `missing-native:buf_str` | 4 | 4 |
+| `compiler-js-input:nil-kind` | 3 | 3 |
+| `missing-native:file_mtime` | 2 | 2 |
+| `missing-runner:node` | 2 | 2 |
+| `runtime:[oversized-wal-smoke-test] oversized WAL was accepted` | 2 | 2 |
+| `NATIVE_PASS_MARKER_MISSING` | 1 | 1 |
+| `missing-native:buf_to_binary` | 1 | 1 |
+| `missing-native:rem` | 1 | 1 |
+| `missing-native:sleep_ms` | 1 | 1 |
+| `production-tls-boundary` | 1 | 1 |
+
+이후 최대 묶음은 `compiler:undeclared:peer` 27건이다. 해당 실행 파일의 optional parameter `[peer nil]` 참조가 생성 C에서 선언되지 않는다. 이는 이번 수정으로 새로 발생한 오류가 아니다. DB95-7 원본 case 1 로그의 뒤쪽에도 `peer` undeclared 진단이 있었고, 당시에는 앞선 process_exit가 먼저 막았다. 현 범위인 process_exit 작업을 넘어서 이 묶음까지 임의로 고치지 않았다. TLS 경계도 구현하지 않았다. 남은 56건은 제품 전체 통과로 간주하지 않는다.
+
+분류표 첫 오류 원문은 `DB95-8` 보고서와 함께 커밋되는 sanitized TSV에 기록했다. 분류기는 원인별 건수 정규화에만 사용했고, TSV의 첫 진단 문자열에서 경로는 `<가림>` 처리했다. 실행 추적에서 `DB95_SUCCESSFUL_NODE_NPM_NPX_EXEC=0 PYTHON_EXEC=0`; 별도 native-only 규칙과 실행 파일 조회 결과를 함께 확인했다. node가 없는 두 테스트는 실제 node 실행 0이고 `missing-runner:node`로 분류했다. 옛 runner 전체 회귀는 `L06_EXISTING_REGRESSIONS=PASS` 및 `결과: 10 PASS / 0 FAIL / 10 총`이다.
+
+첫 오류 표와 그룹 건수는 [first-errors.tsv](evidence/db95-8/first-errors.tsv), [first-error-groups.tsv](evidence/db95-8/first-error-groups.tsv)다. 비공개 원문 로그의 SHA-256은 `evidence/db95-8/private-log-sha256.txt`에 기록했다.
+
+## 4. 회귀와 bootstrap
+
+최종 compiler 및 runtime에서 무거운 전체 체인을 공통 flock 잠금 아래 실행했고, 시작 전에 `ps`를 저장했다. DB95 gate는 71건을 기록하고 예상된 미해결 묶음 때문에 exit 1을 반환했으며, 이를 통과로 위장하지 않았다. 별도 scope 회귀 `has-key`, `raw-peer-ports`, `closure-map-capture`, `afj-file-names`, `closure-capture`, `peer-address`는 각각 exit 0.
+
+전체 회귀 `E08_COMPLETION=PASS`, `E07_COMPLETION=PASS`; CLI 4/4, Chrome timer 20/20, timer exception 3/3, L07 `L07_SELF_PASS=221`, `L07_SELF_FAIL=0`, leak case `REMAINING_LEAK_CASES=12/12`, small leaks `2/2`, worker `3/3` 및 leak 0. L06 HTTP `110/0`, timeout `2/2`, TLS `110/0`, JSON `13/0`, native TCP `8/0`. 기존 DB6 strict map 및 DB7 regex 재현 시험도 통과했다. E09/E10/J-1 결과는 위 병합 관문 수치와 같다.
+
+격리 native bootstrap은 strace 없이 정적 감사 방식으로 실행했다. seed는 시작 기준과 동일: `STAGE0_SHA=f7425bf086d99d11231ba79296e194fcc36b454379e46d44131bafb0dc74101c`. 결과 원문:
 
 ```text
-BRANCH=peer PROBE=regex-order EXIT=0
-PATTERN_FIRST=true
-TEXT_FIRST=false
-BRANCH=peer PROBE=regex-type EXIT=1
-Uncaught error: regex_match_i: string arguments required
-BRANCH=mainline PROBE=regex-order EXIT=0
-PATTERN_FIRST=false
-TEXT_FIRST=true
-BRANCH=mainline PROBE=regex-type EXIT=0
-NIL_MATCH=true
+STAGE2_SHA=2e7a802f8102c5bf4826bae532486778212ebcbe50539ab74316936f2c3d122f
+STAGE3_SHA=2e7a802f8102c5bf4826bae532486778212ebcbe50539ab74316936f2c3d122f
+STAGE4_SHA=2e7a802f8102c5bf4826bae532486778212ebcbe50539ab74316936f2c3d122f
+RESIDUAL_PROCESSES=0
+CLEAN_CHECKOUT=PASS
+BOOTSTRAP_STRACE=0
+BOOTSTRAP_DYNAMIC_EXEC_COUNTS=UNOBSERVED
+BOOTSTRAP_EXIT=0
+NODE=0 NPM=0 NPX=0 JS=0 PYTHON=0
 ```
 
-첫 probe의 두 식은 각각 (regex_match "^A+$" "AAA")와 (regex_match "AAA" "^A+$")다.
-DB95 가지는 기존 native pattern-first, 본줄기는 v11 text-first로 해석한다.
-동일한 함수 이름과 두 문자열 인자만으로 두 약속을 동시에 선택할 수 없다.
-둘째 probe의 식은 (regex_match_i nil ".*")다. DB95-7의 native 계약은 문자열 외 인자 오류,
-본줄기의 v11 계약은 자동 문자열 변환이므로 결과가 다르다.
+정적 금지 프로세스 token scan은 0건, 범위는 seed와 생성 compiler translation unit이다. 동적 bootstrap 실행 감사는 이번 비-strace 경로에서 관측하지 않았으므로 0 실행으로 주장하지 않는다. stage2=3=4 해시는 서로 동일하다. seed 교체는 하지 않았다.
 
-DB95-7 고정 시험은 native pattern-first 결과와 문자열 인자 오류를 검사한다.
-본줄기 phase3 정규식 시험은 v11 text-first와 자체 정규식 VM 동작을 검사한다.
-기대값을 바꾸거나 한쪽 분기를 덮어서 양쪽 통과로 보고하지 않았다.
+본줄기 병합·process_exit·native symbols 메타데이터 변경 외에 DB95 `.fls` 제품 구현, db95 JS runner, seed, 고정 기대값/문턱값은 수정하지 않았다. 새 JS/TS/Python 소스 파일은 추가하지 않았다. 검수 단계 경계를 유지하며 DB95 영속성·트랜잭션·네트워크 제품 완료를 주장하지 않는다.
 
-본줄기에는 기존 native kebab-case API와 v11 underscore API를 구분하는 경로가 있다.
-구체적인 제안은 본줄기의 regex_match·regex_match_i를 유지하고,
-DB95-7의 레거시 검사 호출을 기존 regex-match·regex-match-i 이름으로 옮기는 것이다.
-기대값·문턱값은 유지하되, 고정 검사에서 가리키는 API 이름의 이관이므로 사용자 판단을 요청했다.
-승인 전에는 검사 호출·기대값·컴파일러 바인딩을 수정하지 않는다.
+## 5. 푸시 및 최종 상태
 
-이는 지시서 1의 “충돌은 양쪽 기능을 모두 살리는 쪽으로 푼다. 판단이 어려우면 멈추고 보고한다”에 따른 중단이다.
-정답값 변경이나 검사 끄기를 요청하는 것이 아니며, 공개 API 이름·버전 구분 결정을 기다린다.
+아래 기록은 실제 Forgejo→GitHub 순서 푸시와 원격 ref 검증 후 채운다.
 
-## process_exit와 언어 성과 칸
+| 저장소/branch | 최종 로컬 HEAD | Forgejo | GitHub | 작업 트리 |
+|---|---|---|---|---|
+| freelang-v11-fx `feat/db95-native-peer` | `be83234e627cfcc85abb7ee993e8309cbdd3730b` | 대기 | 대기 | CLEAN |
+| afj-db95 `native-run` | 대기 | 대기 | 대기 | CLEAN |
 
-본줄기의 v11-compat.h에는 process-exit 구현이 이미 있다.
-underscore process_exit는 builtin 이름 정규화로 같은 handler에 연결된다.
-현재 handler는 정수 종료 코드를 검사하고 fl_schedule_shutdown 뒤 C exit를 호출한다.
-따라서 본줄기 병합 후 고정 시험으로 실제 종료 코드·출력 flush·정리 작업을 확인한 뒤
-부족한 동작만 수정해야 한다. 기존 구현을 새 성과로 중복 보고하지 않는다.
-
-**이번에 언어에서 새로 생기거나 고쳐진 것: 아직 없음.**
-실제 병합을 보류했으므로 process_exit 정답 선커밋·구현, 71건 재실행,
-E09·E10·J-1·DB95-6/7 병합 후 회귀, native 회귀·옛 러너·격리 bootstrap은 아직 미실행이다.
-이전 실행의 통과 수나 해시를 이번 병합 결과로 복사하지 않았다.
-
-단계 기준은 메모리 관계형 코어 검증이며, 영속성·트랜잭션·네트워크 제품 완성이나 DB95 출시 완료를 주장하지 않는다.
-23·25 서버 및 금지 제품에는 명령·시험을 실행하지 않았고 seed·JS 러너·기대값·임계값을 변경하지 않았다.
-
-## 판정
-
-| 항목 | 현재 판정 |
-|---|---|
-| 1 본줄기 병합·E09·E10·J-1 | 미완료: 충돌 목록·계약 재현 후 API 이관 결정 대기 |
-| 2 process_exit 선커밋·구현 | 미실행: 병합 이전 |
-| 3 71건 재실행 | 미실행 |
-| 4 회귀·bootstrap | 미실행 |
-| 5 푸시·원격 일치·CLEAN | 미실행: 원격 변경 없음 |
-
-보고서·사전 진단 증거만 보존한다. 원본 로그·ps·probe 해시는 raw-sha256.txt에 기록했다.
-
-DB95_SUMMARY=0/5
+DB95_SUMMARY=4/5

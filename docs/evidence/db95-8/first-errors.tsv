@@ -1,0 +1,72 @@
+CASE	LABEL	STATUS	GROUP	FIRST_ERROR
+1	syntax: tcp-server	FAIL	compiler:undeclared:peer	<가림>:6338:139: error: ‘peer’ undeclared (first use in this function)
+2	syntax: afj-db95	PASS	PASS	NONE (PASS)
+3	raw binary boundary	FAIL	missing-native:buf_to_binary	Uncaught error: [buf-to-binary] Function not found: buf-to-binary (at line 2, col 0)
+4	MariaDB packet codec	FAIL	missing-native:buf_str	Uncaught error: [buf-str] Function not found: buf-str (at line 116, col 0)
+5	MariaDB charset contract	FAIL	missing-native:buf_str	Uncaught error: [buf-str] Function not found: buf-str (at line 116, col 0)
+6	COLLATE contract	PASS	PASS	NONE (PASS)
+7	page/WAL smoke	FAIL	runtime:[oversized-wal-smoke-test] oversized WAL was accepted	Uncaught error (line 455): [oversized-wal-smoke-test] oversized WAL was accepted (at line 486, col 0)
+8	metrics contract	FAIL	compiler:undeclared:peer	<가림>:6347:139: error: ‘peer’ undeclared (first use in this function)
+9	local canary rollback	FAIL	missing-runner:node	<가림>: line 11: node: command not found
+10	large corpus	FAIL	missing-native:rem	Uncaught error (line 3051): [make-rows] [rem] Function not found: rem (at line 11, col 0)
+11	TCP catalog pages	FAIL	compiler:undeclared:peer	<가림>:6338:139: error: ‘peer’ undeclared (first use in this function)
+12	TCP lazy catalog eviction	FAIL	compiler:undeclared:peer	<가림>:6338:139: error: ‘peer’ undeclared (first use in this function)
+13	persistent recursive B+Tree	FAIL	runtime:[oversized-wal-smoke-test] oversized WAL was accepted	Uncaught error (line 455): [oversized-wal-smoke-test] oversized WAL was accepted (at line 486, col 0)
+14	bounded B+Tree range	PASS	PASS	NONE (PASS)
+15	compound unique index	PASS	PASS	NONE (PASS)
+16	compound predicate range	PASS	PASS	NONE (PASS)
+17	schema MVCC merge	FAIL	compiler:undeclared:peer	<가림>:6338:139: error: ‘peer’ undeclared (first use in this function)
+18	composite type order	PASS	PASS	NONE (PASS)
+19	composite NULL order	PASS	PASS	NONE (PASS)
+20	schema-aware composite order	PASS	PASS	NONE (PASS)
+21	mixed declared composite types	PASS	PASS	NONE (PASS)
+22	composite reopen rebuild	PASS	PASS	NONE (PASS)
+23	schema-aware composite range	PASS	PASS	NONE (PASS)
+24	TCP concurrency	FAIL	compiler-js-input:nil-kind	Uncaught error (line 761): (get nil "kind") — nil에 key 접근 불가. nil 체크 먼저.
+25	TCP 5m performance envelope	FAIL	compiler-js-input:nil-kind	Uncaught error (line 761): (get nil "kind") — nil에 key 접근 불가. nil 체크 먼저.
+26	backup smoke	FAIL	missing-native:file_mtime	Uncaught error (line 210): [backup-smoke-test] [backup-bundle] [backup-manifest] [file_mtime] Function not found: file_mtime (at line 18, col 0)
+27	backup restore soak	FAIL	missing-native:file_mtime	Uncaught error (line 219): [backup-smoke-test] [backup-bundle] [backup-manifest] [file_mtime] Function not found: file_mtime (at line 18, col 0)
+28	compatibility scorecard	FAIL	NATIVE_PASS_MARKER_MISSING	NATIVE_PASS_MARKER_MISSING
+29	AFJ error token mapping	FAIL	compiler:undeclared:peer	<가림>:6338:139: error: ‘peer’ undeclared (first use in this function)
+30	MariaDB remediation regression	FAIL	compiler:undeclared:peer	<가림>:6380:139: error: ‘peer’ undeclared (first use in this function)
+31	MariaDB unsupported contract	PASS	PASS	NONE (PASS)
+32	TCP database session scope	FAIL	compiler:undeclared:peer	<가림>:6367:139: error: ‘peer’ undeclared (first use in this function)
+33	WAL format	FAIL	compiler:undeclared:peer	<가림>:6354:139: error: ‘peer’ undeclared (first use in this function)
+34	forced-kill WAL recovery	FAIL	missing-runner:node	<가림>: line 24: node: command not found
+35	TCP transaction forced-kill recovery	FAIL	compiler:unsupported-literal	[CGC-ERR] unsupported literal type=unknown line=12
+36	transaction isolation	FAIL	compiler:undeclared:peer	<가림>:6338:139: error: ‘peer’ undeclared (first use in this function)
+37	isolation levels	FAIL	compiler:undeclared:peer	<가림>:6338:139: error: ‘peer’ undeclared (first use in this function)
+38	MVCC conflicts	FAIL	compiler:undeclared:peer	<가림>:6352:139: error: ‘peer’ undeclared (first use in this function)
+39	range predicate conflict	FAIL	compiler:undeclared:peer	<가림>:6338:139: error: ‘peer’ undeclared (first use in this function)
+40	row-version MVCC core	PASS	PASS	NONE (PASS)
+41	row-version WAL recovery	FAIL	compiler:undeclared:peer	<가림>:6338:139: error: ‘peer’ undeclared (first use in this function)
+42	row-version catalog checkpoint	FAIL	compiler:undeclared:peer	<가림>:6338:139: error: ‘peer’ undeclared (first use in this function)
+43	savepoint	FAIL	compiler:undeclared:peer	<가림>:6338:139: error: ‘peer’ undeclared (first use in this function)
+44	deadlock	FAIL	compiler:undeclared:peer	<가림>:6338:139: error: ‘peer’ undeclared (first use in this function)
+45	lock timeout	FAIL	compiler:undeclared:peer	<가림>:6338:139: error: ‘peer’ undeclared (first use in this function)
+46	prepared JSON adapter	FAIL	compiler:undeclared:peer	<가림>:6338:139: error: ‘peer’ undeclared (first use in this function)
+47	request limits	FAIL	compiler:undeclared:peer	<가림>:6347:139: error: ‘peer’ undeclared (first use in this function)
+48	slow request timeout	FAIL	compiler:undeclared:peer	<가림>:6338:139: error: ‘peer’ undeclared (first use in this function)
+49	auth lockout	PASS	PASS	NONE (PASS)
+50	auth lockout reset	FAIL	missing-native:sleep_ms	Uncaught error (line 176): [sleep_ms] Function not found: sleep_ms (at line 18, col 0)
+51	auth state recovery	PASS	PASS	NONE (PASS)
+52	session cleanup	FAIL	compiler:undeclared:peer	<가림>:6338:139: error: ‘peer’ undeclared (first use in this function)
+53	session TTL	FAIL	compiler:undeclared:peer	<가림>:6338:139: error: ‘peer’ undeclared (first use in this function)
+54	connection rate limit	FAIL	compiler:undeclared:peer	<가림>:6338:139: error: ‘peer’ undeclared (first use in this function)
+55	peer IP rate limit	FAIL	compiler:undeclared:peer	<가림>:6338:139: error: ‘peer’ undeclared (first use in this function)
+56	runtime peer IP rate limit	FAIL	compiler:unsupported-literal	[CGC-ERR] unsupported literal type=unknown line=12
+57	fragmented TCP requests	FAIL	compiler:undeclared:peer	<가림>:6338:139: error: ‘peer’ undeclared (first use in this function)
+58	SQL error mapping	FAIL	compiler:undeclared:peer	<가림>:6338:139: error: ‘peer’ undeclared (first use in this function)
+59	production TLS boundary	FAIL	production-tls-boundary	production TLS boundary returned an unexpected error
+60	native TLS listener	FAIL	compiler:unsupported-literal	[CGC-ERR] unsupported literal type=unknown line=9
+61	native TLS mTLS/reload	FAIL	compiler:unsupported-literal	[CGC-ERR] unsupported literal type=unknown line=9
+62	production native TLS integration	FAIL	compiler:unsupported-literal	[CGC-ERR] unsupported literal type=unknown line=9
+63	TLS adapter handshake/reload	FAIL	compiler:unsupported-literal	[CGC-ERR] unsupported literal type=unknown line=8
+64	MariaDB wire packet unit	FAIL	compiler:unsupported-literal	[CGC-ERR] unsupported literal type=unknown line=9
+65	MariaDB mysql_native_password SHA-1	FAIL	missing-native:buf_str	Uncaught error: [buf-str] Function not found: buf-str (at line 116, col 0)
+66	MariaDB wire prepared	FAIL	compiler-js-input:nil-kind	Uncaught error (line 761): (get nil "kind") — nil에 key 접근 불가. nil 체크 먼저.
+67	MariaDB standard-client smoke	FAIL	compiler:unsupported-literal	[CGC-ERR] unsupported literal type=unknown line=15
+68	native MariaDB wire	FAIL	compiler:unsupported-literal	[CGC-ERR] unsupported literal type=unknown line=9
+69	native MariaDB auth rejection	FAIL	compiler:unsupported-literal	[CGC-ERR] unsupported literal type=unknown line=11
+70	native MariaDB decoder	FAIL	missing-native:buf_str	Uncaught error: [buf-str] Function not found: buf-str (at line 116, col 0)
+71	native MariaDB prepared	FAIL	compiler:unsupported-literal	[CGC-ERR] unsupported literal type=unknown line=11

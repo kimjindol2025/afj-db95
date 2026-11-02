@@ -1,0 +1,13 @@
+27	compiler:undeclared:peer
+15	PASS
+11	compiler:unsupported-literal
+4	missing-native:buf_str
+3	compiler-js-input:nil-kind
+2	missing-native:file_mtime
+2	missing-runner:node
+2	runtime:[oversized-wal-smoke-test] oversized WAL was accepted
+1	NATIVE_PASS_MARKER_MISSING
+1	missing-native:buf_to_binary
+1	missing-native:rem
+1	missing-native:sleep_ms
+1	production-tls-boundary
