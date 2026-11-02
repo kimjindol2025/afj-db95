@@ -1,0 +1,72 @@
+CASE	LABEL	STATUS	GROUP	FIRST_ERROR
+1	syntax: tcp-server	FAIL	missing-native:regex_match_i	<가림>:1480:12: error: implicit declaration of function ‘regex_match_i’; did you mean ‘regex_match’? [-Wimplicit-function-declaration]
+2	syntax: afj-db95	FAIL	missing-native:json_str	<가림>:168:23: error: implicit declaration of function ‘json_str’; did you mean ‘json_parse’? [-Wimplicit-function-declaration]
+3	raw binary boundary	FAIL	missing-native:buf_to_binary	<fl>:2:14: error: implicit declaration of function ‘buf_to_binary’ [-Wimplicit-function-declaration]
+4	MariaDB packet codec	FAIL	missing-native:buf_str	<fl>:9:28: error: implicit declaration of function ‘buf_str’ [-Wimplicit-function-declaration]
+5	MariaDB charset contract	FAIL	missing-native:buf_str	<fl>:9:28: error: implicit declaration of function ‘buf_str’ [-Wimplicit-function-declaration]
+6	COLLATE contract	FAIL	duplicate-native:__fl_wrap_token_at	<가림>:1678:16: error: redefinition of ‘__fl_wrap_token_at’
+7	page/WAL smoke	FAIL	missing-native:json_str	<가림>:168:23: error: implicit declaration of function ‘json_str’; did you mean ‘json_parse’? [-Wimplicit-function-declaration]
+8	metrics contract	FAIL	missing-native:regex_match_i	<가림>:1482:12: error: implicit declaration of function ‘regex_match_i’; did you mean ‘regex_match’? [-Wimplicit-function-declaration]
+9	local canary rollback	FAIL	missing-runner:node	<가림>: line 11: node: command not found
+10	large corpus	FAIL	missing-native:arr_flatten	<fl>:299:107: error: implicit declaration of function ‘arr_flatten’; did you mean ‘flatten’? [-Wimplicit-function-declaration]
+11	TCP catalog pages	FAIL	missing-native:regex_match_i	<가림>:1480:12: error: implicit declaration of function ‘regex_match_i’; did you mean ‘regex_match’? [-Wimplicit-function-declaration]
+12	TCP lazy catalog eviction	FAIL	missing-native:regex_match_i	<가림>:1480:12: error: implicit declaration of function ‘regex_match_i’; did you mean ‘regex_match’? [-Wimplicit-function-declaration]
+13	persistent recursive B+Tree	FAIL	missing-native:json_str	<가림>:208:23: error: implicit declaration of function ‘json_str’; did you mean ‘json_parse’? [-Wimplicit-function-declaration]
+14	bounded B+Tree range	FAIL	missing-native:arr_flatten	<fl>:299:107: error: implicit declaration of function ‘arr_flatten’; did you mean ‘flatten’? [-Wimplicit-function-declaration]
+15	compound unique index	FAIL	duplicate-native:__fl_wrap_token_at	<가림>:1676:16: error: redefinition of ‘__fl_wrap_token_at’
+16	compound predicate range	FAIL	duplicate-native:__fl_wrap_token_at	<가림>:1697:16: error: redefinition of ‘__fl_wrap_token_at’
+17	schema MVCC merge	FAIL	missing-native:regex_match_i	<가림>:1480:12: error: implicit declaration of function ‘regex_match_i’; did you mean ‘regex_match’? [-Wimplicit-function-declaration]
+18	composite type order	FAIL	missing-native:arr_flatten	<fl>:299:107: error: implicit declaration of function ‘arr_flatten’; did you mean ‘flatten’? [-Wimplicit-function-declaration]
+19	composite NULL order	FAIL	missing-native:arr_flatten	<fl>:299:107: error: implicit declaration of function ‘arr_flatten’; did you mean ‘flatten’? [-Wimplicit-function-declaration]
+20	schema-aware composite order	FAIL	missing-native:arr_flatten	<fl>:299:107: error: implicit declaration of function ‘arr_flatten’; did you mean ‘flatten’? [-Wimplicit-function-declaration]
+21	mixed declared composite types	FAIL	missing-native:arr_flatten	<fl>:299:107: error: implicit declaration of function ‘arr_flatten’; did you mean ‘flatten’? [-Wimplicit-function-declaration]
+22	composite reopen rebuild	FAIL	missing-native:arr_flatten	<fl>:299:107: error: implicit declaration of function ‘arr_flatten’; did you mean ‘flatten’? [-Wimplicit-function-declaration]
+23	schema-aware composite range	FAIL	duplicate-native:__fl_wrap_token_at	<가림>:1669:16: error: redefinition of ‘__fl_wrap_token_at’
+24	TCP concurrency	FAIL	compiler-js-input:nil-kind	Uncaught error (line 736): (get nil "kind") — nil에 key 접근 불가. nil 체크 먼저.
+25	TCP 5m performance envelope	FAIL	compiler-js-input:nil-kind	Uncaught error (line 736): (get nil "kind") — nil에 key 접근 불가. nil 체크 먼저.
+26	backup smoke	FAIL	missing-native:file_read	<가림>:57:38: error: implicit declaration of function ‘file_read’; did you mean ‘fl_file_read’? [-Wimplicit-function-declaration]
+27	backup restore soak	FAIL	missing-native:file_read	<가림>:59:38: error: implicit declaration of function ‘file_read’; did you mean ‘fl_file_read’? [-Wimplicit-function-declaration]
+28	compatibility scorecard	FAIL	runtime:compatibility-scorecard	Uncaught error (line 41): compatibility scorecard failure
+29	AFJ error token mapping	FAIL	missing-native:regex_match_i	<가림>:1480:12: error: implicit declaration of function ‘regex_match_i’; did you mean ‘regex_match’? [-Wimplicit-function-declaration]
+30	MariaDB remediation regression	FAIL	missing-native:regex_match_i	<가림>:1494:12: error: implicit declaration of function ‘regex_match_i’; did you mean ‘regex_match’? [-Wimplicit-function-declaration]
+31	MariaDB unsupported contract	FAIL	missing-native:regex_match_i	<가림>:1030:71: error: implicit declaration of function ‘regex_match_i’; did you mean ‘regex_match’? [-Wimplicit-function-declaration]
+32	TCP database session scope	FAIL	missing-native:regex_match_i	<가림>:1488:12: error: implicit declaration of function ‘regex_match_i’; did you mean ‘regex_match’? [-Wimplicit-function-declaration]
+33	WAL format	FAIL	missing-native:regex_match_i	<가림>:1483:12: error: implicit declaration of function ‘regex_match_i’; did you mean ‘regex_match’? [-Wimplicit-function-declaration]
+34	forced-kill WAL recovery	FAIL	missing-runner:node	<가림>: line 24: node: command not found
+35	TCP transaction forced-kill recovery	FAIL	compiler:unsupported-literal	[CGC-ERR] unsupported literal type=unknown line=12
+36	transaction isolation	FAIL	missing-native:regex_match_i	<가림>:1480:12: error: implicit declaration of function ‘regex_match_i’; did you mean ‘regex_match’? [-Wimplicit-function-declaration]
+37	isolation levels	FAIL	missing-native:regex_match_i	<가림>:1480:12: error: implicit declaration of function ‘regex_match_i’; did you mean ‘regex_match’? [-Wimplicit-function-declaration]
+38	MVCC conflicts	FAIL	missing-native:regex_match_i	<가림>:1482:12: error: implicit declaration of function ‘regex_match_i’; did you mean ‘regex_match’? [-Wimplicit-function-declaration]
+39	range predicate conflict	FAIL	missing-native:regex_match_i	<가림>:1480:12: error: implicit declaration of function ‘regex_match_i’; did you mean ‘regex_match’? [-Wimplicit-function-declaration]
+40	row-version MVCC core	FAIL	missing-native:conj	<fl>:86:441: error: implicit declaration of function ‘conj’ [-Wimplicit-function-declaration]
+41	row-version WAL recovery	FAIL	missing-native:regex_match_i	<가림>:1480:12: error: implicit declaration of function ‘regex_match_i’; did you mean ‘regex_match’? [-Wimplicit-function-declaration]
+42	row-version catalog checkpoint	FAIL	missing-native:regex_match_i	<가림>:1480:12: error: implicit declaration of function ‘regex_match_i’; did you mean ‘regex_match’? [-Wimplicit-function-declaration]
+43	savepoint	FAIL	missing-native:regex_match_i	<가림>:1480:12: error: implicit declaration of function ‘regex_match_i’; did you mean ‘regex_match’? [-Wimplicit-function-declaration]
+44	deadlock	FAIL	missing-native:regex_match_i	<가림>:1480:12: error: implicit declaration of function ‘regex_match_i’; did you mean ‘regex_match’? [-Wimplicit-function-declaration]
+45	lock timeout	FAIL	missing-native:regex_match_i	<가림>:1480:12: error: implicit declaration of function ‘regex_match_i’; did you mean ‘regex_match’? [-Wimplicit-function-declaration]
+46	prepared JSON adapter	FAIL	missing-native:regex_match_i	<가림>:1480:12: error: implicit declaration of function ‘regex_match_i’; did you mean ‘regex_match’? [-Wimplicit-function-declaration]
+47	request limits	FAIL	missing-native:regex_match_i	<가림>:1482:12: error: implicit declaration of function ‘regex_match_i’; did you mean ‘regex_match’? [-Wimplicit-function-declaration]
+48	slow request timeout	FAIL	missing-native:regex_match_i	<가림>:1480:12: error: implicit declaration of function ‘regex_match_i’; did you mean ‘regex_match’? [-Wimplicit-function-declaration]
+49	auth lockout	FAIL	missing-native:json_str	<fl>:76:123: error: implicit declaration of function ‘json_str’; did you mean ‘json_parse’? [-Wimplicit-function-declaration]
+50	auth lockout reset	FAIL	missing-native:json_str	<fl>:76:123: error: implicit declaration of function ‘json_str’; did you mean ‘json_parse’? [-Wimplicit-function-declaration]
+51	auth state recovery	FAIL	missing-native:json_str	<fl>:76:123: error: implicit declaration of function ‘json_str’; did you mean ‘json_parse’? [-Wimplicit-function-declaration]
+52	session cleanup	FAIL	missing-native:regex_match_i	<가림>:1480:12: error: implicit declaration of function ‘regex_match_i’; did you mean ‘regex_match’? [-Wimplicit-function-declaration]
+53	session TTL	FAIL	missing-native:regex_match_i	<가림>:1480:12: error: implicit declaration of function ‘regex_match_i’; did you mean ‘regex_match’? [-Wimplicit-function-declaration]
+54	connection rate limit	FAIL	missing-native:regex_match_i	<가림>:1480:12: error: implicit declaration of function ‘regex_match_i’; did you mean ‘regex_match’? [-Wimplicit-function-declaration]
+55	peer IP rate limit	FAIL	missing-native:regex_match_i	<가림>:1480:12: error: implicit declaration of function ‘regex_match_i’; did you mean ‘regex_match’? [-Wimplicit-function-declaration]
+56	runtime peer IP rate limit	FAIL	compiler:unsupported-literal	[CGC-ERR] unsupported literal type=unknown line=12
+57	fragmented TCP requests	FAIL	missing-native:regex_match_i	<가림>:1480:12: error: implicit declaration of function ‘regex_match_i’; did you mean ‘regex_match’? [-Wimplicit-function-declaration]
+58	SQL error mapping	FAIL	missing-native:regex_match_i	<가림>:1480:12: error: implicit declaration of function ‘regex_match_i’; did you mean ‘regex_match’? [-Wimplicit-function-declaration]
+59	production TLS boundary	FAIL	production-tls-boundary	production TLS boundary returned an unexpected error
+60	native TLS listener	FAIL	compiler:unsupported-literal	[CGC-ERR] unsupported literal type=unknown line=9
+61	native TLS mTLS/reload	FAIL	compiler:unsupported-literal	[CGC-ERR] unsupported literal type=unknown line=9
+62	production native TLS integration	FAIL	compiler:unsupported-literal	[CGC-ERR] unsupported literal type=unknown line=9
+63	TLS adapter handshake/reload	FAIL	compiler:unsupported-literal	[CGC-ERR] unsupported literal type=unknown line=8
+64	MariaDB wire packet unit	FAIL	compiler:unsupported-literal	[CGC-ERR] unsupported literal type=unknown line=9
+65	MariaDB mysql_native_password SHA-1	FAIL	duplicate-native:__fl_wrap_sha1_add	<가림>:242:16: error: redefinition of ‘__fl_wrap_sha1_add’
+66	MariaDB wire prepared	FAIL	compiler-js-input:nil-kind	Uncaught error (line 736): (get nil "kind") — nil에 key 접근 불가. nil 체크 먼저.
+67	MariaDB standard-client smoke	FAIL	compiler:unsupported-literal	[CGC-ERR] unsupported literal type=unknown line=15
+68	native MariaDB wire	FAIL	compiler:unsupported-literal	[CGC-ERR] unsupported literal type=unknown line=9
+69	native MariaDB auth rejection	FAIL	compiler:unsupported-literal	[CGC-ERR] unsupported literal type=unknown line=11
+70	native MariaDB decoder	FAIL	missing-native:buf_str	<fl>:9:28: error: implicit declaration of function ‘buf_str’ [-Wimplicit-function-declaration]
+71	native MariaDB prepared	FAIL	compiler:unsupported-literal	[CGC-ERR] unsupported literal type=unknown line=11
