@@ -358,6 +358,22 @@ L01_BROWSER_CANCEL_PASS=20 FAIL=0
 
 원본 로그·실행 추적·ps는 비공개 <가림>에 보존하고 raw-sha256.txt에 원본 해시를 기록했다.
 공개본은 경로·주소를 가리고 CR을 문자 그대로의 \r로 표시하며 수치·해시는 유지한다.
-커밋 전 민감정보 diff를 확인하고 Forgejo→GitHub 순서로 제출하며 최종 원격 ref·CLEAN 결과를 추가한다.
+커밋 전 민감정보 diff 검사 PASS. 두 저장소를 모두 Forgejo에 먼저, 모두 GitHub에 다음으로 제출했다.
+아래는 구현·전체 증거 제출 커밋의 원격 ref를 실제 조회한 원문이다.
+
+```text
+FX_FORGEJO_HEAD=985824f4b60a3131e33a94ef0bab6a253b0d8fe5
+DB95_FORGEJO_HEAD=eee9b349fbba8b5f72b0960749a96531aaef97b0
+FX_GITHUB_HEAD=985824f4b60a3131e33a94ef0bab6a253b0d8fe5
+DB95_GITHUB_HEAD=eee9b349fbba8b5f72b0960749a96531aaef97b0
+FX_WORKTREE=CLEAN
+DB95_WORKTREE=CLEAN
+PUSH_ORDER=BOTH_FORGEJO_THEN_BOTH_GITHUB
+```
+
+원문: push-verification.txt. 푸시 검증 기록만 추가한 후속 db95 문서 커밋도
+Forgejo→GitHub 순서로 제출하고 최종 원격 ref를 다시 비교한다.
+후속 문서 커밋 자체의 HEAD는 자기 참조를 피하여 최종 채팅에 원문으로 기록한다.
+5번의 미완료 이유는 지정 브랜치 E09·E10 미구현이며 푸시·CLEAN 검사는 통과했다.
 
 DB95_SUMMARY=4/5
