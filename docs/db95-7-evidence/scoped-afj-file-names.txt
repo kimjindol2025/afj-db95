@@ -1,0 +1,2 @@
+Compiled <가림> -> <가림>
+AFJ_FILE_NAMES=PASS

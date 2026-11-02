@@ -1,0 +1,9 @@
+TARGET_FX_HEAD=985824f4b60a3131e33a94ef0bab6a253b0d8fe5
+browser-target.h_PRESENT=0
+browser-core.fl_PRESENT=0
+browser-http.fl_PRESENT=0
+browser-cancel.fl_PRESENT=0
+verify-l01-browser-target.sh_PRESENT=0
+BROWSER_CLI_FLAG_PRESENT=0
+E09_TARGET_CHROME=UNAVAILABLE
+E10_TARGET_CHROME=UNAVAILABLE

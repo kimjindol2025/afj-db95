@@ -1,0 +1,14 @@
+27	missing-native:process_exit
+11	compiler:unsupported-literal
+7	missing-native:arr_flatten
+6	missing-native:json_str
+5	duplicate-native:__fl_wrap_token_at
+3	compiler-js-input:nil-kind
+3	missing-native:buf_str
+2	missing-native:file_read
+2	missing-runner:node
+1	duplicate-native:__fl_wrap_sha1_add
+1	missing-native:buf_to_binary
+1	missing-native:conj
+1	production-tls-boundary
+1	runtime:compatibility-scorecard

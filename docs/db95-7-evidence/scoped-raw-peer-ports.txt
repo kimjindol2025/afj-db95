@@ -1,0 +1,3 @@
+Compiled <가림> -> <가림>
+TCP_FIXED_PORT=10/10
+TCP_RANDOM_PORT=10/10

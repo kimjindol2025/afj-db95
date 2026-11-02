@@ -1,0 +1,33 @@
+Compiled <가림> -> <가림>
+<fl>: In function ‘main’:
+<fl>:6:54: error: implicit declaration of function ‘regex_match_i’; did you mean ‘regex_match’? [-Wimplicit-function-declaration]
+<fl>:6:54: error: incompatible type for argument 2 of ‘check_regex’
+<fl>:2:44: note: expected ‘FLValue’ but argument is of type ‘int’
+<fl>:7:54: error: incompatible type for argument 2 of ‘check_regex’
+<fl>:2:44: note: expected ‘FLValue’ but argument is of type ‘int’
+<fl>:8:52: error: incompatible type for argument 2 of ‘check_regex’
+<fl>:2:44: note: expected ‘FLValue’ but argument is of type ‘int’
+<fl>:9:51: error: incompatible type for argument 2 of ‘check_regex’
+<fl>:2:44: note: expected ‘FLValue’ but argument is of type ‘int’
+<fl>:10:54: error: incompatible type for argument 2 of ‘check_regex’
+<fl>:2:44: note: expected ‘FLValue’ but argument is of type ‘int’
+<fl>:11:51: error: incompatible type for argument 2 of ‘check_regex’
+<fl>:2:44: note: expected ‘FLValue’ but argument is of type ‘int’
+<fl>:12:52: error: incompatible type for argument 2 of ‘check_regex’
+<fl>:2:44: note: expected ‘FLValue’ but argument is of type ‘int’
+<fl>:13:56: error: incompatible type for argument 2 of ‘check_regex’
+<fl>:2:44: note: expected ‘FLValue’ but argument is of type ‘int’
+<fl>:14:51: error: incompatible type for argument 2 of ‘check_regex’
+<fl>:2:44: note: expected ‘FLValue’ but argument is of type ‘int’
+<fl>:15:54: error: incompatible type for argument 2 of ‘check_regex’
+<fl>:2:44: note: expected ‘FLValue’ but argument is of type ‘int’
+<fl>:16:52: error: incompatible type for argument 2 of ‘check_regex’
+<fl>:2:44: note: expected ‘FLValue’ but argument is of type ‘int’
+<fl>:17:55: error: incompatible type for argument 2 of ‘check_regex’
+<fl>:2:44: note: expected ‘FLValue’ but argument is of type ‘int’
+<fl>:18:53: error: incompatible type for argument 2 of ‘check_regex’
+<fl>:2:44: note: expected ‘FLValue’ but argument is of type ‘int’
+<fl>:19:51: error: incompatible type for argument 2 of ‘check_regex’
+<fl>:2:44: note: expected ‘FLValue’ but argument is of type ‘int’
+<fl>:20:49: error: incompatible type for argument 2 of ‘check_regex’
+<fl>:2:44: note: expected ‘FLValue’ but argument is of type ‘int’

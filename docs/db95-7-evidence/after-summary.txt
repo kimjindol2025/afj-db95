@@ -1,0 +1,72 @@
+NATIVE_CASE=1 status=FAIL exit=1 label=syntax: tcp-server
+NATIVE_CASE=2 status=FAIL exit=1 label=syntax: afj-db95
+NATIVE_CASE=3 status=FAIL exit=1 label=raw binary boundary
+NATIVE_CASE=4 status=FAIL exit=1 label=MariaDB packet codec
+NATIVE_CASE=5 status=FAIL exit=1 label=MariaDB charset contract
+NATIVE_CASE=6 status=FAIL exit=1 label=COLLATE contract
+NATIVE_CASE=7 status=FAIL exit=1 label=page/WAL smoke
+NATIVE_CASE=8 status=FAIL exit=1 label=metrics contract
+NATIVE_CASE=9 status=FAIL exit=127 label=local canary rollback
+NATIVE_CASE=10 status=FAIL exit=1 label=large corpus
+NATIVE_CASE=11 status=FAIL exit=1 label=TCP catalog pages
+NATIVE_CASE=12 status=FAIL exit=1 label=TCP lazy catalog eviction
+NATIVE_CASE=13 status=FAIL exit=1 label=persistent recursive B+Tree
+NATIVE_CASE=14 status=FAIL exit=1 label=bounded B+Tree range
+NATIVE_CASE=15 status=FAIL exit=1 label=compound unique index
+NATIVE_CASE=16 status=FAIL exit=1 label=compound predicate range
+NATIVE_CASE=17 status=FAIL exit=1 label=schema MVCC merge
+NATIVE_CASE=18 status=FAIL exit=1 label=composite type order
+NATIVE_CASE=19 status=FAIL exit=1 label=composite NULL order
+NATIVE_CASE=20 status=FAIL exit=1 label=schema-aware composite order
+NATIVE_CASE=21 status=FAIL exit=1 label=mixed declared composite types
+NATIVE_CASE=22 status=FAIL exit=1 label=composite reopen rebuild
+NATIVE_CASE=23 status=FAIL exit=1 label=schema-aware composite range
+NATIVE_CASE=24 status=FAIL exit=1 label=TCP concurrency
+NATIVE_CASE=25 status=FAIL exit=1 label=TCP 5m performance envelope
+NATIVE_CASE=26 status=FAIL exit=1 label=backup smoke
+NATIVE_CASE=27 status=FAIL exit=1 label=backup restore soak
+NATIVE_CASE=28 status=FAIL exit=1 label=compatibility scorecard
+NATIVE_CASE=29 status=FAIL exit=1 label=AFJ error token mapping
+NATIVE_CASE=30 status=FAIL exit=1 label=MariaDB remediation regression
+NATIVE_CASE=31 status=FAIL exit=1 label=MariaDB unsupported contract
+NATIVE_CASE=32 status=FAIL exit=1 label=TCP database session scope
+NATIVE_CASE=33 status=FAIL exit=1 label=WAL format
+NATIVE_CASE=34 status=FAIL exit=1 label=forced-kill WAL recovery
+NATIVE_CASE=35 status=FAIL exit=1 label=TCP transaction forced-kill recovery
+NATIVE_CASE=36 status=FAIL exit=1 label=transaction isolation
+NATIVE_CASE=37 status=FAIL exit=1 label=isolation levels
+NATIVE_CASE=38 status=FAIL exit=1 label=MVCC conflicts
+NATIVE_CASE=39 status=FAIL exit=1 label=range predicate conflict
+NATIVE_CASE=40 status=FAIL exit=1 label=row-version MVCC core
+NATIVE_CASE=41 status=FAIL exit=1 label=row-version WAL recovery
+NATIVE_CASE=42 status=FAIL exit=1 label=row-version catalog checkpoint
+NATIVE_CASE=43 status=FAIL exit=1 label=savepoint
+NATIVE_CASE=44 status=FAIL exit=1 label=deadlock
+NATIVE_CASE=45 status=FAIL exit=1 label=lock timeout
+NATIVE_CASE=46 status=FAIL exit=1 label=prepared JSON adapter
+NATIVE_CASE=47 status=FAIL exit=1 label=request limits
+NATIVE_CASE=48 status=FAIL exit=1 label=slow request timeout
+NATIVE_CASE=49 status=FAIL exit=1 label=auth lockout
+NATIVE_CASE=50 status=FAIL exit=1 label=auth lockout reset
+NATIVE_CASE=51 status=FAIL exit=1 label=auth state recovery
+NATIVE_CASE=52 status=FAIL exit=1 label=session cleanup
+NATIVE_CASE=53 status=FAIL exit=1 label=session TTL
+NATIVE_CASE=54 status=FAIL exit=1 label=connection rate limit
+NATIVE_CASE=55 status=FAIL exit=1 label=peer IP rate limit
+NATIVE_CASE=56 status=FAIL exit=1 label=runtime peer IP rate limit
+NATIVE_CASE=57 status=FAIL exit=1 label=fragmented TCP requests
+NATIVE_CASE=58 status=FAIL exit=1 label=SQL error mapping
+NATIVE_CASE=59 status=FAIL exit=1 label=production TLS boundary
+NATIVE_CASE=60 status=FAIL exit=1 label=native TLS listener
+NATIVE_CASE=61 status=FAIL exit=1 label=native TLS mTLS/reload
+NATIVE_CASE=62 status=FAIL exit=1 label=production native TLS integration
+NATIVE_CASE=63 status=FAIL exit=1 label=TLS adapter handshake/reload
+NATIVE_CASE=64 status=FAIL exit=1 label=MariaDB wire packet unit
+NATIVE_CASE=65 status=FAIL exit=1 label=MariaDB mysql_native_password SHA-1
+NATIVE_CASE=66 status=FAIL exit=1 label=MariaDB wire prepared
+NATIVE_CASE=67 status=FAIL exit=1 label=MariaDB standard-client smoke
+NATIVE_CASE=68 status=FAIL exit=1 label=native MariaDB wire
+NATIVE_CASE=69 status=FAIL exit=1 label=native MariaDB auth rejection
+NATIVE_CASE=70 status=FAIL exit=1 label=native MariaDB decoder
+NATIVE_CASE=71 status=FAIL exit=1 label=native MariaDB prepared
+NATIVE_GATE_PASS=0 FAIL=71 TIMEOUT=0 SKIP=0 TOTAL=71

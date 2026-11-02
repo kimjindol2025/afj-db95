@@ -1,0 +1,10 @@
+has-key=PASS
+raw-peer-ports=PASS
+closure-map-capture=PASS
+afj-file-names=PASS
+closure-capture=PASS
+peer-address=PASS
+V11_SCOPED_REGRESSION_PASS=6 FAIL=0
+LEGACY_NATIVE_EXIT=0
+BOOTSTRAP_ISOLATED_EXIT=0
+DB95_7_REGRESSION=PASS

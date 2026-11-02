@@ -1,0 +1,21 @@
+Compiled <가림> -> <가림>
+LEGACY_NATIVE_jit-test_BUILD=PASS
+Compiled <가림> -> <가림>
+LEGACY_NATIVE_gc-stress_BUILD=PASS
+LEGACY_RUNNER_BYTES=UNCHANGED
+🔍 FreeLang C Native Runtime 테스트
+
+✅ JIT add1(41)=42
+✅ JIT mul2(21)=42
+✅ JIT addxy(10,32)
+✅ JIT add1(0)=1
+✅ JIT pool_cap=64KB
+✅ JIT ready=true
+✅ GC atom 초기화
+✅ GC 정수 누산 100회
+✅ GC 벡터 atom 20회
+✅ GC JIT 풀 준비
+
+────────────────────────────
+결과: 10 PASS / 0 FAIL / 10 총
+🎉 모든 테스트 통과!
