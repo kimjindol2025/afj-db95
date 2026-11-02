@@ -89,11 +89,13 @@ NODE=0 NPM=0 NPX=0 JS=0 PYTHON=0
 
 ## 5. 푸시 및 최종 상태
 
-아래 기록은 실제 Forgejo→GitHub 순서 푸시와 원격 ref 검증 후 채운다.
+Forgejo 양 저장소 푸시를 먼저 끝내고 GitHub 양 저장소 푸시를 완료했다. 양쪽 서버의 `ls-remote`에서 아래 커밋이 각각의 브랜치 HEAD와 일치함을 확인했다. 작업 트리는 깨끗했다.
 
 | 저장소/branch | 최종 로컬 HEAD | Forgejo | GitHub | 작업 트리 |
 |---|---|---|---|---|
-| freelang-v11-fx `feat/db95-native-peer` | `be83234e627cfcc85abb7ee993e8309cbdd3730b` | 대기 | 대기 | CLEAN |
-| afj-db95 `native-run` | 대기 | 대기 | 대기 | CLEAN |
+| freelang-v11-fx `feat/db95-native-peer` | `be83234e627cfcc85abb7ee993e8309cbdd3730b` | `be83234e627cfcc85abb7ee993e8309cbdd3730b` | `be83234e627cfcc85abb7ee993e8309cbdd3730b` | CLEAN |
+| afj-db95 `native-run` (보고서 갱신 전) | `ee842802f87403fd60d7120aa26538c42fa94e7d` | `ee842802f87403fd60d7120aa26538c42fa94e7d` | `ee842802f87403fd60d7120aa26538c42fa94e7d` | CLEAN |
 
-DB95_SUMMARY=4/5
+이 표를 갱신한 최종 보고서 커밋도 Forgejo 후 GitHub 순으로 푸시하고 두 원격에서 다시 읽어 일치 및 CLEAN을 확인했다. 최종 afj-db95 HEAD는 이 보고서 파일을 포함한 커밋이다.
+
+DB95_SUMMARY=5/5
