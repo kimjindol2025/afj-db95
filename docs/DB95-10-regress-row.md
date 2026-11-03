@@ -86,6 +86,14 @@ NATIVE_GATE_PASS=34 FAIL=37 TIMEOUT=0 SKIP=0 TOTAL=71
 
 보호 묶음 첫 오류 수는 `peer=0`, `process_exit=0`, `regex_match_i=0`, `has_key_p=0`이다. 이전 보고의 `compiler:undeclared:row=43`은 올바른 최종 컴파일러로 재실행한 결과 재현되지 않았다. 이번 최대 묶음은 `compiler:unsupported-literal` 11건이며 다음 후보는 `missing-native:buf_str` 4건이다. 이 단계에서는 묶음 수정에 착수하지 않았다.
 
+푸시 후 올바른 `CPATH`/`LIBRARY_PATH`를 지정해 71건을 다시 실행한 결과도 동일했다:
+
+```text
+NATIVE_GATE_PASS=34 FAIL=37 TIMEOUT=0 SKIP=0 TOTAL=71
+```
+
+첫 재실행은 이 두 헤더 경로를 넘기지 않아 `curl/curl.h` 컴파일 오류가 반복됐다. 동일 오류가 세 차례 나온 뒤 그 실행을 중단하고 환경을 바로잡아 위의 유효한 결과를 얻었다. 푸시 후에도 보호 묶음은 각각 0건이고 `compiler:undeclared:row`는 0건이다.
+
 ## 4. 고정점, 커밋, 푸시
 
 격리 native bootstrap은 첫 실행에서 curl 헤더 include 경로 누락으로 빌드 실패했다. `CPATH`와 `LIBRARY_PATH`를 지정한 재실행은 통과했다. 재실행은 strace 없이 수행했다. 원문 해시:
@@ -98,14 +106,21 @@ STAGE4_SHA=6a0d4e384a18834d4f0cb03c10460aade5bf05f999f5db981dd5dc275d313e7d
 
 `FIXPOINT_LOG`: Stage2·3·4는 동일하다. 이전 고정점 `2e7a802f8102c5bf4826bae532486778212ebcbe50539ab74316936f2c3d122f`에서 새 고정점으로 바뀐 이유는 `self/cgc-main.fl`에 정규화된 `map-has-key-p`의 native API 매핑을 추가했기 때문이다. Stage0 seed는 변경하지 않았다.
 
-민감정보 diff 검사, Forgejo/GitHub의 두 저장소 HEAD 확인은 완료 뒤 기록한다.
+민감정보 diff 검사는 두 저장소 모두 통과했다. 커밋 및 Forgejo → GitHub 푸시:
+
+| 저장소 | 커밋 | Forgejo | GitHub |
+|---|---|---|---|
+| freelang-v11-fx `feat/db95-native-peer` | `b8fdb29b94eec109db245172237c2d5a55e4c001` | PASS | PASS |
+| afj-db95 `native-run` | `203861dc075f4496f9cac040a9e74cc53b27f743` | PASS | PASS |
+
+두 저장소 모두 푸시 후 local, Forgejo, GitHub의 branch HEAD가 일치함을 확인했다. 이 보고서의 사후 gate 결과를 추가한 AFJ 문서 커밋은 별도 후속 커밋으로 Forgejo에 먼저, GitHub에 이어 푸시한다.
 
 ## 5. row 묶음(43건)
 
-회귀 6/6과 푸시 완료 전에는 row 묶음에 손대지 않는다. 현재 gate에서 `compiler:undeclared:row`는 0건으로, 기존 43건 묶음은 잘못된 Stage0 실행에서 나온 결과로 판정했다. DB95-10에서 관찰된 다음 최대 묶음은 `compiler:unsupported-literal` 11건이다. 이번에는 row 소스/시험을 수정하지 않았다.
+회귀 6/6과 푸시가 끝난 뒤 row 묶음을 진단했다. 대표 row 오류는 올바른 최종 컴파일러 기준 두 71건 실행에서 0건이라 수정 전 실패 재현 시험을 만들 수 없었다. 기존 43건은 Stage0 컴파일러로 실행했던 결과이며, 언어 회귀나 DB95 호출 결함으로 재현되지 않았다. 기대값과 row 코드를 바꾸지 않았다. 다음 최대 묶음 후보는 `compiler:unsupported-literal` 11건이고, 그 다음은 `missing-native:buf_str` 4건이다.
 
 ## 언어 성과
 
 `map-has-key?`가 `map-has-key-p`로 정규화되는 약속에 맞춰 native compiler 매핑을 보완했다. DB95가 드러낸 결함은 predicate 이름 정규화와 native API codegen 매핑의 불일치다.
 
-DB95_SUMMARY=3/5
+DB95_SUMMARY=4/5
