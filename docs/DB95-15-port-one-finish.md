@@ -48,4 +48,4 @@ REFERENCE_COMPILER_SHA_AFTER=4411e601988d9b7e5444f6b0973ca60d15751bd618efd456d9f
 
 FX의 기존 DB95-13 native TCP client API 변경은 보존했다. 임시 포트 선택을 위해 `tcp-client-free-port`를 `runtime/v11-ops.h`와 `runtime/v11-tcp.h`에 추가했으며, mainline named callback을 사용하는 fixture로 바꿨다. 승인 뒤 smoke와 case 25 gate는 실행하지 않아 PONG 및 포트 이식은 미검증이다. DB95가 드러낸 결함은 smoke fixture가 named callback API 대신 inline closure를 전달한 점이다.
 
-DB95_SUMMARY=1/5
+DB95_SUMMARY=2/5
