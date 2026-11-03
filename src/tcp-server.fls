@@ -1993,7 +1993,7 @@
                 (afj-tcp-send conn (afj-tcp-shutdown request))
                 (afj-tcp-send conn {"ok" false "error" "UNKNOWN_REQUEST"}))))))))))))))))
 
-(defn afj-db-tcp-handler [event conn payload [peer nil]]
+(defn afj-db-tcp-handler [event conn payload peer]
   (do
     (if (or (nil? $peer) (= $peer ""))
       nil

@@ -458,7 +458,7 @@
       (mariadb-wire-drain conn rest))
     bytes))
 
-(defn mariadb-wire-handler [event conn payload [peer nil]]
+(defn mariadb-wire-handler [event conn payload peer]
   (if (or (= event "connect") (= event "accept"))
     (do
       (swap! mariadb-wire-sessions assoc conn

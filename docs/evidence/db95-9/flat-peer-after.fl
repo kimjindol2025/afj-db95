@@ -1,0 +1,3 @@
+(defn optional-peer [event conn payload peer]
+  peer)
+(println (optional-peer "data" "conn" "payload" "127.0.0.1"))
