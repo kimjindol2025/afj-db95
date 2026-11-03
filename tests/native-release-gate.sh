@@ -18,6 +18,7 @@ if [[ "${1:-}" == "--worker" ]]; then
   number="$2" label="$3" rel_path="$4" case_dir="$5" env_text="$6"
   input="$repo_root/$rel_path"
   compiler="${FX_NATIVE_STAGE0:?}"
+  export AFJ_DB95_REPO_ROOT="$repo_root"
   mkdir -p "$case_dir"
   export AFJ_DB_WAL="$case_dir/case.wal"
   export AFJ_DB_REMEDIATION_WAL="$case_dir/remediation.wal"
@@ -27,6 +28,9 @@ if [[ "${1:-}" == "--worker" ]]; then
   if [[ -n "$env_text" ]]; then
     read -r -a assignments <<< "$env_text"
     for assignment in "${assignments[@]}"; do export "$assignment"; done
+  fi
+  if [[ "$rel_path" == "tests/tcp-long-soak.js" && -f "$repo_root/tests/tcp-long-soak.fls" ]]; then
+    input="$repo_root/tests/tcp-long-soak.fls"
   fi
   case "$input" in
     *.js)

@@ -1,0 +1,168 @@
+;; FreeLang port of tests/tcp-long-soak.js. Keep the JS checks and limits 1:1.
+(define repo-root (env-get "AFJ_DB95_REPO_ROOT"))
+(define fx-root (env-get "FX_ROOT"))
+(define compiler (env-get "AFJ_BOOTSTRAP"))
+(define process-id (process-pid))
+(define port (tcp-client-free-port))
+(define soak-ms (str-to-num (env-or "AFJ_SOAK_MS" "60000")))
+(define directory (str "/tmp/afj-db95-soak-" process-id))
+(define wal (str directory "/tcp.wal"))
+(define daemon-log (str directory "/daemon.log"))
+(define daemon-c (str directory "/daemon.c"))
+(define daemon-bin (str directory "/daemon-bin"))
+(define daemon-file (str repo-root "/tests/tcp-soak-daemon.fls"))
+(define clients (atom []))
+(define writes (atom 0))
+(define latencies (atom []))
+(define next-id (atom 0))
+(define batches (atom 0))
+(define daemon-pid (atom 0))
+
+(defn tcp-soak-cleanup []
+  (map (fn [client] (tcp-client-close (get client "fd"))) @clients)
+  (if (> @daemon-pid 0)
+    (process-run (str "kill -TERM " @daemon-pid " >/dev/null 2>&1 || true")) nil)
+  (process-run (str "rm -rf '" directory "'")))
+
+(try
+(do
+(if (or (nil? port) (nil? repo-root) (nil? fx-root) (nil? compiler))
+  (throw "TCP soak setup failed") nil)
+(process-run (str "mkdir -p " directory))
+(env-set "AFJ_DB_MODE" "development")
+(env-set "AFJ_DB_PORT" (str port))
+(env-set "AFJ_DB_BIND_HOST" "127.0.0.1")
+(env-set "AFJ_DB_WAL" wal)
+(env-set "AFJ_DB_RATE_MAX_REQUESTS" "10000")
+(env-set "AFJ_DB_RATE_WINDOW_MS" "60000")
+
+;; Build the child daemon with the same native compiler and runtime as the gate.
+(define daemon-build
+  (process-run
+    (str "timeout 120s '" compiler "' '" daemon-file "' '" daemon-c "' && "
+         "gcc -O2 -w -rdynamic -Werror=implicit-function-declaration -I '"
+         fx-root "/runtime' -o '" daemon-bin "' '" daemon-c "' "
+         "'" fx-root "/runtime/core.c' '" fx-root "/runtime/collection.c' '"
+         fx-root "/runtime/io.c' '" fx-root "/runtime/math.c' '"
+         fx-root "/runtime/error.c' '" fx-root "/runtime/process.c' '"
+         fx-root "/runtime/json.c' '" fx-root "/runtime/aliases.c' '"
+         fx-root "/runtime/user-fns.c' '" fx-root "/runtime/gc.c' '"
+         fx-root "/runtime/http.c' '" fx-root "/runtime/raw_tcp.c' '"
+         fx-root "/runtime/websocket.c' '" fx-root "/runtime/sqlite.c' '"
+         fx-root "/runtime/mariadb.c' '" fx-root "/runtime/debug.c' '"
+         fx-root "/runtime/http_client.c' '" fx-root "/runtime/regex.c' '"
+         fx-root "/runtime/smtp.c' '" fx-root "/runtime/sse.c' "
+         "-lm -lpthread -ldl -lsqlite3 -lssl -lcrypto -lcurl && echo SOAK_DAEMON_BUILD_OK")))
+(if (str-includes daemon-build "SOAK_DAEMON_BUILD_OK")
+  nil (throw (str "soak daemon build failed: " daemon-build)))
+
+(define spawn-output
+  (process-run (str "'" daemon-bin "' > '" daemon-log
+                    "' 2>&1 < /dev/null & echo $!")))
+(reset! daemon-pid (str-to-num (trim spawn-output)))
+(if (> @daemon-pid 0) nil (throw "TCP soak daemon spawn failed"))
+
+;; Match waitForOutput: marker within 60 seconds; fail if the child exits.
+(define marker-deadline (+ (now-ms) 60000))
+(while (and (< (now-ms) marker-deadline)
+            (not (str-includes (file-read daemon-log) "TCP soak server STARTED")))
+  (do
+    (if (= (trim (process-run (str "kill -0 " @daemon-pid " >/dev/null 2>&1; echo $?"))) "0")
+      nil
+      (throw (str "soak daemon exited: " (file-read daemon-log))))
+    (sleep_ms 50)))
+(if (str-includes (file-read daemon-log) "TCP soak server STARTED")
+  nil (throw (str "soak start timeout: " (file-read daemon-log))))
+
+;; Match waitForPort: retry connection probes for 30 seconds.
+(define port-deadline (+ (now-ms) 30000))
+(define port-ready (atom false))
+(while (and (< (now-ms) port-deadline) (not @port-ready))
+  (let [probe (tcp-client-open "127.0.0.1" port 200)]
+    (if (nil? probe) (sleep_ms 50)
+      (do (tcp-client-close probe) (reset! port-ready true)))))
+(if @port-ready nil (throw "soak port timeout"))
+
+(defn tcp-soak-request [client body]
+  (let [started (now-ms)
+        sent (tcp-client-write (get client "fd") (str (json_str body) "\n"))]
+    (if (= sent "ok") nil (throw "soak socket write failed"))
+    (let [line (tcp-client-read-line (get client "fd") 20000)]
+      (if (nil? line) (throw (str "soak request timeout: " (get body "statement"))) nil)
+      (let [response (json-parse line)]
+        (assoc response "_latency" (- (now-ms) started))))))
+
+;; Match 8 sequential connections and login.ok assertions.
+(define client-index (atom 0))
+(while (< @client-index 8)
+  (let [fd (tcp-client-open "127.0.0.1" port 3000)]
+    (if (nil? fd) (throw "soak client connect failed") nil)
+    (let [login (tcp-soak-request {"fd" fd}
+                   {"type" "login" "user" "root" "password" "development-only"})]
+      (if (get login "ok") nil (throw "soak login assertion failed"))
+      (swap! clients append {"fd" fd "token" (get login "token")})))
+  (swap! client-index + 1))
+
+;; Match the table creation and its ok assertion.
+(let [first-client (get @clients 0)
+      table (tcp-soak-request first-client
+               {"type" "query" "token" (get first-client "token")
+                "statement" "CREATE TABLE soak_users (id INT PRIMARY KEY, name TEXT)"})]
+  (if (get table "ok") nil (throw "soak table assertion failed")))
+
+(define soak-deadline (+ (now-ms) soak-ms))
+(while (< (now-ms) soak-deadline)
+  (let [jobs (map (fn [client]
+                    (let [id @next-id]
+                      (swap! next-id + 1)
+                      {"client" client "id" id})) @clients)
+        tasks (map (fn [job]
+                     (fn []
+                       (let [client (get job "client")
+                             id (get job "id")
+                             response (tcp-soak-request client
+                               {"type" "query" "token" (get client "token")
+                                "statement" (str "INSERT INTO soak_users (id,name) VALUES ("
+                                                 id ",'soak-" id "')")})]
+                         (if (get response "ok") nil (throw "soak insert assertion failed"))
+                         (swap! latencies append (get response "_latency"))
+                         (swap! writes + 1)))) jobs)
+        parallel-results (run-parallel tasks)]
+    (swap! batches + 1)
+    (if (= (rem @batches 10) 0)
+      (let [last-id (- @next-id 1)
+            first-client (get @clients 0)
+            checkpoint (tcp-soak-request first-client
+              {"type" "query" "token" (get first-client "token")
+               "statement" (str "SELECT * FROM soak_users WHERE id=" last-id)})]
+        (if (get checkpoint "ok") nil (throw "soak checkpoint ok assertion failed"))
+        (if (= (count (get (get checkpoint "result") "rows")) 1)
+          nil (throw "soak checkpoint rows assertion failed")))))
+
+;; Match final select.ok and exactly one row.
+(let [last-id (- @next-id 1)
+      first-client (get @clients 0)
+      selected (tcp-soak-request first-client
+        {"type" "query" "token" (get first-client "token")
+         "statement" (str "SELECT * FROM soak_users WHERE id=" last-id)})]
+  (if (get selected "ok") nil (throw "soak final select assertion failed"))
+  (if (= (count (get (get selected "result") "rows")) 1)
+    nil (throw "soak final row assertion failed")))
+
+(if (>= @writes 8) nil (throw "soak writes assertion failed"))
+(define sorted-latencies (sort @latencies))
+(define percentile-index (floor (* (- (count sorted-latencies) 1) 0.95)))
+(define p95 (if (> (count sorted-latencies) 0) (get sorted-latencies percentile-index) 0))
+(define max-latency (if (> (count sorted-latencies) 0) (last sorted-latencies) 0))
+(define throughput (/ @writes (/ soak-ms 1000)))
+(define max-limit (str-to-num (env-or "AFJ_SOAK_MAX_LATENCY_MS" "20000")))
+(define p95-limit (str-to-num (env-or "AFJ_SOAK_P95_LATENCY_MS" "5000")))
+(if (<= max-latency max-limit) nil (throw "soak max latency assertion failed"))
+(if (<= p95 p95-limit) nil (throw "soak p95 latency assertion failed"))
+(println (str "afj-db95 TCP " (/ soak-ms 1000) "s soak PASS writes=" @writes
+              " throughput=" throughput "/s p95=" p95 "ms max=" max-latency "ms"))
+)
+  (catch [error]
+    (tcp-soak-cleanup)
+    (throw error)))
+(tcp-soak-cleanup)
