@@ -1,0 +1,10 @@
+43	compiler:undeclared:row
+14	compiler:unsupported-literal
+3	missing-native:file_append
+3	compiler:undeclared:column
+2	missing-runner:node
+2	missing-native:file_size
+1	runtime:Uncaught error (line 41): compatibility scorecard failure
+1	production-tls-boundary
+1	missing-native:buf_to_binary
+1	compiler:undeclared:reader_tx

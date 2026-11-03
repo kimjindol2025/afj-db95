@@ -54,16 +54,39 @@ DB95 두 핸들러 선언의 마지막 인자를 `[peer nil]`에서 `peer`로 �
 
 ## 3. 재시험 및 회귀
 
-RUN-20261103-07에서 DB95 71건 게이트를 `/tmp/fl-heavy.lock`으로 대기 실행 중이며 아직 결과가 없다. 2026-11-03 01:09:42 UTC 시작, 01:26:04 UTC 확인 시 대기 경과 16분 22초였다. `ps`에는 잠금 보유 프로세스로 `flock -o /tmp/fl-heavy.lock ... tests/run-task946-full.sh ... valid-full-2`가 보였다(원문 실행 경로는 `<가림>`). 01:26:04 UTC 기준 해당 보유 `flock`은 31분 20초, 그 하위 `timeout`은 15분 21초 실행 중이었다. 이후 v11 범위 회귀와 격리 bootstrap은 gate가 끝난 뒤 잠금 안에서 순서대로 실행해야 한다. 완료 전까지 재시험 수치나 고정점 해시는 없다.
+2026-11-03 01:09:42 UTC 시작한 잠금 대기는 18분 26초 후인 01:28:08 UTC에 실행됐다. 기다리는 동안 `ps`로 다른 `run-task946-full.sh`의 `flock` 점유를 반복 확인했으며 강제 해제나 프로세스 종료는 하지 않았다.
+
+DB95 71건 원문 요약:
+
+```text
+NATIVE_GATE_PASS=0 FAIL=71 TIMEOUT=0 SKIP=0 TOTAL=71
+```
+
+첫 오류 전체 그룹표(큰 순):
+
+| 첫 오류 묶음 | 건수 |
+|---|---:|
+| `compiler:undeclared:row` | 43 |
+| `compiler:unsupported-literal` | 14 |
+| `missing-native:file_append` | 3 |
+| `compiler:undeclared:column` | 3 |
+| `missing-runner:node` | 2 |
+| `missing-native:file_size` | 2 |
+| `runtime:Uncaught error (line 41): compatibility scorecard failure` | 1 |
+| `production-tls-boundary` | 1 |
+| `missing-native:buf_to_binary` | 1 |
+| `compiler:undeclared:reader_tx` | 1 |
+
+대상 `compiler:undeclared:peer`는 0건이다. `process_exit`, `regex_match_i`, `has_key_p` 첫 오류도 각각 0건으로 유지됐다. 전체 통과가 0건이고 새 최대 묶음이 생겼으므로 결과를 성공으로 취급하지 않고 push하지 않는다. 원문 첫 오류는 경로를 `<가림>` 처리해 `docs/evidence/db95-9/first-errors.tsv`에, 그룹 수는 `first-error-groups.tsv`에 보관했다. v11 범위 회귀와 격리 bootstrap은 다음 순서로 실행 대기 중이다.
 
 ## 4. 다음 지시서 후보
 
-DB95 71건 사후 첫 오류 표를 얻지 못해 다음으로 큰 묶음과 개수를 확정하지 못했다. TLS 묶음인지도 새 결과 기준으로 재판정이 필요하다. raw_tcp 경계 다섯 항목(빈 host, 소수 yield, chunk/NUL, 느린 수신자)을 별도 후보로 유지한다.
+다음 지시서 최대 묶음 후보는 `compiler:undeclared:row` 43건이다. TLS 묶음은 첫 오류 1건이다. raw_tcp 경계: 빈 host, 소수 yield, 4096바이트 chunk, NUL 잘림, 느린 수신자 송신 정체는 수정하지 않고 별도 후보로 유지한다.
 
 ## 5. 언어 성과와 푸시
 
 언어 기능 변경 없음. DB95가 드러낸 결함은 본줄기 flat native TCP callback 인자 API와 맞지 않는 중첩 optional 인자 때문에 peer 바인딩이 생성 C에서 누락된 점이다. 민감정보 패턴 diff 검사를 통과한 로컬 커밋은 DB95 `2505b7f`, FX `21d588f`이다. Forgejo/GitHub 푸시는 gate와 회귀가 통과한 뒤 진행한다.
 
-완료 항목: 시작 기준 및 오류 표 기록, 재현/원인 판정, DB95 callback 호출 선언 교정, raw_tcp 문자열 dispatch 제거, 가벼운 raw_tcp 및 symbol closure 확인, 로컬 민감정보 검사/커밋(3/6). 무거운 재시험, 회귀, bootstrap, push 및 원격 HEAD 일치는 미완료.
+완료 항목: 시작 기준 및 오류 표 기록, 재현/원인 판정, DB95 callback 호출 선언 교정, raw_tcp 문자열 dispatch 제거, 가벼운 raw_tcp 및 symbol closure 확인, 로컬 민감정보 검사/커밋, DB95 71건 재시험 및 보호 묶음 회귀 판정(4/6). v11 회귀와 bootstrap은 대기 중이며, 전체 게이트 실패로 원격 푸시는 보류한다.
 
-DB95_SUMMARY=3/6
+DB95_SUMMARY=4/6

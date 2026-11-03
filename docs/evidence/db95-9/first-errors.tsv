@@ -1,0 +1,72 @@
+case	label	first_error
+1	syntax: tcp-server	error: ‘row’ undeclared (first use in this function); did you mean ‘throw’?
+2	syntax: afj-db95	error: ‘column’ undeclared (first use in this function)
+3	raw binary boundary	error: implicit declaration of function ‘buf_to_binary’ [-Wimplicit-function-declaration]
+4	MariaDB packet codec	error: ‘row’ undeclared (first use in this function); did you mean ‘throw’?
+5	MariaDB charset contract	error: ‘row’ undeclared (first use in this function); did you mean ‘throw’?
+6	COLLATE contract	error: ‘row’ undeclared (first use in this function); did you mean ‘throw’?
+7	page/WAL smoke	error: ‘column’ undeclared (first use in this function)
+8	metrics contract	error: ‘row’ undeclared (first use in this function); did you mean ‘throw’?
+9	local canary rollback	<가림> line 11: node: command not found
+10	large corpus	error: ‘row’ undeclared (first use in this function); did you mean ‘throw’?
+11	TCP catalog pages	error: ‘row’ undeclared (first use in this function); did you mean ‘throw’?
+12	TCP lazy catalog eviction	error: ‘row’ undeclared (first use in this function); did you mean ‘throw’?
+13	persistent recursive B+Tree	error: ‘column’ undeclared (first use in this function)
+14	bounded B+Tree range	error: ‘row’ undeclared (first use in this function); did you mean ‘throw’?
+15	compound unique index	error: ‘row’ undeclared (first use in this function); did you mean ‘throw’?
+16	compound predicate range	error: ‘row’ undeclared (first use in this function); did you mean ‘throw’?
+17	schema MVCC merge	error: ‘row’ undeclared (first use in this function); did you mean ‘throw’?
+18	composite type order	error: ‘row’ undeclared (first use in this function); did you mean ‘throw’?
+19	composite NULL order	error: ‘row’ undeclared (first use in this function); did you mean ‘throw’?
+20	schema-aware composite order	error: ‘row’ undeclared (first use in this function); did you mean ‘throw’?
+21	mixed declared composite types	error: ‘row’ undeclared (first use in this function); did you mean ‘throw’?
+22	composite reopen rebuild	error: ‘row’ undeclared (first use in this function); did you mean ‘throw’?
+23	schema-aware composite range	error: ‘row’ undeclared (first use in this function); did you mean ‘throw’?
+24	TCP concurrency	[CGC-ERR] unsupported literal type=unknown line=12
+25	TCP 5m performance envelope	[CGC-ERR] unsupported literal type=unknown line=11
+26	backup smoke	error: implicit declaration of function ‘file_size’; did you mean ‘_fl_file_size’? [-Wimplicit-function-declaration]
+27	backup restore soak	error: implicit declaration of function ‘file_size’; did you mean ‘_fl_file_size’? [-Wimplicit-function-declaration]
+28	compatibility scorecard	Uncaught error (line 41): compatibility scorecard failure
+29	AFJ error token mapping	error: ‘row’ undeclared (first use in this function); did you mean ‘throw’?
+30	MariaDB remediation regression	error: ‘row’ undeclared (first use in this function); did you mean ‘throw’?
+31	MariaDB unsupported contract	error: ‘row’ undeclared (first use in this function); did you mean ‘throw’?
+32	TCP database session scope	error: ‘row’ undeclared (first use in this function); did you mean ‘throw’?
+33	WAL format	error: ‘row’ undeclared (first use in this function); did you mean ‘throw’?
+34	forced-kill WAL recovery	<가림> line 24: node: command not found
+35	TCP transaction forced-kill recovery	[CGC-ERR] unsupported literal type=unknown line=12
+36	transaction isolation	error: ‘row’ undeclared (first use in this function); did you mean ‘throw’?
+37	isolation levels	error: ‘row’ undeclared (first use in this function); did you mean ‘throw’?
+38	MVCC conflicts	error: ‘row’ undeclared (first use in this function); did you mean ‘throw’?
+39	range predicate conflict	error: ‘row’ undeclared (first use in this function); did you mean ‘throw’?
+40	row-version MVCC core	error: ‘reader_tx’ undeclared (first use in this function)
+41	row-version WAL recovery	error: ‘row’ undeclared (first use in this function); did you mean ‘throw’?
+42	row-version catalog checkpoint	error: ‘row’ undeclared (first use in this function); did you mean ‘throw’?
+43	savepoint	error: ‘row’ undeclared (first use in this function); did you mean ‘throw’?
+44	deadlock	error: ‘row’ undeclared (first use in this function); did you mean ‘throw’?
+45	lock timeout	error: ‘row’ undeclared (first use in this function); did you mean ‘throw’?
+46	prepared JSON adapter	error: ‘row’ undeclared (first use in this function); did you mean ‘throw’?
+47	request limits	error: ‘row’ undeclared (first use in this function); did you mean ‘throw’?
+48	slow request timeout	error: ‘row’ undeclared (first use in this function); did you mean ‘throw’?
+49	auth lockout	error: implicit declaration of function ‘file_append’; did you mean ‘_fl_file_append’? [-Wimplicit-function-declaration]
+50	auth lockout reset	error: implicit declaration of function ‘file_append’; did you mean ‘_fl_file_append’? [-Wimplicit-function-declaration]
+51	auth state recovery	error: implicit declaration of function ‘file_append’; did you mean ‘_fl_file_append’? [-Wimplicit-function-declaration]
+52	session cleanup	error: ‘row’ undeclared (first use in this function); did you mean ‘throw’?
+53	session TTL	error: ‘row’ undeclared (first use in this function); did you mean ‘throw’?
+54	connection rate limit	error: ‘row’ undeclared (first use in this function); did you mean ‘throw’?
+55	peer IP rate limit	error: ‘row’ undeclared (first use in this function); did you mean ‘throw’?
+56	runtime peer IP rate limit	[CGC-ERR] unsupported literal type=unknown line=12
+57	fragmented TCP requests	error: ‘row’ undeclared (first use in this function); did you mean ‘throw’?
+58	SQL error mapping	error: ‘row’ undeclared (first use in this function); did you mean ‘throw’?
+59	production TLS boundary	production TLS boundary returned an unexpected error
+60	native TLS listener	[CGC-ERR] unsupported literal type=unknown line=9
+61	native TLS mTLS/reload	[CGC-ERR] unsupported literal type=unknown line=9
+62	production native TLS integration	[CGC-ERR] unsupported literal type=unknown line=9
+63	TLS adapter handshake/reload	[CGC-ERR] unsupported literal type=unknown line=8
+64	MariaDB wire packet unit	[CGC-ERR] unsupported literal type=unknown line=9
+65	MariaDB mysql_native_password SHA-1	error: ‘row’ undeclared (first use in this function); did you mean ‘throw’?
+66	MariaDB wire prepared	[CGC-ERR] unsupported literal type=unknown line=15
+67	MariaDB standard-client smoke	[CGC-ERR] unsupported literal type=unknown line=15
+68	native MariaDB wire	[CGC-ERR] unsupported literal type=unknown line=9
+69	native MariaDB auth rejection	[CGC-ERR] unsupported literal type=unknown line=11
+70	native MariaDB decoder	error: ‘row’ undeclared (first use in this function); did you mean ‘throw’?
+71	native MariaDB prepared	[CGC-ERR] unsupported literal type=unknown line=11
