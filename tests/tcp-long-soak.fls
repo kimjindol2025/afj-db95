@@ -5,7 +5,9 @@
 (define process-id (process-pid))
 (define port (tcp-client-free-port))
 (define soak-ms (str-to-num (env-or "AFJ_SOAK_MS" "60000")))
-(define directory (str "/tmp/afj-db95-soak-" process-id))
+(define temp-root (env-get "TMPDIR"))
+(if (nil? temp-root) (throw "TMPDIR must point to the DB95 run artifacts") nil)
+(define directory (str temp-root "/afj-db95-soak-" process-id))
 (define wal (str directory "/tcp.wal"))
 (define daemon-log (str directory "/daemon.log"))
 (define daemon-c (str directory "/daemon.c"))
@@ -162,7 +164,4 @@
 (println (str "afj-db95 TCP " (/ soak-ms 1000) "s soak PASS writes=" @writes
               " throughput=" throughput "/s p95=" p95 "ms max=" max-latency "ms"))
 )
-  (catch [error]
-    (tcp-soak-cleanup)
-    (throw error)))
-(tcp-soak-cleanup)
+  (finally (tcp-soak-cleanup)))

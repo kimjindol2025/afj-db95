@@ -35,17 +35,64 @@ REFERENCE_COMPILER_SHA_AFTER=4411e601988d9b7e5444f6b0973ca60d15751bd618efd456d9f
 
 세 번 모두 같은 응답 불일치 지점에서 실패했으므로 지시의 3회 중단 규칙에 따라 추가 실행을 멈췄다. 진단상 poll 수만으로 해결되는 문제가 아니며, `tcp-server-raw`가 named callback 문자열을 받아 `fl_named_fn`으로 호출하는데 fixture는 inline `fn` 값을 전달하고 있다. 근거: FX `runtime/v11-tcp.h:38, 97, 111-117, 240`; `tests/native-bootstrap/legacy-api-names.md`는 mainline 이름을 named callback 경로, `fl-tcp-*`를 closure 경로로 구분한다.
 
-사용자가 mainline named callback 방식 적용을 승인했다. 이에 fixture를 named handler 문자열 `"tcp-client-smoke-handler"`를 전달하도록 바꾸고, 서버 시작·연결·송신·수신 순서의 yield 지점을 유지했다. 승인 뒤 실행은 잠금 대기 중 중단했으며, named callback 적용 후 PING→PONG은 아직 검증하지 않았다. TCP 런타임 및 case 25 포트/gate 동작도 미검증이다.
+사용자가 mainline named callback 방식 적용을 승인했다. 이에 fixture를 named handler 문자열 `"tcp-client-smoke-handler"`를 전달하도록 바꾸고, 서버 시작·연결·송신·수신 순서의 yield 지점을 유지했다. 당시 승인 뒤 시험은 잠금 대기 중 중단했다. 후속 재개에서 named callback 적용 후 PING→PONG과 오답 기대값 거부를 확인했다.
 
 ## 미수행 항목
 
-- fixture PING→PONG 바이트 일치: 미통과
-- case 25 `.fls` 동등 포트와 gate 연결: 미완료
-- case 25의 node/JS 0건 trace 및 71건 gate: 미실행
-- 민감정보 diff 검사, 진행본 커밋, Forgejo/GitHub 푸시: 이번 진행본 저장에서 수행
+- fixture PING→PONG 왕복 및 오답 기대값 거부: 통과
+- case 25 `.fls` gate 연결은 했으나 worker가 daemon 컴파일 120초 제한으로 종료되어 동등 실행 미확인
+- case 25 trace에서 node/JS 실행 0건 확인. 71건 gate와 전체 회귀는 미실행
+- 기존 진행 커밋은 Forgejo/GitHub에 푸시됨. 이번 TMPDIR/finally/보고서 변경은 미커밋·미푸시
+
+## 재개 기록 — compiler 복구와 case 25
+
+후속 실행 산출물은 `<가림>/db95-8/artifacts/RUN-20261103-18` 아래에 두었다. gate worker는 case별 `TMPDIR`을 case 디렉터리 아래로 설정하고, soak fixture는 `TMPDIR`이 없으면 실패하도록 바꿔 루트 `/tmp`에 시험 데이터를 쓰지 않게 했다. 수정된 gate 셸은 `bash -n` 및 `git diff --check`를 통과했다.
+
+기준 Stage2 생성 소스와 SHA-256이 `6a0d4e384a18834d4f0cb03c10460aade5bf05f999f5db981dd5dc275d313e7d`로 일치하는 기존 Stage2 실행 파일을 찾아 작업 경로로 복사했다. 실행 파일 SHA-256은 `9e08f102a579aed6ad77edac06997637e9f7b05dbe7197de1002107a6e905864`이며, smoke 및 case 25 실행 전후 동일했다. 이전 실행 파일 SHA-256 `4411e601988d9b7e5444f6b0973ca60d15751bd618efd456d9f4a9963318c7d3`은 찾지 못해, 현재 이 해시가 기록된 실행 파일로 작업했다.
+
+시스템 설치 없이 공식 OS 저장소의 `libcurl-devel-8.12.1-4.el10_2.7.x86_64` 패키지를 작업 산출물 경로에 받고 RPM 서명 검증 `digests signatures OK`를 확인해 헤더를 사용했다. 시스템 runtime libcurl은 `8.9.1-5.el10.x86_64`다. 패키지는 설치하지 않았고, linker symlink도 작업 산출물 안에서만 만들었다.
+
+확인 결과:
+
+```text
+TCP_CLIENT_GENERATE_C_SYNTAX=PASS
+TCP_CLIENT_ROUNDTRIP=PASS
+Uncaught error (line 19): TCP_CLIENT_RESPONSE_MISMATCH
+TCP_CLIENT_WRONG_EXPECTATION=REJECTED
+EXISTING_TRY_CATCH_SYNTAX=PASS
+TCP_LONG_SOAK_GENERATE_C_SYNTAX=PASS
+COMPILER_SHA_AFTER=9e08f102a579aed6ad77edac06997637e9f7b05dbe7197de1002107a6e905864
+```
+
+soak `.fls`의 첫 생성 C 검사는 `catch`가 일반 호출로 출력되어 `catch` implicit declaration 및 `__fl_binding_63` 미선언 오류로 실패했다. JS의 `finally` 정리와 동등하게 `.fls`를 `(finally (tcp-soak-cleanup))` 구조로 바꾼 뒤 생성 C 문법 검사는 통과했다.
+
+case 25 worker는 단일 `strace -f -e trace=execve` 아래 실행했다. trace에서 `CASE25_NODE_JS_EXEC=0`이었다. 그러나 daemon 생성용 Stage2 컴파일이 `timeout 120s`에 도달해 종료됐다. 원문 결과는 `Uncaught error (line 59): soak daemon build failed: `이며 trace의 Stage2 compiler 종료 상태는 `124`다. 원래 300000ms soak 제한은 변경하지 않았다. case 25는 PASS가 아니다. 71건 gate 및 전체 회귀는 실행하지 않았다.
 
 ## 언어 성과
 
-FX의 기존 DB95-13 native TCP client API 변경은 보존했다. 임시 포트 선택을 위해 `tcp-client-free-port`를 `runtime/v11-ops.h`와 `runtime/v11-tcp.h`에 추가했으며, mainline named callback을 사용하는 fixture로 바꿨다. 승인 뒤 smoke와 case 25 gate는 실행하지 않아 PONG 및 포트 이식은 미검증이다. DB95가 드러낸 결함은 smoke fixture가 named callback API 대신 inline closure를 전달한 점이다.
+FX의 기존 DB95-13 native TCP client API와 `tcp-client-free-port`를 보존했고, mainline named callback smoke로 PING→PONG을 확인했다. DB95가 드러낸 결함은 smoke fixture가 named callback API 대신 inline closure를 전달한 점이다. case 25 포트 이식은 생성 C 문법과 JS 미사용 trace까지만 확인했고, 내부 daemon 컴파일 시간 제한으로 실행 PASS는 확인하지 못했다.
+
+
+## DB95-15 보충 — 컴파일 시간 측정
+
+컴파일러는 지정대로 기존 바이너리를 그대로 사용했다. 측정 전후 실행 파일 SHA-256은 `9e08f102a579aed6ad77edac06997637e9f7b05dbe7197de1002107a6e905864`였다. Stage2 생성 소스 SHA-256은 `6a0d4e384a18834d4f0cb03c10460aade5bf05f999f5db981dd5dc275d313e7d`였다. 재빌드는 하지 않았다.
+
+측정 전 부하 원문:
+
+```text
+00:30:36 up  1:49,  5 users,  load average: 7.58, 6.87, 6.30
+```
+
+`nproc` 결과는 `72`였다. 측정 전 `ps` 상위 15행은 `artifacts/RUN-20261103-18/measurement/preload.txt`에 보존했다. 해당 목록에는 `tmp-archive-wit`가 59.2% CPU로 있었지만 case-bin, daemon-bin, native-release-gate, tcp-long-soak 프로세스는 없었다. 잠금 기록 `lock.txt`상 `flock -o /tmp/fl-heavy.lock` 대기는 `0`초였다. 측정 아티팩트는 작업공간 경로 아래에 두었다.
+
+두 경우 모두 같은 기존 컴파일러로 daemon 컴파일 단계만 실행했다. case25 결과는 원문 `CASE25_DAEMON_COMPILE_SECONDS=313.32`, 비교 대상인 이미 통과한 case 3 `raw binary boundary` 결과는 원문 `COMPARE_CASE3_COMPILE_SECONDS=0.01`이다. 생성 C 크기는 case25 `7529 1599030` (줄, 바이트), case 3 `24 1645` (줄, 바이트)였다. case25의 입력 소스 그래프는 5개 파일 합계 4,644줄, 202,229바이트였다.
+
+판정은 **(다) 컴파일러가 해당 구조에서 느림**이다. 측정 전 load average는 72 CPU에 비해 낮았고, 측정 중 컴파일러가 대체로 CPU 한 코어를 사용했으므로 전체 시스템 부하가 주원인인 (가)로 보기 어렵다. case25가 case3보다 훨씬 큰 입력·출력을 만들므로 단순 규모 영향(나)을 완전히 분리할 대조군은 없지만, 1.6MB 생성 C에 313.32초가 걸리고 1,645바이트 생성 사례는 0.01초인 차이를 근거로 컴파일러의 이 코드 구조 처리 비용을 주원인으로 판단한다. 이는 두 사례만 비교한 진단적 추론이며, case25 실행 자체는 앞서 기록한 120초 내부 제한 때문에 미통과 상태다.
+
+| 보충 확인 | 결과 |
+|---|---|
+| 보충 1/2 — case25와 비교 case 컴파일 시간 원문 기록 | PASS — `313.32`, `0.01` |
+| 보충 2/2 — 판정 근거 및 푸시·HEAD 일치 | 판정 기록 완료; 푸시 후 확인 예정 |
+
 
 DB95_SUMMARY=2/5

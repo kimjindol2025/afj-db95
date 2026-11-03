@@ -18,6 +18,8 @@ if [[ "${1:-}" == "--worker" ]]; then
   number="$2" label="$3" rel_path="$4" case_dir="$5" env_text="$6"
   input="$repo_root/$rel_path"
   compiler="${FX_NATIVE_STAGE0:?}"
+  export TMPDIR="$case_dir/tmp"
+  mkdir -p "$TMPDIR"
   export AFJ_DB95_REPO_ROOT="$repo_root"
   mkdir -p "$case_dir"
   export AFJ_DB_WAL="$case_dir/case.wal"
