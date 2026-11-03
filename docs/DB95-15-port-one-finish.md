@@ -92,7 +92,7 @@ FX의 기존 DB95-13 native TCP client API와 `tcp-client-free-port`를 보존�
 | 보충 확인 | 결과 |
 |---|---|
 | 보충 1/2 — case25와 비교 case 컴파일 시간 원문 기록 | PASS — `313.32`, `0.01` |
-| 보충 2/2 — 판정 근거 및 푸시·HEAD 일치 | 판정 기록 완료; 푸시 후 확인 예정 |
+| 보충 2/2 — 판정 근거 및 푸시·HEAD 일치 | PASS — 판정 근거 기록; Forgejo와 GitHub 모두 2e001b92d81e0d822b80ea756a8767d7710026a7 확인 |
 
 
 DB95_SUMMARY=2/5
