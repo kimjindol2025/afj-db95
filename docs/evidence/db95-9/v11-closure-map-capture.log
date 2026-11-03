@@ -1,0 +1,14 @@
+Compiled <가림> -> <가림>
+<가림> In function ‘__fl_anon_0’:
+<가림> error: ‘collation’ undeclared (first use in this function)
+   13 |     return (__extension__ ({ FLValue __fl_kv[2] = {fl_str_val("sort-key"), (fl_truthy(fl_eq(collation, fl_str_val("x"))) ? get(row, key) : fl_str_val("z"))}; fl_map_from_pairs(__fl_kv, 1); }));
+      |                                                                                             ^~~~~~~~~
+<가림> note: each undeclared identifier is reported only once for each function it appears in
+<가림> error: ‘row’ undeclared (first use in this function); did you mean ‘throw’?
+   13 |     return (__extension__ ({ FLValue __fl_kv[2] = {fl_str_val("sort-key"), (fl_truthy(fl_eq(collation, fl_str_val("x"))) ? get(row, key) : fl_str_val("z"))}; fl_map_from_pairs(__fl_kv, 1); }));
+      |                                                                                                                                ^~~
+      |                                                                                                                                throw
+<가림> error: ‘key’ undeclared (first use in this function); did you mean ‘keys’?
+   13 |     return (__extension__ ({ FLValue __fl_kv[2] = {fl_str_val("sort-key"), (fl_truthy(fl_eq(collation, fl_str_val("x"))) ? get(row, key) : fl_str_val("z"))}; fl_map_from_pairs(__fl_kv, 1); }));
+      |                                                                                                                                     ^~~
+      |                                                                                                                                     keys

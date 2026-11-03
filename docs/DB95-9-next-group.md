@@ -77,7 +77,26 @@ NATIVE_GATE_PASS=0 FAIL=71 TIMEOUT=0 SKIP=0 TOTAL=71
 | `missing-native:buf_to_binary` | 1 |
 | `compiler:undeclared:reader_tx` | 1 |
 
-대상 `compiler:undeclared:peer`는 0건이다. `process_exit`, `regex_match_i`, `has_key_p` 첫 오류도 각각 0건으로 유지됐다. 전체 통과가 0건이고 새 최대 묶음이 생겼으므로 결과를 성공으로 취급하지 않고 push하지 않는다. 원문 첫 오류는 경로를 `<가림>` 처리해 `docs/evidence/db95-9/first-errors.tsv`에, 그룹 수는 `first-error-groups.tsv`에 보관했다. v11 범위 회귀와 격리 bootstrap은 다음 순서로 실행 대기 중이다.
+대상 `compiler:undeclared:peer`는 0건이다. `process_exit`, `regex_match_i`, `has_key_p` 첫 오류도 각각 0건으로 유지됐다. 전체 통과가 0건이고 새 최대 묶음이 생겼으므로 결과를 성공으로 취급하지 않고 push하지 않는다. 원문 첫 오류는 경로를 `<가림>` 처리해 `docs/evidence/db95-9/first-errors.tsv`에, 그룹 수는 `first-error-groups.tsv`에 보관했다.
+
+두 번째 잠금 대기는 2026-11-03 01:31:53 UTC 시작해 약 30분 10초 후 회귀를 시작했다. `ps`에서 다른 `run-task946-full.sh`가 잠금을 보유하는 것을 확인하고 기다렸으며 강제 해제/중단은 하지 않았다.
+
+v11 범위 회귀 6개 개별 결과는 `has-key=FAIL`, `raw-peer-ports=PASS`, `closure-map-capture=FAIL`, `afj-file-names=FAIL`, `closure-capture=FAIL`, `peer-address=PASS`로 2 PASS / 4 FAIL이다. 기존 회귀 shell의 `V11_SCOPED_REGRESSION_PASS=5 FAIL=1` 합계 표시는 실패를 boolean으로만 세어 개별 결과와 맞지 않아 사용하지 않았다. 실패 첫 진단은 각각 `fl_not` 인자 타입, `row`/`key` 미선언, `file_append`/`file_size` 미선언, `row` 미선언이다. 통과한 raw peer port 시험은 고정 10/10 및 임의 포트 10/10이다.
+
+격리 native bootstrap은 완료했다. strace 없이 실행했다. 원문 해시:
+
+```text
+STAGE0_SHA=f7425bf086d99d11231ba79296e194fcc36b454379e46d44131bafb0dc74101c
+STAGE1_SHA=b60f8752d4f4045d0acccdd1489697ecb9c142e3d4b4d4f2618cbd23f7aaa344
+STAGE2_SHA=2e7a802f8102c5bf4826bae532486778212ebcbe50539ab74316936f2c3d122f
+STAGE3_SHA=2e7a802f8102c5bf4826bae532486778212ebcbe50539ab74316936f2c3d122f
+STAGE4_SHA=2e7a802f8102c5bf4826bae532486778212ebcbe50539ab74316936f2c3d122f
+RESIDUAL_PROCESSES=0
+CLEAN_CHECKOUT=PASS
+BOOTSTRAP_STRACE=0
+```
+
+Stage2, Stage3, and Stage4 are the same fixed point. `STAGE0_EQ_CANONICAL=DIFFERENT` was also reported by the script. Sanitized raw logs are under `docs/evidence/db95-9/`.
 
 ## 4. 다음 지시서 후보
 
@@ -87,6 +106,6 @@ NATIVE_GATE_PASS=0 FAIL=71 TIMEOUT=0 SKIP=0 TOTAL=71
 
 언어 기능 변경 없음. DB95가 드러낸 결함은 본줄기 flat native TCP callback 인자 API와 맞지 않는 중첩 optional 인자 때문에 peer 바인딩이 생성 C에서 누락된 점이다. 민감정보 패턴 diff 검사를 통과한 로컬 커밋은 DB95 `2505b7f`, FX `21d588f`이다. Forgejo/GitHub 푸시는 gate와 회귀가 통과한 뒤 진행한다.
 
-완료 항목: 시작 기준 및 오류 표 기록, 재현/원인 판정, DB95 callback 호출 선언 교정, raw_tcp 문자열 dispatch 제거, 가벼운 raw_tcp 및 symbol closure 확인, 로컬 민감정보 검사/커밋, DB95 71건 재시험 및 보호 묶음 회귀 판정(4/6). v11 회귀와 bootstrap은 대기 중이며, 전체 게이트 실패로 원격 푸시는 보류한다.
+완료 항목: 시작 기준 및 오류 표 기록, 재현/원인 판정, DB95 callback 호출 선언 교정, raw_tcp 문자열 dispatch 제거, 가벼운 raw_tcp 및 symbol closure 확인, 로컬 민감정보 검사/커밋, DB95 71건 재시험 및 보호 묶음 회귀 판정, v11 회귀, 격리 bootstrap(5/6). 게이트와 범위 회귀 실패가 있어 push 및 원격 HEAD 확인은 하지 않았다.
 
-DB95_SUMMARY=4/6
+DB95_SUMMARY=5/6

@@ -1,0 +1,9 @@
+Compiled <가림> -> <가림>
+<fl>: In function ‘main’:
+<fl>:2:5: error: implicit declaration of function ‘file_append’; did you mean ‘_fl_file_append’? [-Wimplicit-function-declaration]
+<fl>:4:22: error: implicit declaration of function ‘file_size’; did you mean ‘_fl_file_size’? [-Wimplicit-function-declaration]
+<fl>:4:22: error: incompatible type for argument 1 of ‘fl_eq’
+In file included from <가림>
+<가림> note: expected ‘FLValue’ but argument is of type ‘int’
+  115 | FLValue fl_eq(FLValue a, FLValue b);
+      |               ~~~~~~~~^

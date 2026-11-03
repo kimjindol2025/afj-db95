@@ -1,0 +1,16 @@
+Compiled <가림> -> <가림>
+<fl>: In function ‘main’:
+<fl>:3:49: error: implicit declaration of function ‘map_has_key_p’; did you mean ‘fl_has_key’? [-Wimplicit-function-declaration]
+<fl>:3:49: error: incompatible type for argument 1 of ‘fl_truthy’
+In file included from <가림>
+<가림> note: expected ‘FLValue’ but argument is of type ‘int’
+  105 | bool fl_truthy(FLValue v);
+      |                ~~~~~~~~^
+<fl>:3:101: error: incompatible type for argument 1 of ‘fl_not’
+<가림> note: expected ‘FLValue’ but argument is of type ‘int’
+  123 | FLValue fl_not(FLValue a);
+      |                ~~~~~~~~^
+<fl>:3:232: error: incompatible type for argument 1 of ‘fl_not’
+<가림> note: expected ‘FLValue’ but argument is of type ‘int’
+  123 | FLValue fl_not(FLValue a);
+      |                ~~~~~~~~^
