@@ -91,3 +91,66 @@ EXIT=1
 FX 내장 연결 커밋: 886af1c434d7a8f70bceb851360ff6600d2c3c3b. Forgejo 다음 GitHub에 푸시하고 ls-remote로 양쪽 동일 HEAD를 확인했다. 민감정보 diff 검사 및 diff --check를 통과했다. 보고서는 별도 문서 커밋 후 같은 순서로 푸시하고 원격 검증 결과를 최종 응답에 기록한다. 원본 컴파일러 실행 파일은 보존했다.
 
 DB95_SUMMARY=2/4, PASS=미측정 FAIL=미측정 TIMEOUT=미측정
+
+## 보충 2 — cgc-while 최소 수정
+
+컴파일러 수정 승인을 받아 self/cgc-main.fl:2373 한 줄만 교체했다(+1/-1). `(cgc (get $args 1))`을 `(cgc-do (slice $args 1 (length $args)))`로 바꿨다. 다른 컴파일러 함수는 수정하지 않았다.
+
+재현을 FX tests/db95-26-while.fl(7줄)에 추가했다. 앞 절의 실패 재현과 같은 내용이다. 수정 전 `WHILE_SECOND_BODY=0`, exit 1; 수정 후 출력은 다음과 같고 exit 0이다.
+
+```text
+WHILE_SECOND_BODY=1
+WHILE_BODY_PASS
+```
+
+기존 실행 파일 1d86c0b1140f98710927ba847458b811122d6bd7f9ead4fee79bde918e901769에서 시작해 새 소스로 Stage1을 만든 후 순차적으로 Stage2·3·4를 만들었다. Stage0·시드 교체 없이 분리된 임시 자료에서 실행했다.
+
+```text
+STAGE1=e4fb1a898828cd873989008e248cdcadeb5dc7ce72ac4b68d5f3ea1b28c6f487
+STAGE2=e4fb1a898828cd873989008e248cdcadeb5dc7ce72ac4b68d5f3ea1b28c6f487
+STAGE3=e4fb1a898828cd873989008e248cdcadeb5dc7ce72ac4b68d5f3ea1b28c6f487
+STAGE4=e4fb1a898828cd873989008e248cdcadeb5dc7ce72ac4b68d5f3ea1b28c6f487
+FIXPOINT_MATCH=PASS
+```
+
+새 Stage4 실행 파일 SHA-256: 7bca2ea4c37619bce3f6047d88e9bace717129034c92836c322d2ba845cfdb2a.
+
+기존 7b119bfd… 생성 C 대비 raw diff는 자동 생성 변수/함수 번호 이동을 포함한다. arg/av/anon/env/logic/loop/catch/try 및 __env의 자동 번호를 정규화한 diff는 `@@ -4736,7 +4736,7 @@` 한 곳만 남는다. 해당 함수 __fl_binding_1421은 cgc-while이며 호출이 cgc → cgc-do(slice ...)로 바뀐 내용이다. Stage1과 Stage4 C도 cmp 동일하다. 원본 diff 및 정규화 diff는 <가림>/DB95-26에 보존했다.
+
+### 기존 단위 시험
+
+아래 12개 파일이 모두 통과했다. 기존 단위 시험 회귀는 0건이다. 각 파일 내부 확인값과 오류 기대값은 변경하지 않았다.
+
+- FX: db95-26-while, db95-26-runtime, buf-str-compat, sleep-ms-compat, buf-buffer-compat, rem-compat, rem-zero-divisor, println-flush-child, bit-ops-compat, bit-adapter-compat.
+- afj-db95: db95-25-buf-u32le, db95-25-sha1-abc.
+- rem-zero-divisor는 기존 rem-zero-check.sh로 exit 1과 원문 오류를 확인했고, println-flush-child는 기존 println-flush-check.sh로 리디렉션 후 0.1초 시점의 문구를 확인했다.
+
+### case 25 단독 실행
+
+기존 worker, 환경값 및 360초 제한으로 실행했다. 로그인 SESSION_LIMIT은 넘었고 쓰기·조회 검증이 진행됐다. 그러나 최종 종료 코드는 124이며 통과가 아니다.
+
+```text
+CASE25_EXIT=124
+afj-db95 TCP 300s soak PASS writes=16376 throughput=54.586666666666666/s p95=173ms max=323ms
+Uncaught error (line 131): [finally] Function not found: finally (at line 167, col 0)
+```
+
+PASS 문구가 반복 출력됐지만 종료 결과를 기준으로 실패로 기록한다. 시험 원본의 while/후속 표현식 배치와 finally 처리가 후속 조사 대상이다. cgc-while 밖의 컴파일러 및 시험 원본은 수정하지 않았다. 제한시간도 바꾸지 않았다.
+
+전체 gate는 단독 시험 뒤 공용 잠금 아래 원래 러너로 실행한다. 첫 대기용 background 프로세스는 gate 시작 파일이나 case 기록을 만들지 않고 종료되어 실제 실행으로 세지 않는다. 이후 foreground 실행의 한 프로세스에서 71건을 완료하는지 확인한다.
+
+### 메모리 경고 및 실행 중단
+
+사용자의 메모리 경고 뒤 확인한 커널 기록에서 2026-11-05 02:12:43에 case-bin OOM 종료를 확인했다. 식별정보는 가렸다.
+
+```text
+Out of memory: Killed process 158215 (case-bin) total-vm:202632992kB, anon-rss:175861936kB, file-rss:6880kB, shmem-rss:0kB
+```
+
+익명 RSS만 약 168GiB다. gate는 case 26 FAIL exit=124까지 집계했고 case 27 로그가 있으나 완료 파일과 71건 최종 요약은 없다. OOM 프로세스가 정확히 어느 case에 해당하는지는 추가 확인이 필요하다. case 26·27 로그에 중간 PASS 문구가 있으나 완료 판정으로 쓰지 않는다. 확인 시점에 gate·컴파일러·case-bin·daemon-bin 프로세스는 남아 있지 않았다. 같은 조건의 재시작은 시스템 OOM 재발 위험 때문에 보류한다. 사용자 지시대로 일부 구간을 이어 돌려 합산하지 않았다.
+
+완료 기준: 수정 전 실패/수정 후 통과 및 새 고정점 검증은 충족했다. 기존 단위 시험은 12개 파일 모두 통과했으나 case 25는 미통과다. 71건 gate 미완료이므로 PASS 44 이상과 기존 42건 전체 회귀 여부는 확정할 수 없다. 원인 조사 또는 메모리 안전 실행 방안 확인 없이 무거운 시험을 추가 실행하지 않는다.
+
+언어 성과: FreeLang while의 두 번째 이후 본문 누락을 수정했고 최소 재현과 기존 단위 시험을 통과했다. 전체 DB95 통과 수는 이번 회차 미확정이다.
+
+DB95_SUMMARY=2/4, PASS=미확정 FAIL=미확정 TIMEOUT=미확정, FIXED_POINT=e4fb1a898828cd873989008e248cdcadeb5dc7ce72ac4b68d5f3ea1b28c6f487
