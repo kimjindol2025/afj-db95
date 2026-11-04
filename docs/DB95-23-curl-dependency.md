@@ -142,6 +142,7 @@ flock -o /tmp/fl-heavy.lock bwrap --bind / / --dev-bind /dev /dev --proc /proc \
   /bin/bash tests/native-release-gate.sh
 ```
 
+A preliminary setup command pointed at a non-existent compiler path; it was interrupted before any case output or Stage0 build log was produced. The completed run below used the existing compiler after its executable bit and SHA-256 were verified.
 The compiler SHA-256 at start and end was `bb6b1a355e4e47360607a648b9d13ab24f43d056d5f58d87ec78fa8f657510f3` in both checks. The complete gate output is preserved under `<가림>/tmp/RUN-20261104-28/gate-fixed/gate.log`.
 
 ### Full-gate result
@@ -178,7 +179,7 @@ The next groups each have 2 cases: `oversized WAL was accepted` (7, 13), and `mi
 | 1/4: `/dev/null` cause confirmed | PASS — host device is normal; namespace omitted explicit device bind |
 | 2/4: 71-case gate completed | PASS — exact summary line above |
 | 3/4: top three failure groups | PASS — 13, 4, and 4 cases |
-| 4/4: report commit and Forgejo HEAD match | pending at report edit time |
+| 4/4: report commit and Forgejo HEAD match | PASS — committed and pushed; local and Forgejo HEAD were equal |
 
 GitHub remains untouched pending the user's authentication-complete notice. No source, runner, test expectation, timeout, compiler, or runtime file was changed in DB95-24.
 
