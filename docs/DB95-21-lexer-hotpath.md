@@ -9,7 +9,7 @@ RUN-ID: `RUN-20261104-25`
 - afj-db95 start HEAD: `cbb223ac58da7a03506cfbdd23e07ddd5a1831f8` (`native-run`).
 - Stage2 input compiler SHA-256: `c4bb4153fd8f1ff230c17ffb49d1d29f976b15d478cd3ebaa3569235fcf9d64e`.
 - Original compiler `9e08f102a579aed6ad77edac06997637e9f7b05dbe7197de1002107a6e905864` was not replaced or deleted. Stage0 was not used.
-- Evidence is preserved under `tmp/RUN-20261104-25/` in afj-db95. The full 71-case gate was not run; its latest recorded result remains `NATIVE_GATE_PASS=34 FAIL=37 TOTAL=71` from DB95-10/12.
+- Evidence is preserved under `<가림>`. The full 71-case gate was not run; its latest recorded result remains `NATIVE_GATE_PASS=34 FAIL=37 TOTAL=71` from DB95-10/12.
 
 ## 1. Calls repeated while scanning characters
 
@@ -54,7 +54,7 @@ Each row uses the exact DB95-19 input and compiler timing basis. Each compile ra
 
 GDB breakpoint sampling saved 103 stacks (`t_units`: 51, `t_unit`: 52). The run was interrupted after 612.88 seconds so it would not continue spending time in per-hit breakpoint accounting. At interruption, GDB reported `t_units` hits `1185747` and `t_unit` hits `2090854`; within those partial counts, `t_unit/(t_units+t_unit)=63.81%` and `t_unit/t_units=1.763`. This is a partial run, not a complete-compile count.
 
-DB95-20's earlier asynchronous sample contained `t_unit` in 48/100 stacks. The current 103 stacks were gathered by two targeted breakpoints, so their 52/103 `t_unit` breakpoint share is not comparable with that asynchronous sample. A separate asynchronous attempt yielded only two stacks before the compiler finished. Therefore a decrease in a directly comparable GDB `t_unit` sample ratio is **not established**, even though compile time fell by more than 20% and the source no longer calls string `length`/`char-at` per character. GDB logs and the interrupted-run counter output are preserved under `tmp/RUN-20261104-25/gdb/` and `gdb-async/`.
+DB95-20's earlier asynchronous sample contained `t_unit` in 48/100 stacks. The current 103 stacks were gathered by two targeted breakpoints, so their 52/103 `t_unit` breakpoint share is not comparable with that asynchronous sample. A separate asynchronous attempt yielded only two stacks before the compiler finished. Therefore a decrease in a directly comparable GDB `t_unit` sample ratio is **not established**, even though compile time fell by more than 20% and the source no longer calls string `length`/`char-at` per character. GDB logs and the interrupted-run counter output are preserved under `<가림>`.
 
 ## 4. Case 3 and case 25 runs
 
@@ -69,7 +69,7 @@ The latest recorded complete 71-case gate remains 34/71; this run did not re-run
 
 ## Commit and remote status
 
-- FX source commit: `24101fdc1969eaa7f758a5e2e06aa5bc0fbbbc7b` on `fix/db95-21-lexer`. Forgejo ref matches this commit. The GitHub push attempt failed with `fatal: could not read Username for 'https://github.com': No such device or address`; its branch ref is absent.
+- FX source commit: `24101fdc1969eaa7f758a5e2e06aa5bc0fbbbc7b` on `fix/db95-21-lexer`. Forgejo ref matches this commit. The GitHub push attempt failed because authentication was unavailable; its branch ref is absent.
 - The afj-db95 report is committed to `native-run`, and its Forgejo ref was verified equal after the final report-sync push. GitHub remains at `cbb223ac58da7a03506cfbdd23e07ddd5a1831f8`; its push was not retried after the same GitHub authentication failure.
 - Read-only `gh auth status` reports the configured `kimjindol2025` account failed to log in. No credential, URL, or repository setting was changed.
 

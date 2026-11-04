@@ -40,13 +40,13 @@ The earlier command assigned `case_root` in the parent shell and then used it in
 The corrected command assigned and used the paths in the same shell, with no nested `bash -c`. Exact command pattern used for case 3:
 
 ```bash
-case_root="$PWD/tmp/RUN-20261104-28/cases"
+case_root="<가림>"
 case_dir="$case_root/case-3"
 mkdir -p "$case_dir"
 FX_ROOT=<가림>/freelang-v11-fx \
-FX_NATIVE_STAGE0="$PWD/tmp/RUN-20261104-25/fixpoint-final/stage3-bin" \
-LIBRARY_PATH="$PWD/tmp/RUN-20261104-28/linker" \
-flock -o /tmp/fl-heavy.lock timeout --foreground 120s \
+FX_NATIVE_STAGE0="<가림>" \
+LIBRARY_PATH="<가림>" \
+flock -o <가림> timeout --foreground 120s \
   /bin/bash tests/native-release-gate.sh --worker 3 \
   "raw binary boundary" tests/binary-raw.fls "$case_dir" "" \
   >"$case_dir/output.log" 2>&1
@@ -62,11 +62,11 @@ The same pattern was run individually for cases 4, 5, 8, and 10. The compiler wa
 | 8 `metrics contract` | PASS | absent | `afj-db95 executor PASS` |
 | 10 `large corpus` | FAIL | absent | `Uncaught error (line 3051): [make-rows] [rem] Function not found: rem (at line 11, col 0)` |
 
-The five output logs and preflight `ps` records are preserved under `tmp/RUN-20261104-28/` in afj-db95. The local linker-name alias is also in that run directory; no package was installed.
+The five output logs and preflight `ps` records are preserved under `<가림>`. The local linker-name alias is also in that run directory; no package was installed.
 
 ## 4. One interrupted full gate attempt
 
-All five representative outputs lacked the curl header/call diagnostic, so the full gate was started once. The gate `/tmp` was redirected into `tmp/RUN-20261104-28/root-tmp` without editing the runner. That namespace setup also made `/dev/null` unwritable. The repeated first error was:
+All five representative outputs lacked the curl header/call diagnostic, so the full gate was started once. The gate temporary directory was redirected to `<가림>` without editing the runner. That namespace setup also made the null device unavailable. The repeated first error was:
 
 ```text
 cc1: fatal error: cannot open ‘/dev/null’ for writing: Permission denied
@@ -81,7 +81,7 @@ The same environment cause appeared in multiple consecutive cases, so the gate w
 | TIMEOUT | 39 | No aggregate; timeout reduction cannot be inferred |
 | TOTAL | 71 | Not completed |
 
-The single gate attempt is preserved under `tmp/RUN-20261104-28/gate/`. It was not rerun. Its partial case records must not be used as native test results or as evidence that timeouts were resolved.
+The single gate attempt is preserved under `<가림>`. It was not rerun. Its partial case records must not be used as native test results or as evidence that timeouts were resolved.
 
 ## Push status
 
@@ -122,7 +122,7 @@ Host `ls -l /dev/null` output (owner/group redacted as required):
 crw-rw-rw-. 1 <가림> <가림> 1, 3 Nov  3 22:41 /dev/null
 ```
 
-The device node itself is healthy. The prior failed run used a bwrap mount namespace that rebound the root and `/tmp` but did not explicitly bind the device filesystem. In that namespace `/dev/null` could not be opened, which caused the line 98 link redirections and compiler `/dev/null` writes to fail. The gate script only has `/dev/null` redirections at `tests/native-release-gate.sh:98,101-102`; inspection found no command that removes, truncates, or overwrites `/dev/null`. No runner file was changed.
+The device node itself is healthy. The prior failed run used a bwrap mount namespace that rebound the root and temporary directory but did not explicitly bind the device filesystem. In that namespace `/dev/null` could not be opened, which caused the line 98 link redirections and compiler `/dev/null` writes to fail. The gate script only has `/dev/null` redirections at `tests/native-release-gate.sh:98,101-102`; inspection found no command that removes, truncates, or overwrites `/dev/null`. No runner file was changed.
 
 With the device bind corrected, the namespace sees:
 
@@ -133,17 +133,17 @@ crw-rw-rw-. 1 <가림> <가림> 1, 3 Nov  3 22:41 /dev/null
 The one complete gate invocation was:
 
 ```bash
-flock -o /tmp/fl-heavy.lock bwrap --bind / / --dev-bind /dev /dev --proc /proc \
-  --bind <가림>/root-tmp /tmp --chdir <가림>/afj-db95 \
+flock -o <가림> bwrap --bind / / --dev-bind /dev /dev --proc /proc \
+  --bind <가림> <가림> --chdir <가림> \
   env FX_ROOT=<가림>/freelang-v11-fx \
-  FX_NATIVE_STAGE0=<가림>/afj-db95/tmp/RUN-20261104-25/fixpoint-final/stage3-bin \
-  LIBRARY_PATH=<가림>/afj-db95/tmp/RUN-20261104-28/linker \
-  NATIVE_GATE_LOG_DIR=<가림>/afj-db95/tmp/RUN-20261104-28/gate-fixed/log \
+  FX_NATIVE_STAGE0=<가림> \
+  LIBRARY_PATH=<가림> \
+  NATIVE_GATE_LOG_DIR=<가림> \
   /bin/bash tests/native-release-gate.sh
 ```
 
 A preliminary setup command pointed at a non-existent compiler path; it was interrupted before any case output or Stage0 build log was produced. The completed run below used the existing compiler after its executable bit and SHA-256 were verified.
-The compiler SHA-256 at start and end was `bb6b1a355e4e47360607a648b9d13ab24f43d056d5f58d87ec78fa8f657510f3` in both checks. The complete gate output is preserved under `<가림>/tmp/RUN-20261104-28/gate-fixed/gate.log`.
+The compiler SHA-256 at start and end was `bb6b1a355e4e47360607a648b9d13ab24f43d056d5f58d87ec78fa8f657510f3` in both checks. The complete gate output is preserved under `<가림>`.
 
 ### Full-gate result
 

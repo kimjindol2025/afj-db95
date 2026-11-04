@@ -6,11 +6,11 @@ RUN-ID: `RUN-20261104-27`
 
 - FX branch: `fix/db95-21-lexer`, HEAD `24101fdc1969eaa7f758a5e2e06aa5bc0fbbbc7b`.
 - afj-db95 branch: `native-run`; starting HEAD `d02503d1c8cbeb977769a2abf1f7a77e2ddd043f`.
-- Compiler: DB95-21 Stage3 at `<가림>/afj-db95/tmp/RUN-20261104-25/fixpoint-final/stage3-bin`.
+- Compiler: DB95-21 Stage3 at `<가림>`.
 - Compiler SHA-256 before gate: `bb6b1a355e4e47360607a648b9d13ab24f43d056d5f58d87ec78fa8f657510f3`.
 - Compiler SHA-256 after GDB sampling: `bb6b1a355e4e47360607a648b9d13ab24f43d056d5f58d87ec78fa8f657510f3`.
 - Gate ran once with `tests/native-release-gate.sh`; it used the supplied Stage3 compiler and did not build Stage0. GDB input was the preserved DB95-20 25% `tcp-server.fls`.
-- Gate output and per-case artifacts: `tmp/RUN-20261104-27/gate/`. GDB command, console and 120 sampled stacks: `tmp/RUN-20261104-27/gdb/`. The `ps`/uptime records made before both heavy runs are in the corresponding `preflight.txt` files. No evidence was deleted.
+- Gate output and per-case artifacts: `<가림>`. GDB command, console and 120 sampled stacks: `<가림>`. The `ps`/uptime records made before both heavy runs are in the corresponding `preflight.txt` files. No evidence was deleted.
 
 ## 1. One gate run
 
@@ -20,7 +20,7 @@ Original gate summary line:
 NATIVE_GATE_PASS=2 FAIL=69 TIMEOUT=0 SKIP=0 TOTAL=71
 ```
 
-The gate command exited `1`, as expected with failures. The summary was captured in `tmp/RUN-20261104-27/gate/gate.log` and `gate-exit.txt`.
+The gate command exited `1`, as expected with failures. The summary was captured in `<가림>`.
 
 ## 2. Comparison with V-18
 
