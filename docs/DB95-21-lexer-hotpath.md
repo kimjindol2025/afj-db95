@@ -69,9 +69,9 @@ The latest recorded complete 71-case gate remains 34/71; this run did not re-run
 
 ## Commit and remote status
 
-- FX source commit: `24101fdc1969eaa7f758a5e2e06aa5bc0fbbbc7b` on `fix/db95-21-lexer`. Forgejo accepted the branch push.
-- GitHub push was attempted and failed with `fatal: could not read Username for 'https://github.com': No such device or address`. Read-only `gh auth status` reports the configured `kimjindol2025` account failed to log in. No credential, URL, or repository setting was changed.
-- The afj-db95 report commit and its Forgejo push are recorded after they complete. GitHub synchronization remains blocked by the same authentication state.
+- FX source commit: `24101fdc1969eaa7f758a5e2e06aa5bc0fbbbc7b` on `fix/db95-21-lexer`. Forgejo ref matches this commit. The GitHub push attempt failed with `fatal: could not read Username for 'https://github.com': No such device or address`; its branch ref is absent.
+- afj-db95 report commit: `4d87ae4f07851c2468a669025de5e79ecd7b589f` on `native-run`. Forgejo ref matches this commit. GitHub remains at `cbb223ac58da7a03506cfbdd23e07ddd5a1831f8`; its push was not retried after the same GitHub authentication failure.
+- Read-only `gh auth status` reports the configured `kimjindol2025` account failed to log in. No credential, URL, or repository setting was changed.
 
 ## Result
 
@@ -80,7 +80,7 @@ The latest recorded complete 71-case gate remains 34/71; this run did not re-run
 | 1/4: repeated character work and source lines | PASS — baseline calls and conversion path are listed above |
 | 2/4: fixed point and generated output | PASS — Stage2=3=4 source hash; all three generated C outputs identical |
 | 3/4: 20% speed reduction and lower GDB `t_unit` ratio | PARTIAL — compile time fell by 91.0%/92.5%; a comparable completed GDB ratio decrease was not established |
-| 4/4: push and matching remote HEADs | INCOMPLETE — FX is on Forgejo; GitHub authentication failed, and afj-db95 still needs its report commit and Forgejo push |
+| 4/4: push and matching remote HEADs | INCOMPLETE — both Forgejo refs match their local commits; GitHub is not synchronized because authentication failed |
 
 ## Language result
 
