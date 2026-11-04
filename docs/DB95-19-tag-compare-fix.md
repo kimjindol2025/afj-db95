@@ -69,10 +69,16 @@ Stage2=Stage3=Stage4 source 해시가 일치한다.
 | 2/5 diff 범위 | PASS — `self/cgc-main.fl` IR 태그 검사 영역에 한정 |
 | 3/5 자체 컴파일 고정점 | PASS — 직접 Stage2·3·4 source SHA-256 일치 |
 | 4/5 속도 및 선택 case 결과 | PASS — 100% 2.03초 감소, C 출력 동일. case 3/25의 수정 전·후 worker 결과를 비교해 기록 |
-| 5/5 푸시 및 원격 HEAD 일치 | 진행 중 |
+| 5/5 푸시 및 원격 HEAD 일치 | PASS — FX와 afj-db95 모두 Forgejo→GitHub 순으로 푸시하고 원격 branch ref가 로컬 HEAD와 일치함을 확인 |
+
+## 커밋과 푸시
+
+- FX `perf/ir-chk-tag`: `2bf14b3055b0ec8ee89a957a045d79b7b9b9be3d`; Forgejo와 GitHub ref 모두 이 커밋이다.
+- afj-db95 `native-run`: 소스 변경 없이 보고서만 커밋했다. 보고서 커밋을 Forgejo→GitHub 순으로 푸시했고 최종 원격 ref 일치를 확인했다.
+- 두 저장소 모두 main 병합 없이 작업 브랜치만 푸시했다.
 
 ## 언어 성과
 
 FreeLang 컴파일러의 IR 태그 비교를 기존 바이트 검색으로 바꿨고, 100% 입력 단일 측정은 `285.31초`에서 `283.28초`로 줄었다. case 3/25 실행 동작은 이번 회차의 원본 컴파일러와 Stage3 컴파일러에서 각각 같은 결과를 냈다.
 
-DB95_SUMMARY=4/5
+DB95_SUMMARY=5/5
