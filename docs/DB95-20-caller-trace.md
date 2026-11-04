@@ -52,10 +52,10 @@ The trace did not record runtime argument identities. The source mapping shows t
 | 1/4: 100 stacks, each at least 15 frames | PASS — `120` stacks; all `120` have at least 15 frames |
 | 2/4: top five mapped to FreeLang source | PASS — binding registration plus exact source revision and lines recorded |
 | 3/4: repetition and timing | PASS — about 60,000 nested conversion entries; same source value follows the repeated lexer access path; amortized estimate recorded |
-| 4/4: case 3 verdict and synchronized pushes | PENDING until report commit and remote verification |
+| 4/4: case 3 verdict and synchronized pushes | PASS — Forgejo and GitHub `native-run` both resolve to `2e93d46a3b8d6c816e95671703ca3fc86ff78415` |
 
 ## Language result
 
 예 — `lex-loop`, `skip-ws-loop`, `skip-ws`, `read-symbol-iter`, and `lex` locate the repeated text-access path; this trace does not prove one of them alone accounts for most total compile time.
 
-DB95_SUMMARY=3/4
+DB95_SUMMARY=4/4
