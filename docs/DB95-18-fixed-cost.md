@@ -65,7 +65,7 @@ GDB callstack의 source line 값은 `__fl_binding_288`에서 `self/cgc-main.fl:2
 | 1/4 GDB 오류 원문과 원인 | PASS |
 | 2/4 표본 100개 이상 | PASS — 100개 |
 | 3/4 상위 5개 함수와 `self/*.fl` 소스 위치 | PARTIAL — native 상위 5개와 런타임 위치는 기록. `ir-chk`의 직접 source line 두 곳을 확인했으나, 5개 FreeLang 함수명으로 완전 역매핑하지 못함 |
-| 4/4 판정, 문서 커밋·Forgejo→GitHub 푸시·동일 HEAD | 진행 중 |
+| 4/4 판정, 문서 커밋·Forgejo→GitHub 푸시·동일 HEAD | PASS — 판정 근거를 기록했고 보고서 커밋 `54144bb713e9c87d234c377f98ce510b11a675bd`를 Forgejo→GitHub 순으로 푸시해 동일 HEAD를 확인했다. 이 푸시 확인을 담은 최종 문서 갱신도 같은 순서로 반영하고 ref를 재확인한다. |
 
 ## 언어 성과
 
