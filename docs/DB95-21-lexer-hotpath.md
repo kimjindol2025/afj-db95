@@ -70,7 +70,7 @@ The latest recorded complete 71-case gate remains 34/71; this run did not re-run
 ## Commit and remote status
 
 - FX source commit: `24101fdc1969eaa7f758a5e2e06aa5bc0fbbbc7b` on `fix/db95-21-lexer`. Forgejo ref matches this commit. The GitHub push attempt failed with `fatal: could not read Username for 'https://github.com': No such device or address`; its branch ref is absent.
-- afj-db95 report commit: `4d87ae4f07851c2468a669025de5e79ecd7b589f` on `native-run`. Forgejo ref matches this commit. GitHub remains at `cbb223ac58da7a03506cfbdd23e07ddd5a1831f8`; its push was not retried after the same GitHub authentication failure.
+- The afj-db95 report is committed to `native-run`, and its Forgejo ref was verified equal after the final report-sync push. GitHub remains at `cbb223ac58da7a03506cfbdd23e07ddd5a1831f8`; its push was not retried after the same GitHub authentication failure.
 - Read-only `gh auth status` reports the configured `kimjindol2025` account failed to log in. No credential, URL, or repository setting was changed.
 
 ## Result
