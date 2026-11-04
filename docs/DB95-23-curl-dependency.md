@@ -111,3 +111,77 @@ The single gate attempt is preserved under `tmp/RUN-20261104-28/gate/`. It was n
 The five representative DB95 cases recorded `1/5` PASS after the source-level curl transport removal; the full native 71-case pass count remains unmeasured. The unchanged gate linker command still attaches the host's `libcurl.so.4` runtime to case binaries, as disclosed above.
 
 DB95_SUMMARY=2/4, 보충 1: 2/3
+
+## DB95-24 — `/dev/null` diagnosis and full gate
+
+### Cause
+
+Host `ls -l /dev/null` output (owner/group redacted as required):
+
+```text
+crw-rw-rw-. 1 <가림> <가림> 1, 3 Nov  3 22:41 /dev/null
+```
+
+The device node itself is healthy. The prior failed run used a bwrap mount namespace that rebound the root and `/tmp` but did not explicitly bind the device filesystem. In that namespace `/dev/null` could not be opened, which caused the line 98 link redirections and compiler `/dev/null` writes to fail. The gate script only has `/dev/null` redirections at `tests/native-release-gate.sh:98,101-102`; inspection found no command that removes, truncates, or overwrites `/dev/null`. No runner file was changed.
+
+With the device bind corrected, the namespace sees:
+
+```text
+crw-rw-rw-. 1 <가림> <가림> 1, 3 Nov  3 22:41 /dev/null
+```
+
+The one complete gate invocation was:
+
+```bash
+flock -o /tmp/fl-heavy.lock bwrap --bind / / --dev-bind /dev /dev --proc /proc \
+  --bind <가림>/root-tmp /tmp --chdir <가림>/afj-db95 \
+  env FX_ROOT=<가림>/freelang-v11-fx \
+  FX_NATIVE_STAGE0=<가림>/afj-db95/tmp/RUN-20261104-25/fixpoint-final/stage3-bin \
+  LIBRARY_PATH=<가림>/afj-db95/tmp/RUN-20261104-28/linker \
+  NATIVE_GATE_LOG_DIR=<가림>/afj-db95/tmp/RUN-20261104-28/gate-fixed/log \
+  /bin/bash tests/native-release-gate.sh
+```
+
+The compiler SHA-256 at start and end was `bb6b1a355e4e47360607a648b9d13ab24f43d056d5f58d87ec78fa8f657510f3` in both checks. The complete gate output is preserved under `<가림>/tmp/RUN-20261104-28/gate-fixed/gate.log`.
+
+### Full-gate result
+
+Original summary line:
+
+```text
+NATIVE_GATE_PASS=34 FAIL=37 TIMEOUT=0 SKIP=0 TOTAL=71
+```
+
+| Metric | V-18 | DB95-24 |
+|---|---:|---:|
+| PASS | 4 | 34 |
+| FAIL | 67 | 37 |
+| TIMEOUT | 39 | 0 |
+| TOTAL | 71 | 71 |
+
+TIMEOUT is reported as the gate's timeout count (a subset of FAIL), not an additional case category. The curl-related compiler diagnostic occurred in 0 case logs. The source transport change therefore has a first measured native gate result of 34/71 passing; `tests/native-release-gate.sh` still links `-lcurl`, so this result does not claim the produced executables have no libcurl shared-library dependency.
+
+### Largest first-error groups
+
+| First-error group | Cases | Count | Representative original line |
+|---|---|---:|---|
+| `NATIVE_JS_SOURCE_NOT_PORTED` | 24, 35, 56, 60–64, 66–69, 71 | 13 | `NATIVE_JS_SOURCE_NOT_PORTED` |
+| `missing-native:buf_str` | 4, 5, 65, 70 | 4 | `Uncaught error: [buf-str] Function not found: buf-str (at line 116, col 0)` |
+| `missing-native:sleep_ms` | 25, 45, 50, 53 | 4 | `Uncaught error: [sleep_ms] Function not found: sleep_ms (at line 75, col 0)` |
+
+The next groups each have 2 cases: `oversized WAL was accepted` (7, 13), and `missing-native:file_mtime` (26, 27). Case 9 and case 34 also fail because the shell scripts require `node`, which is absent from the restricted path; no JS test was run. Case 45 has the `sleep_ms` first error even though later checks print PASS markers.
+
+### DB95-24 score
+
+| Criterion | Result |
+|---|---|
+| 1/4: `/dev/null` cause confirmed | PASS — host device is normal; namespace omitted explicit device bind |
+| 2/4: 71-case gate completed | PASS — exact summary line above |
+| 3/4: top three failure groups | PASS — 13, 4, and 4 cases |
+| 4/4: report commit and Forgejo HEAD match | pending at report edit time |
+
+GitHub remains untouched pending the user's authentication-complete notice. No source, runner, test expectation, timeout, compiler, or runtime file was changed in DB95-24.
+
+Language result: FreeLang-native DB95 currently passes 34 of 71 cases with the curl source dependency removed; the fixed gate linker flag still adds the system libcurl runtime dependency.
+
+DB95_SUMMARY=4/4, PASS=34 FAIL=37 TIMEOUT=0
