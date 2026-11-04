@@ -52,7 +52,7 @@ The trace did not record runtime argument identities. The source mapping shows t
 | 1/4: 100 stacks, each at least 15 frames | PASS — `120` stacks; all `120` have at least 15 frames |
 | 2/4: top five mapped to FreeLang source | PASS — binding registration plus exact source revision and lines recorded |
 | 3/4: repetition and timing | PASS — about 60,000 nested conversion entries; same source value follows the repeated lexer access path; amortized estimate recorded |
-| 4/4: case 3 verdict and synchronized pushes | PASS — Forgejo and GitHub `native-run` both resolve to `2e93d46a3b8d6c816e95671703ca3fc86ff78415` |
+| 4/4: case 3 verdict and synchronized pushes | PASS — report commit pushed Forgejo first, then GitHub; both `native-run` refs verified equal |
 
 ## Language result
 
