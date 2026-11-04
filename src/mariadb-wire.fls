@@ -28,6 +28,11 @@
                (buf-u8 (bit-and (bit_shr value 16) 255))
                (buf-u8 (bit-and (bit_shr value 24) 255))]))
 
+;; Compatibility name used by the native decoder case. Keep encoding in
+;; FreeLang and compose the registered byte-buffer primitives above.
+(defn buf_u32le [value]
+  (mariadb-u32le value))
+
 (defn mariadb-read-u32le [bytes offset]
   (+ (buf-read-u8 bytes offset)
      (* (buf-read-u8 bytes (+ offset 1)) 256)

@@ -1,0 +1,4 @@
+(load "../src/sha1.fls")
+(if (= (sha1-digest (buf-str "abc")) "qZk+NkcGgWq6PiVxeFDCbJzQ2J0=")
+  (println "DB95_SHA1_ABC_PASS")
+  (throw "DB95_SHA1_ABC_FAILED"))

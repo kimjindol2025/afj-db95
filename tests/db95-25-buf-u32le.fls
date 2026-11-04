@@ -1,0 +1,16 @@
+(load "../src/mariadb-wire.fls")
+
+(defn check-u32le [value b0 b1 b2 b3 message]
+  (let [bytes (buf_u32le value)]
+    (if (and (= (buf-len bytes) 4)
+             (= (buf-read-u8 bytes 0) b0)
+             (= (buf-read-u8 bytes 1) b1)
+             (= (buf-read-u8 bytes 2) b2)
+             (= (buf-read-u8 bytes 3) b3))
+      true
+      (throw message))))
+
+(check-u32le 305419896 120 86 52 18 "buf_u32le normal failed")
+(check-u32le 0 0 0 0 0 "buf_u32le zero boundary failed")
+(check-u32le 4294967295 255 255 255 255 "buf_u32le max boundary failed")
+(println "BUF_U32LE_PASS=3/3")
