@@ -54,10 +54,10 @@ GDB used the DB95-20 sampling script method: break at `t_units.isra` and `t_unit
 | 1/4: one gate run and original summary | PASS — one run; original summary line is recorded above |
 | 2/4: V-18 comparison and timeout delta | PASS — table records the observed `-39`; the shared header failure limits interpretation |
 | 3/4: failure groups and `t_unit` ratio | PASS — 69 failures grouped; `t_unit` top-frame share is 50%, unchanged in the capped DB95-20 comparison |
-| 4/4: Forgejo commit and ref verification | PENDING until this report commit is pushed and the `native-run` ref is checked |
+| 4/4: Forgejo commit and ref verification | PASS — report pushed to Forgejo; the `native-run` ref matched the report commit `57e4be3d56f18a561005ab495d8e6e7ebba20ca8` |
 
 ## Language result
 
 With the DB95-21 Stage3 compiler, the one-run native gate recorded `2/71` PASS. This run does not show that the 39 V-18 timeouts were fixed: 53 cases stopped at the missing `curl/curl.h` build dependency before execution.
 
-DB95_SUMMARY=3/4
+DB95_SUMMARY=4/4
