@@ -51,7 +51,7 @@ NATIVE_GATE_PASS=42 FAIL=29 TIMEOUT=0 SKIP=0 TOTAL=71
 
 ## 푸시 상태
 - FX adapter/test commit d52611256b02cb39eac24b679a0c5f32b94b48f6는 Forgejo에 있고 원격 HEAD 일치를 확인했다.
-- 숫자 정규화 변경 커밋: FX 19364839e103aa8ecd3d5f59d7106ce41ef9763c (Forgejo 원격 HEAD 일치 확인). DB95 src/test/report 커밋은 이 보고서를 포함해 생성하고 Forgejo HEAD를 확인한다.
+- 숫자 정규화 변경 커밋: FX 19364839e103aa8ecd3d5f59d7106ce41ef9763c (Forgejo 원격 HEAD 일치 확인). DB95 구현·시험·보고서 커밋: f1953d6bb65c6911ba85e40c43a752dd3aca66c1 (Forgejo native-run HEAD 일치 확인).
 - GitHub는 보류한다.
 
 ## 기준표
