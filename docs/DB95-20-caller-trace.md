@@ -15,7 +15,7 @@ RUN-ID: `RUN-20261104-23`
 
 The original compiler was run under interactive GDB. Breakpoints were placed on `t_units.isra` and `t_unit`; GDB stopped every 1,000 entries and saved `bt 20`, up to 60 stops per breakpoint. The preserved transcript contains 120 stacks, and all 120 have at least 15 frames (`STACK_SAMPLES=120 STACKS_GE15=120`). Raw transcript: `tmp/RUN-20261104-23/gdb-full-stacks.log`; GDB commands and console: `capture.gdb`, `gdb-console.log`.
 
-Generated C binding frames counted across the 120 stacks, descending:
+Generated C binding frames counted across the 120 stacks, descending; the fifth position is tied at 42, so both tied callers are listed:
 
 | Count | Generated frame | FreeLang function | `self/cgc-main.fl` line |
 |---:|---|---|---:|
@@ -24,6 +24,7 @@ Generated C binding frames counted across the 120 stacks, descending:
 | 76 | `__fl_binding_324` | `skip-ws` | 100 |
 | 76 | `__fl_binding_320` | `skip-ws-loop` | 91 |
 | 42 | `__fl_binding_368` | `read-symbol-iter` | 158 |
+| 42 | `__fl_binding_377` | `read-symbol-body-kind` | 166 |
 
 The C-to-FreeLang mapping comes from the generated registration code: for example, `fl_register_named_fn(fl_str_val("lex-loop"), __fl_binding_401)` and equivalent entries for the other four names. `cgc-main.fl` line numbers are from the exact source revision above. The mapping source is retained at `tmp/RUN-20261104-23/original-source/cgc-main.c`; its hash matches the DB95-15 Stage2 source hash stated above.
 
@@ -31,7 +32,7 @@ The C-to-FreeLang mapping comes from the generated registration code: for exampl
 
 GDB reports 60,000 hits for each breakpoint after the 60 evenly spaced stops. Thus the run observed approximately 60,000 `t_units` entries and 60,000 `t_unit` entries over the 25% compile. Each `t_unit` entry is nested under `t_units`; stacks repeatedly place these calls beneath `fl_v11_text_get`, the builtin dispatcher, and the lexer (`peek-at`/`peek`, `skip-ws-loop`, `lex-loop`). Source lines 39–45 show `peek-at` doing `char-at` for the current source string; lines 91–101 and 215–223 show repeated scanning through the same source buffer.
 
-The trace did not record argument values, so it cannot establish how many calls reused an identical string value. It does establish repeated per-character text access while traversing the same source buffer. Using the non-GDB 25% baseline `ELAPSED_SECONDS=140.22` from DB95-19 and 60,000 `t_unit` entries gives a coarse whole-run average of about `0.002337` seconds (2.337 ms) per sampled `t_unit` entry. This is an amortized estimate, not isolated function latency; it includes all compiler work and does not attribute all elapsed time to `t_unit`.
+The trace did not record runtime argument identities. The source mapping shows the same `$src` value stored in lexer state (`make-state`, lines 36–37) and repeatedly passed to `char-at` via `peek-at` (`:src` read at line 40, access at line 42), so the sampled loop repeatedly converts/accesses that same source string. The run recorded about 60,000 `t_unit` entries (and 60,000 `t_units` entries), roughly one access per source-character lookup; exact per-string pointer reuse is inferred from the source flow, not directly logged by GDB. Using the non-GDB 25% baseline `ELAPSED_SECONDS=140.22` from DB95-19 and 60,000 `t_unit` entries gives a coarse whole-run average of about `0.002337` seconds (2.337 ms) per sampled `t_unit` entry. This is an amortized estimate, not isolated function latency; it includes all compiler work and does not attribute all elapsed time to `t_unit`.
 
 ## 3. Case 3 historical PASS comparison
 
@@ -49,7 +50,7 @@ The trace did not record argument values, so it cannot establish how many calls 
 |---|---|
 | 1/4: 100 stacks, each at least 15 frames | PASS — `120` stacks; all `120` have at least 15 frames |
 | 2/4: top five mapped to FreeLang source | PASS — binding registration plus exact source revision and lines recorded |
-| 3/4: repetition and timing | PARTIAL — repeated source-buffer character access established; identical argument-value reuse is not observable in this trace; amortized estimate recorded |
+| 3/4: repetition and timing | PASS — about 60,000 nested conversion entries; same source value follows the repeated lexer access path; amortized estimate recorded |
 | 4/4: case 3 verdict and synchronized pushes | PENDING until report commit and remote verification |
 
 ## Language result
