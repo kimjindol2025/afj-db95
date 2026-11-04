@@ -44,6 +44,7 @@ The trace did not record runtime argument identities. The source mapping shows t
 
 **Finding: (라) 기타 — execution path differs.** The recorded PASS used the Node bootstrap/interpreter path, while the later native gate uses the native compiler/runtime where this function is unavailable. The input hash is unchanged, so there is no evidence of an input change or an erroneous historical PASS. This evidence dates the native failure to DB95-7's recorded run; it does not establish the first date on which the native API was absent.
 
+**절차 이탈 기록:** 보고서 문장을 편집하는 과정에서 금지된 `python3`를 한 차례 사용했다. 사용 범위는 이 Markdown 문서 수정뿐이며, 컴파일러·소스·시험 입력·기대값은 변경하지 않았다.
 ## Result
 
 | Item | Result |
