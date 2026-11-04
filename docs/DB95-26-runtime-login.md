@@ -154,3 +154,76 @@ Out of memory: Killed process 158215 (case-bin) total-vm:202632992kB, anon-rss:1
 언어 성과: FreeLang while의 두 번째 이후 본문 누락을 수정했고 최소 재현과 기존 단위 시험을 통과했다. 전체 DB95 통과 수는 이번 회차 미확정이다.
 
 DB95_SUMMARY=2/4, PASS=미확정 FAIL=미확정 TIMEOUT=미확정, FIXED_POINT=e4fb1a898828cd873989008e248cdcadeb5dc7ce72ac4b68d5f3ea1b28c6f487
+
+## 메모리 경고 후 재개 — repeat 복사 폭증 수정
+
+사용자가 메모리 문제 해결과 계속 진행을 지시했다. 기존 원본 시험은 그대로 두고 런타임 fl_repeat의 복사 경로를 조사했다.
+
+src/backup.fls:380의 backup-large-smoke-test는 `(repeat 2097152 "L")`을 join해 2MiB 입력을 만든다. runtime/aliases.c:689의 fl_repeat는 fl_vec_push로 한 개씩 추가했고, runtime/collection.c:100의 불변 push는 매번 기존 벡터 전체를 복사한다. 이전 벡터는 arena 종료까지 남아 전체 메모리 비용이 제곱으로 증가한다. while 수정과 무관하게 이 repeat 경로만 분리한 재현에서도 메모리 폭증을 확인했다. kernel OOM PID의 case 번호는 로그로 단정하지 않으며, case 26·27이 공통으로 실행하는 백업 대용량 경로를 재현한 결과다.
+
+안전 재현에는 prlimit --as=2147483648 --core=0을 적용했다. 이는 프로세스 주소 공간을 2GiB로 제한해 시스템 전체 OOM 재발을 막는다. 기존 시간 제한 및 시험 기대값은 바꾸지 않았다.
+
+수정 전 원문:
+
+```text
+REPRO_EXIT=139
+Command terminated by signal 11
+ELAPSED=1.63 MAX_RSS_KB=2053616 EXIT=0
+```
+
+위 time의 EXIT=0은 signal 종료에서 출력된 값이며 성공이 아니다. 실제 shell 종료 코드는 139다. 메모리 상한 도달 후 런타임 할당 실패 경로에서 signal 11이 발생했다. 이 재현은 수정 전 증거로만 남긴다.
+
+수정은 runtime/aliases.c fl_repeat의 +3/-3이다. fl_vec_new/fl_vec_push 반복을 기존 fl_vec_builder_new/fl_vec_builder_push/fl_vec_builder_freeze 조합으로 교체했다. 외부로 돌려주는 값은 기존과 같은 불변 벡터다. 다른 컬렉션 함수·컴파일러·시험 원본은 바꾸지 않았다.
+
+FX tests/db95-26-repeat.fls에 실제 2,097,152개 입력과 마지막 값·join 길이, 0·음수·정상 값 보존 확인을 추가했다. 수정 후 원문:
+
+```text
+REPRO_EXIT=0
+ELAPSED=0.11 MAX_RSS_KB=70736 EXIT=0
+REPEAT_LARGE_PASS
+REPEAT_BOUNDARIES_PASS
+```
+
+백업 원본 worker를 동일한 2GiB 상한, 기존 120초 제한, 수정된 /dev 바인드와 공용 잠금 아래 실행한 결과:
+
+```text
+CASE=26 EXIT=0
+ELAPSED=15.97 MAX_RSS_KB=116772 EXIT=0
+CASE=27 EXIT=0
+ELAPSED=15.64 MAX_RSS_KB=118116 EXIT=0
+```
+
+전체 gate를 새 로그 디렉터리에서 처음부터 실행한다. 프로세스별 2GiB 주소 공간 상한을 상속시키며, 러너·기대값·시간 제한은 변경하지 않는다. 기존 OOM 중단 결과와 합산하지 않는다.
+
+### 안전 실행 완료 및 최종 집계
+
+이번 gate는 처음부터 한 프로세스로 71건을 완료했다. 이전 OOM 중단 기록을 합산하지 않았다. 원문:
+
+```text
+NATIVE_GATE_PASS=45 FAIL=26 TIMEOUT=1 SKIP=0 TOTAL=71
+GATE_EXIT=1
+2026-11-04T18:12:06Z
+NEW_PASS=3
+NEW_PASS=26
+NEW_PASS=27
+BASELINE42_REGRESSIONS=0 NEW_PASSES=3
+```
+
+TIMEOUT=1은 FAIL=26에 포함된다. 이전 통과 42건은 모두 유지했고 case 3·26·27이 추가 통과했다. 실패가 있으므로 gate 종료 코드 1은 정상적으로 기록된 전체 결과이며 중단을 뜻하지 않는다.
+
+case 25는 다시 exit 124였다. timeout 뒤 자식 case-bin·daemon-bin이 남아 약 1GiB RSS까지 증가하는 것을 확인했다. 해당 실행의 PID와 이름을 확인하고 그 두 프로세스만 TERM 후 필요 시 KILL로 종료했다. gate와 다음 case는 건드리지 않았다. 최종 시점에 case-bin·daemon-bin·Stage 컴파일러 잔류 프로세스는 없었다. 이 시간 초과/자식 정리 문제는 백업 repeat 복사 문제와 별개이며, 러너 수정은 하지 않았다. case 25는 추가 재시도하지 않는다. 최종 로그에는 기존 finally 미등록 오류도 남아 있다.
+
+최종 실행에서는 프로세스별 주소 공간 2GiB 상한을 유지했다. 이를 무제한 환경의 결과로 표현하지 않는다. 향후 시험도 동일한 메모리 보호, 단일 공용 잠금, 종료 후 자식 프로세스 확인을 적용해야 한다. 전체 시스템 OOM을 유발한 이전 조건으로 되돌리지 않는다.
+
+종료 시 원래 실행 파일 SHA는 1d86c0b1140f98710927ba847458b811122d6bd7f9ead4fee79bde918e901769, while 수정 컴파일러 SHA는 7bca2ea4c37619bce3f6047d88e9bace717129034c92836c322d2ba845cfdb2a로 시작값과 같다. 보존된 Stage2·3·4 생성 C 모두 e4fb1a898828cd873989008e248cdcadeb5dc7ce72ac4b68d5f3ea1b28c6f487이다. repeat 수정은 시험 실행 파일에 링크되는 런타임 변경이며 컴파일러 실행 파일을 교체하거나 생성 C를 바꾸지 않았다.
+
+| 기준 | 결과 |
+|---|---|
+| 1/4 수정 전 while 실패, 수정 후 통과 | 충족 |
+| 2/4 Stage2·3·4 일치 및 while만 의미 변경 | 충족 |
+| 3/4 case 25 통과 및 기존 단위 시험 회귀 0 | 미충족: case 25 exit 124. 기존 단위 12개 파일은 통과 |
+| 4/4 단일 gate PASS 44 이상, 기존 42건 회귀 0, 양쪽 원격 | 집계 조건 충족. 아래 변경과 보고서를 커밋 후 양쪽 원격 검증 |
+
+언어 성과: while 본문 전체가 실행되며, repeat의 벡터 반복 복사를 기존 빌더 조합으로 바꿔 2,097,152개 입력을 0.11초·70,736KiB에서 처리했다. curl 없이 native gate 45/71, 기존 42건 회귀 0. case 25 시간 초과는 남아 있다.
+
+DB95_SUMMARY=3/4, PASS=45 FAIL=26 TIMEOUT=1, FIXED_POINT=e4fb1a898828cd873989008e248cdcadeb5dc7ce72ac4b68d5f3ea1b28c6f487
