@@ -47,7 +47,7 @@ kill -KILL "$writer_pid"
 wait "$writer_pid" 2>/dev/null || true
 writer_pid=""
 
-if timeout 20s node "$bootstrap" run "$repo_root/tests/fault-injection-restart.fls" \
+if timeout 20s stdbuf -oL "${AFJ_NATIVE_FAULT_BIN:?native fault binary required}" \
     | grep -q "afj-db95 forced-kill WAL recovery PASS"; then
   echo "afj-db95 forced-kill process recovery PASS"
 else
