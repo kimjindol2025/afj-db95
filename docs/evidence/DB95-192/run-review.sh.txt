@@ -1,0 +1,49 @@
+#!/bin/bash
+set -eu
+af=$(pwd -P)
+work="$af/tmp/DB95-next"
+fx="$af/../freelang-v11-fx"
+phase=${1:?baseline or subset}
+case "$phase" in baseline) source_root="$work/baseline";; subset) source_root="$af";; *) exit 2;; esac
+mkdir -p "$work/$phase-storage" "$work/$phase-logs"
+number=0
+while IFS= read -r line; do
+  [[ "$line" == run_case\ \"* ]] || continue
+  number=$((number+1))
+  if [ "$phase" = baseline ]; then
+    case "$number" in 12|39) ;; *) continue;; esac
+  else
+    case "$number" in 7|12|13|28|30|38|39|41|42) ;; 9) printf 'CASE=9 STATUS=HOLD EXECUTED=no\n' | tee "$work/subset-logs/case-9-hold.txt"; continue;; *) continue;; esac
+  fi
+  label=$(printf '%s\n' "$line" | sed -n 's/^run_case "\([^"]*\)".*/\1/p')
+  path=$(printf '%s\n' "$line" | sed -n 's/.*"\$repo_root\/\([^"]*\)".*/\1/p')
+  assignments=''
+  if [[ "$line" == *' env '* ]]; then assignments="${line#* env }"; assignments="${assignments%% node *}"; fi
+  dir="$work/$phase-logs/case-$number"
+  mkdir -p "$dir"
+  ps -eo pid,ppid,comm,%cpu,rss > "$dir/process-before.log"
+  date -u +%FT%TZ > "$dir/start"
+  set +e
+  flock -o /tmp/fl-heavy.lock prlimit --as=2147483648 --core=0 -- \
+    bwrap --bind / / --dev-bind /dev /dev --proc /proc --bind "$work/$phase-storage" /tmp --chdir "$source_root" \
+    env FX_ROOT="$fx" FX_NATIVE_STAGE0="$af/tmp/DB95-26/fixedpoint/stage4-bin" \
+    LIBRARY_PATH="$af/tmp/RUN-20261104-28/linker" NATIVE_GATE_LOG_DIR="$work/$phase-logs" \
+    timeout --foreground 120s /bin/bash "$source_root/tests/native-release-gate.sh" --worker \
+    "$number" "$label" "$path" "$dir" "$assignments" > "$dir/output.log" 2>&1
+  result=$?
+  set -e
+  printf 'PHASE=%s CASE=%s EXIT=%s\n' "$phase" "$number" "$result" | tee "$dir/result"
+  date -u +%FT%TZ > "$dir/end"
+  tail -n 5 "$dir/output.log" | sed -E 's#/home/[^ :]+#<가림>#g'
+  if [ "$result" -eq 124 ]; then exit 124; fi
+  if [ "$phase" = baseline ]; then
+    test "$result" -eq 1 || exit 2
+    if [ "$number" -eq 12 ]; then rg -q 'lazy transaction snapshot changed' "$dir/output.log"; else rg -q 'range delete conflict was not detected' "$dir/output.log"; fi
+  else
+    case "$number" in
+      28) test "$result" -eq 1; rg -q 'NATIVE_PASS_MARKER_MISSING' "$dir/output.log";;
+      30) test "$result" -eq 1; rg -q 'PATH_OR_ACCESS_DENIED' "$dir/output.log";;
+      *) test "$result" -eq 0;;
+    esac
+  fi
+done < "$source_root/tests/release-gate.sh"

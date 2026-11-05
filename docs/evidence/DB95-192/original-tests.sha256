@@ -1,0 +1,4 @@
+e464a355883b76a7780707f5acb2a19f187a21961f6eaa2653abe828aa583f99  tests/release-gate.sh
+662e50036dbc8ec5abd7fafe6e3179f1a91427dc32fe3d1cfe4b36190888c250  tests/native-release-gate.sh
+b6f1d223ad03386a258f076f8791812061e7607d4fdf9325f3da33128818ad8d  tests/tcp-lazy-catalog.fls
+e33e0d78d7b915d3cf2faf90e09b9adab0ee8028d7280a58789f2d87c75ba48b  tests/tcp-range-predicate.fls

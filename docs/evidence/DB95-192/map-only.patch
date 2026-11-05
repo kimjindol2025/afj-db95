@@ -1,0 +1,24 @@
+diff --git a/src/tcp-server.fls b/src/tcp-server.fls
+index 3e66c31..3843f88 100644
+--- a/src/tcp-server.fls
++++ b/src/tcp-server.fls
+@@ -870,7 +870,7 @@
+         current (afj-tcp-row-map rows schema)]
+     ;; Rows that disappeared become tombstones at this commit revision.
+     (doseq [key (keys old-chain)]
+-      (if (nil? (get (deref current) key))
++      (if (nil? (get current key))
+         (let [chain (get old-chain key)]
+           (swap! afj-tcp-row-versions assoc table
+                  (assoc (get (deref afj-tcp-row-versions) table {}) key
+@@ -878,8 +878,8 @@
+                                (afj-tcp-close-row-version version revision)) chain))))
+         nil))
+     ;; Changed or newly inserted rows receive a fresh immutable version.
+-    (doseq [key (keys (deref current))]
+-      (let [row (get (deref current) key)
++    (doseq [key (keys current)]
++      (let [row (get current key)
+             chain (get (get (deref afj-tcp-row-versions) table) key [])
+             latest (if (= (count chain) 0) nil (last chain))
+             same (and (not (nil? latest))
