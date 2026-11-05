@@ -21,7 +21,7 @@ cleanup() {
 trap cleanup EXIT
 
 rm -f "$wal"
-node "$bootstrap" run "$repo_root/tests/fault-injection-restart.fls" >"$log_file" 2>&1 &
+stdbuf -oL "${AFJ_NATIVE_FAULT_BIN:?native fault binary required}" >"$log_file" 2>&1 &
 writer_pid="$!"
 
 ready=""
