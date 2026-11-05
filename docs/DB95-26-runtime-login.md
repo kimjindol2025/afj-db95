@@ -227,3 +227,64 @@ case 25는 다시 exit 124였다. timeout 뒤 자식 case-bin·daemon-bin이 남
 언어 성과: while 본문 전체가 실행되며, repeat의 벡터 반복 복사를 기존 빌더 조합으로 바꿔 2,097,152개 입력을 0.11초·70,736KiB에서 처리했다. curl 없이 native gate 45/71, 기존 42건 회귀 0. case 25 시간 초과는 남아 있다.
 
 DB95_SUMMARY=3/4, PASS=45 FAIL=26 TIMEOUT=1, FIXED_POINT=e4fb1a898828cd873989008e248cdcadeb5dc7ce72ac4b68d5f3ea1b28c6f487
+
+## 보충 3 — 기준 재검증과 case 25 단계별 진단
+
+생성 C를 다시 sha256sum으로 확인했다.
+
+```text
+STAGE2=e4fb1a898828cd873989008e248cdcadeb5dc7ce72ac4b68d5f3ea1b28c6f487
+STAGE3=e4fb1a898828cd873989008e248cdcadeb5dc7ce72ac4b68d5f3ea1b28c6f487
+STAGE4=e4fb1a898828cd873989008e248cdcadeb5dc7ce72ac4b68d5f3ea1b28c6f487
+WHILE_FIX_INCLUDED=yes
+```
+
+repeat 커밋 a9ffce18d6c14709e133562149c6829f543cb120의 바로 앞 커밋은 while 수정 a8f944134f91e04d7e7e6c6d7cd5e00d691bc9d1이다. git merge-base --is-ancestor로 포함을 확인했으며 self/cgc-main.fl:2373에도 cgc-do(slice ...) 수정이 존재한다. 이 회차에서 컴파일러를 다시 수정하거나 재빌드하지 않았다.
+
+### 원본에서 확인한 구조 문제
+
+tests/tcp-long-soak.fls:116의 while은 checkpoint 검증이 끝나는 142행 뒤에 닫혀야 하지만 닫는 괄호가 없다. 145행 이후 최종 조회·통계 계산·PASS 출력이 while 안에서 매 배치 반복된다. 166행 괄호가 while을 닫고, 167행 finally가 do 안의 일반 함수 호출이 된다. 문자열·주석을 제외한 괄호 깊이는 EOF에서 1로 try가 닫히지 않는다.
+
+```text
+LINE=29 DEPTH_BEFORE=0 DEPTH_AFTER=1
+LINE=30 DEPTH_BEFORE=1 DEPTH_AFTER=2
+LINE=116 DEPTH_BEFORE=2 DEPTH_AFTER=3
+LINE=142 DEPTH_BEFORE=7 DEPTH_AFTER=3
+LINE=145 DEPTH_BEFORE=3 DEPTH_AFTER=4
+LINE=165 DEPTH_BEFORE=5 DEPTH_AFTER=3
+LINE=166 DEPTH_BEFORE=3 DEPTH_AFTER=2
+LINE=167 DEPTH_BEFORE=2 DEPTH_AFTER=1
+EOF_DEPTH=1
+```
+
+원본 수정 금지에 따라 변경하지 않았다. 142행 뒤 닫는 괄호 한 개를 추가해 while/최종 검증/finally의 구조를 바로잡는 최소 변경 허용 여부를 질문했다. 잘못된 입력을 컴파일러에서 이 시험만 특별 처리하는 우회는 하지 않는다.
+
+### 단독 측정 방법
+
+원본 worker와 환경값, 전체 360초 및 내부 컴파일 120초 제한은 그대로다. 공용 flock 및 수정된 /dev 바인드 아래 별도 프로세스 그룹에서 실행하고 2GiB 주소 공간 상한을 적용했다. 임시 관찰 스크립트가 1초 간격으로 실행 파일·생성 C·데몬 준비 로그·최초 PASS 출력 발생을 기록했다. 따라서 각 시점은 약 1초 해상도의 관찰값이다. 종료 시 이 실행의 프로세스 그룹만 TERM/KILL로 정리한다. 저장소 러너 파일은 변경하지 않았다.
+
+```text
+START elapsed=0
+CLIENT_BUILT elapsed=15
+DAEMON_C_CREATED elapsed=40
+DAEMON_BUILT elapsed=75
+DAEMON_READY elapsed=75
+FIRST_PASS_LINE elapsed=76
+```
+
+소스 42~57행은 데몬 생성·C 컴파일을 시험 실행 안에서 수행한다. 이번 측정에서 준비까지 75초가 들었다. 115행에서 시작하는 필수 soak 300초를 합치면 최소 375초로 전체 360초 제한보다 길다. 준비 단계는 주로 생성 C 작성 및 gcc 빌드이며 네트워크 로그인에서 멈춘 것이 아니다. 최초 PASS가 76초에 나온 것도 최종 확인문이 루프 안에 들어갔다는 실행 증거다. while 종료 시각은 고정되어 있어 이를 무한 루프로 단정하지 않는다. 괄호 수정만으로 전체 제한 충족이 보장되지는 않는다.
+
+단독 실행 종료 원문:
+
+```text
+CASE25_EXIT=124 elapsed=361
+OWN_PROCESS_GROUP_CLEANED
+```
+
+360초 제한의 timeout 종료를 관찰 루프가 361초에 기록했다. 종료 후 ps에서 case-bin·daemon-bin 잔류가 없음을 확인했다. 시스템 OOM은 발생하지 않았다. 같은 실패를 추가 재시도하지 않는다.
+
+보충 3 판정: 1/4 Stage2·3·4 일치, 2/4 while 수정 포함, 3/4 시간 초과 원인 및 위치 특정은 충족한다. 4/4는 미충족이다. 원본 괄호 수정 허용 여부와 준비 시간 단축 방안이 남아 전체 gate를 새로 실행하지 않았다. 앞 회차의 45/71 및 TIMEOUT=1은 비교 기준이며 이번 회차의 신규 gate 결과가 아니다.
+
+언어 성과: while 전체 본문 생성 수정은 이미 포함돼 있다. 현재 case 25의 주된 남은 문제는 시험 파일 괄호 불균형과 실행 시간 예산에 포함된 빌드·준비 75초다. 컴파일러 또는 시험을 임의로 우회 수정하지 않았다.
+
+DB95_SUMMARY=3/4, PASS=미실행 FAIL=미실행 TIMEOUT=미실행, FIXED_POINT=e4fb1a898828cd873989008e248cdcadeb5dc7ce72ac4b68d5f3ea1b28c6f487, STAGE234=일치
