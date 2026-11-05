@@ -14,7 +14,7 @@ if env AFJ_DB_MODE=production \
   AFJ_DB_AUDIT_LOG="$runtime_dir/production-tls-boundary.audit.jsonl" \
   AFJ_DB_AUTH_STATE="$runtime_dir/production-tls-boundary.state.jsonl" \
   AFJ_DB_BIND_HOST=0.0.0.0 \
-  node "$bootstrap" run "$repo_root/src/tcp-server.fls" >"$log_file" 2>&1; then
+  "${AFJ_NATIVE_TCP_SERVER_BIN:?native tcp-server binary required}" >"$log_file" 2>&1; then
   echo "production external bind was accepted without TLS"
   exit 1
 fi
