@@ -1,0 +1,23 @@
+(load "../src/mariadb-wire.fls")
+(afj-tcp-recover)
+(if (= (env-get "DB95_195_MODE") "read")
+  (do
+    (let [rows (get (get (deref engine-catalog) "wire_durable") "rows")]
+      (afj-v2-check (= (count rows) 2) "WIRE_RECOVERY_ROWS")
+      (afj-v2-check (= (deref afj-tcp-commit-revision) 3) "WIRE_RECOVERY_REVISION"))
+    (afj-v2-close)
+    (println "DB95_195_MARIADB_FRESH_RECOVERY_PASS"))
+  (do
+    (define wire-port
+      (if (env-get "DB95_195_PORT")
+        (str-to-num (env-get "DB95_195_PORT"))
+        43995))
+    (afj-v2-check (= (tcp-server-raw wire-port "mariadb-wire-handler" "127.0.0.1") "ok") "WIRE_LISTEN")
+    (println "DB95_195_MARIADB_READY")
+    (println (str "DB95_195_PORT=" wire-port))
+    (loop [tick 0]
+      (if (and (< tick 10000) (not (file_exists (env-get "DB95_195_STOP"))))
+        (do (fl-yield 10) (recur (+ tick 1))) true))
+    (tcp-server-stop wire-port)
+    (afj-v2-close)
+    (println "DB95_195_MARIADB_STOPPED")))
