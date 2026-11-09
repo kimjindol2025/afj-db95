@@ -5,10 +5,12 @@
   (if (get started "ok")
     (do
       (println "afj-db95 TCP server STARTED")
-      (set-timeout
-        (fn []
+      ;; Raw TCP callbacks are dispatched by fl-yield. Keep the daemon
+      ;; foreground loop explicit so external JSON-line clients are served.
+      (loop [tick 0]
+        (if (< tick 60000)
+          (do (fl-yield 10) (recur (+ tick 1)))
           (do
             (stop-afj-tcp)
-            (println "afj-db95 TCP server STOPPED")))
-        60000))
+            (println "afj-db95 TCP server STOPPED")))))
     (throw "TCP daemon start failure")))
