@@ -437,7 +437,7 @@
 
 (defn oversized-wal-smoke-test []
   (let [path "/tmp/afj-db95-oversized-wal"
-        padding (str_join (repeat (+ afj-wal-record-limit 1) "x") "")
+        padding (str_join "" (repeat (+ afj-wal-record-limit 1) "x"))
         body {"op" "test" "padding" padding}
         encoded (json_str body)
         envelope {"version" afj-wal-version
