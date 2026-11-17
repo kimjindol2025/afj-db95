@@ -1,0 +1,9 @@
+d4a34cb36d915c2da0d95092f74dd38701e7a798375537d33d449930cd7cc0ab  docs/evidence/blog-b06-snapshot/contracts-after.txt
+d4a34cb36d915c2da0d95092f74dd38701e7a798375537d33d449930cd7cc0ab  docs/evidence/blog-b06-snapshot/contracts-before.txt
+6f8418c8ba50fb2e3ae557d6e4f61154a3e11132dca472fc709de2761fbbc2ee  docs/evidence/blog-b06-snapshot/copy-costs.txt
+35fd028a0609213cee2a260013d4d0c03b3489de8af74e7e620844b3d25c363f  docs/evidence/blog-b06-snapshot/gprof-after.txt
+efc2db3b05cb2b71bc0c7a58fdb61404f1695e118f6cbcf7915c274d9d1c8e86  docs/evidence/blog-b06-snapshot/gprof-before.txt
+08b87e546c1fd75b1087998a0cf425b4b59dfa5448d07e99727ee0046ce17a72  docs/evidence/blog-b06-snapshot/profile-after.txt
+361037eb4fb3e87db2a93c0cc6a86211135615b0c110a9b200847bfb39a442fe  docs/evidence/blog-b06-snapshot/profile-before.txt
+28a3acd72b2cd1c902e26db7b8649bb6c229afc31c6f40793b4946aedfa58557  docs/evidence/blog-b06-snapshot/syscalls-after.txt
+08d6f02dfd286e484982d887ba76fb57c67207ebf678b3677066f20e98207d4e  docs/evidence/blog-b06-snapshot/syscalls-before.txt
