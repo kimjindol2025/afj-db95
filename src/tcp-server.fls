@@ -749,17 +749,20 @@
                           (or (= (get first-ast "type") "update")
                               (= (get first-ast "type") "delete")
                               (= (get first-ast "type") "alter-table")))
+        ;; FreeLang maps and vectors are immutable values. Keep the old roots
+        ;; alive until validation finishes, then restore those exact values
+        ;; on rejection; serializing every table and index is unnecessary.
         catalog (if fast-insert?
                   nil
                   (if local-table?
                   (afj-tcp-copy (get (deref engine-catalog) table-name))
-                  (json-parse (json_str (deref engine-catalog)))))
+                  (deref engine-catalog)))
         indexes (if (or fast-insert? local-table?)
                   nil
-                  (json-parse (json_str (deref engine-indexes))))
+                  (deref engine-indexes))
         databases (if (or fast-insert? local-table?)
                     nil
-                    (json-parse (json_str (deref engine-databases))))]
+                    (deref engine-databases))]
     (try
       (doseq [ast asts]
         (reset! result (execute-ast ast)))
