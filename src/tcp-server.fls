@@ -99,6 +99,8 @@
   (if (nil? afj-tcp-catalog-page-path)
     nil
     (str afj-tcp-catalog-page-path ".tables")))
+(define afj-tcp-checkpoint-table-paths (atom {}))
+(define afj-tcp-checkpoint-manifest (atom nil))
 (define afj-tcp-catalog-page-size 4096)
 (define afj-tcp-page-pool-max
   (let [raw (env-get "AFJ_DB_PAGE_POOL_PAGES")]
@@ -428,27 +430,53 @@
          (= (get page "length") (count encoded))
          (= (get page "checksum") (sha256 encoded)))))
 
-(defn afj-tcp-write-page-set [path value]
+(defn afj-tcp-checkpoint-id []
+  (str (uuid_short) (uuid_short) (uuid_short)))
+
+(defn afj-tcp-write-page-candidate [path cache-path value target]
   (let [encoded (json_str value)
         chunks (afj-tcp-page-chunks encoded 0 [])
         total (count chunks)]
     (if (= total 0)
       (throw "CATALOG_PAGE_EMPTY")
-      (do
+      (let [fd (fd_create path)]
+        (try
+         (do
         (afj-tcp-page-pool-clear)
-        (file_write path "")
         (doseq [index (range 0 total)]
           (let [raw (str (afj-tcp-page-envelope
                            {"set-version" 1
                             "id" index
                             "total" total
                             "data" (get chunks index)}) "\n")]
-            (afj-tcp-page-pool-stage path index raw)
-            (file_append path raw)
-            (if (not (afj-tcp-page-pool-mark-flushed path index))
+            (afj-tcp-page-pool-stage cache-path index raw)
+            (fd_write fd raw)
+            (if (not (afj-tcp-page-pool-mark-flushed cache-path index))
               (throw "PAGE_POOL_FLUSH_FAILED")
               nil)))
-        total))))
+        (if (nil? target)
+          (do (fd_fsync fd) (fd_sync_parent fd))
+          (fd_publish fd target))
+        (fd_close fd)
+        total)
+         (catch [error]
+           ;; Preserve the first I/O error even if close also reports an error.
+           (try (fd_close fd) (catch [close-error] nil))
+           (throw error)))))))
+
+(defn afj-tcp-write-page-set [path value]
+  (afj-tcp-write-page-candidate
+    (str (regex_replace path "[^/]*$" "")
+         ".afj-checkpoint-" (afj-tcp-checkpoint-id) ".new")
+    path value path))
+
+(defn afj-tcp-previous-catalog-path []
+  (str (regex_replace afj-tcp-catalog-page-path "[^/]*$" "")
+       ".afj-previous-" (sha256 afj-tcp-catalog-page-path) ".pages"))
+
+(defn afj-tcp-write-new-page-set [path value]
+  ;; fd_create is exclusive: a collision must not overwrite a live generation.
+  (afj-tcp-write-page-candidate path path value nil))
 
 (defn afj-tcp-read-page-set-value [path]
   (if (not (file_exists path))
@@ -482,7 +510,35 @@
           (json-parse (deref encoded)))))))
 
 (defn afj-tcp-table-page-path [table]
-  (str afj-tcp-catalog-table-dir "/" (sha256 table) ".pages"))
+  (let [known (get (deref afj-tcp-checkpoint-table-paths) table)
+        legacy (str afj-tcp-catalog-table-dir "/" (sha256 table) ".pages")]
+    (if (not (nil? known))
+      known
+      (if (or (nil? afj-tcp-catalog-page-path)
+              (not (file_exists afj-tcp-catalog-page-path)))
+        legacy
+        (let [manifest (afj-tcp-read-page-set-value afj-tcp-catalog-page-path)]
+          ;; Resolve the on-disk checkpoint before full recovery as well.
+          ;; Existing independent readers inspect these files first.
+          (if (= (get manifest "version") 2)
+            (let [paths (afj-tcp-checkpoint-path-map (get manifest "tables" []))]
+              (reset! afj-tcp-checkpoint-table-paths paths)
+              (get paths table legacy))
+            (if (= (get manifest "version") 1)
+              legacy
+              (throw "CATALOG_PAGE_CORRUPT"))))))))
+
+(defn afj-tcp-generation-page-path [table generation]
+  (str afj-tcp-catalog-table-dir "/" (sha256 table) "." generation ".pages"))
+
+(defn afj-tcp-checkpoint-path-map [tables]
+  (reduce (fn [paths descriptor]
+            (let [name (get descriptor "name") path (get descriptor "path")]
+              (if (or (not (string? name)) (not (string? path))
+                      (not (nil? (get paths name))))
+                (throw "CATALOG_PAGE_CORRUPT")
+                (assoc paths name path))))
+          {} tables))
 
 ;; The v2 manifest has a small page-backed catalog index.  It keeps table name
 ;; to page-set resolution ordered and separate from table payload pages; the
@@ -539,17 +595,18 @@
       ;; The manifest no longer embeds the complete catalog. Each table is a
       ;; separately checksummed page set, so recovery and future lazy reads can
       ;; address table storage without loading one monolithic catalog page.
-      (file-mkdir afj-tcp-catalog-table-dir)
+      (dir_create afj-tcp-catalog-table-dir)
       (let [raw (if (file_exists afj-tcp-wal) (file_read afj-tcp-wal) "")
+            generation (afj-tcp-checkpoint-id)
             tables (atom {})]
         (doseq [table (keys (deref engine-catalog))]
           (let [definition (get (deref engine-catalog) table)
                 path (if (afj-tcp-lazy-placeholder? definition)
                        (get definition "path")
-                       (afj-tcp-table-page-path table))]
+                       (afj-tcp-generation-page-path table generation))]
             (if (afj-tcp-lazy-placeholder? definition)
               nil
-              (afj-tcp-write-page-set
+              (afj-tcp-write-new-page-set
                 path
                 (assoc
                   (assoc definition "page-indexes"
@@ -559,10 +616,9 @@
             (reset! tables
                     (assoc (deref tables) table
                            {"name" table "path" path}))))
-        (let [table-index (afj-tcp-catalog-index-build (vals (deref tables)))]
-          (afj-tcp-write-page-set
-            afj-tcp-catalog-page-path
-            {"version" 2
+        (let [table-index (afj-tcp-catalog-index-build (vals (deref tables)))
+              manifest {"version" 2
+             "checkpoint-id" generation
              "wal-size" (count raw)
              "wal-prefix" (sha256 raw)
              "commit-revision" (deref afj-tcp-commit-revision)
@@ -570,7 +626,19 @@
              "schema-revisions" (deref afj-tcp-schema-revisions)
              "tables" (vals (deref tables))
              "table-index" table-index
-             "databases" (deref engine-databases)}))))))
+             "databases" (deref engine-databases)}
+              previous (deref afj-tcp-checkpoint-manifest)]
+          ;; All referenced generation files and directory entries are synced
+          ;; before either manifest is published. No old table page is rewritten.
+          (if (nil? previous)
+            nil
+            (afj-tcp-write-page-set
+              (afj-tcp-previous-catalog-path) previous))
+          (afj-tcp-write-page-set afj-tcp-catalog-page-path manifest)
+          (reset! afj-tcp-checkpoint-table-paths
+                  (afj-tcp-checkpoint-path-map (vals (deref tables))))
+          (reset! afj-tcp-checkpoint-manifest manifest)
+          true)))))
 
 (defn afj-tcp-read-catalog-pages []
   (if (or (nil? afj-tcp-catalog-page-path)
@@ -675,6 +743,7 @@
     (reset! afj-tcp-table-revisions {})
     (reset! afj-tcp-schema-revisions {})
     (reset! afj-tcp-row-versions {})
+    (reset! afj-tcp-checkpoint-manifest nil)
     (let [checkpoint (if (and (not (nil? afj-tcp-catalog-page-path))
                               (file_exists afj-tcp-catalog-page-path))
                        (afj-tcp-read-catalog-pages)
@@ -691,6 +760,11 @@
           replay-start (if prefix-ok checkpoint-size 0)]
       (if prefix-ok
         (do
+          (reset! afj-tcp-checkpoint-table-paths
+                  (afj-tcp-checkpoint-path-map (get checkpoint "tables" [])))
+          (reset! afj-tcp-checkpoint-manifest
+                  (if (= (get checkpoint "version") 2)
+                    (dissoc checkpoint "catalog") checkpoint))
           (reset! engine-catalog (get checkpoint "catalog"))
           (reset! engine-databases (get checkpoint "databases"))
           (reset! afj-tcp-commit-revision
@@ -702,7 +776,7 @@
           (afj-tcp-restore-row-version-history (deref engine-catalog))
           (afj-tcp-rebuild-all-indexes)
           (afj-tcp-record-row-versions (deref engine-catalog) 0))
-        nil)
+        (reset! afj-tcp-checkpoint-table-paths {}))
       (if (or (> (count raw) replay-start)
               (and (= (count raw) 0) (not prefix-ok)))
         (try
