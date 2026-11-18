@@ -112,10 +112,10 @@ readers before deleting anything. Disk usage is not bounded by this change;
 there is no automatic GC, WAL truncation or rotation. This must be resolved
 before deployment.
 
-Other known storage work remains: WAL parent-directory durability on first
-creation, closing WAL handles on errors, fail-closed handling of a missing or
-replaced WAL beside a valid checkpoint, explicit safe recovery of already
-corrupt legacy data, and process ownership. A checkpoint error can occur
+The follow-up in NATIVE-WAL-SAFETY.md now verifies WAL parent-directory sync,
+error-path closing, rejection of a missing/replaced WAL beside a checkpoint,
+and preservation of pre-recovery state on failure. Explicit safe recovery of
+already-corrupt legacy data and process ownership remain open. A checkpoint error can occur
 after the WAL transaction is durable but before a client ACK; the protocol
 must report/handle that uncertainty rather than encourage blind retries.
 

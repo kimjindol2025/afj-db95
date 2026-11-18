@@ -374,15 +374,32 @@
   (swap! afj-tcp-metrics update "errors" (fn [value] (+ value 1)))
   (afj-tcp-error-code-message (error_message error)))
 
+(defn afj-tcp-read-storage-text [path]
+  ;; Only an actual missing file is absence. Policy and I/O errors must not
+  ;; become an empty WAL or an absent checkpoint through file_exists=false.
+  (try
+    {"present" true "text" (file_read path)}
+    (catch [error]
+      (if (str_ends_with (error_message error) "file_read failed: NOT_FOUND")
+        {"present" false "text" ""}
+        (throw error)))))
+
 (defn afj-tcp-wal-append-sync [event sync?]
   (let [encoded (json_str event)]
     (if (> (count encoded) afj-tcp-wal-record-limit)
       (throw "WAL_RECORD_TOO_LARGE")
       nil)
-    (let [fd (fd_open afj-tcp-wal "a")]
-      (fd_write fd (str encoded "\n"))
-      (if sync? (fd_fsync fd) nil)
-      (fd_close fd))
+    (let [fd (if (file_exists afj-tcp-wal)
+               (fd_open_with_parent afj-tcp-wal "a")
+               (fd_create afj-tcp-wal))]
+      (try
+        (do
+          (fd_write fd (str encoded "\n"))
+          (if sync? (do (fd_fsync fd) (fd_sync_parent fd)) nil)
+          (fd_close fd))
+        (catch [error]
+          (try (fd_close fd) (catch [close-error] nil))
+          (throw error))))
     event))
 
 (defn afj-tcp-wal-append [event]
@@ -478,11 +495,9 @@
   ;; fd_create is exclusive: a collision must not overwrite a live generation.
   (afj-tcp-write-page-candidate path path value nil))
 
-(defn afj-tcp-read-page-set-value [path]
-  (if (not (file_exists path))
-    (throw "CATALOG_PAGE_MISSING")
+(defn afj-tcp-decode-page-set [path text]
     (let [lines (filter (fn [line] (not (= (str_trim line) "")))
-                        (str_lines (file_read path)))
+                        (str_lines text))
           first-page (if (= (count lines) 0) nil
                        (try (json-parse (first lines)) (catch [error] nil)))
           first-payload (if (nil? first-page) nil (get first-page "payload"))
@@ -507,7 +522,13 @@
                   (swap! encoded (fn [value]
                                    (str value (get payload "data"))))
                   (afj-tcp-page-pool-mark-flushed path index)))))
-          (json-parse (deref encoded)))))))
+          (json-parse (deref encoded))))))
+
+(defn afj-tcp-read-page-set-value [path]
+  (let [stored (afj-tcp-read-storage-text path)]
+    (if (get stored "present")
+      (afj-tcp-decode-page-set path (get stored "text"))
+      (throw "CATALOG_PAGE_MISSING"))))
 
 (defn afj-tcp-table-page-path [table]
   (let [known (get (deref afj-tcp-checkpoint-table-paths) table)
@@ -596,7 +617,7 @@
       ;; separately checksummed page set, so recovery and future lazy reads can
       ;; address table storage without loading one monolithic catalog page.
       (dir_create afj-tcp-catalog-table-dir)
-      (let [raw (if (file_exists afj-tcp-wal) (file_read afj-tcp-wal) "")
+      (let [raw (get (afj-tcp-read-storage-text afj-tcp-wal) "text")
             generation (afj-tcp-checkpoint-id)
             tables (atom {})]
         (doseq [table (keys (deref engine-catalog))]
@@ -640,11 +661,7 @@
           (reset! afj-tcp-checkpoint-manifest manifest)
           true)))))
 
-(defn afj-tcp-read-catalog-pages []
-  (if (or (nil? afj-tcp-catalog-page-path)
-          (not (file_exists afj-tcp-catalog-page-path)))
-    nil
-    (let [checkpoint (afj-tcp-read-page-set-value afj-tcp-catalog-page-path)]
+(defn afj-tcp-decode-catalog [checkpoint]
       (if (and (= (get checkpoint "version") 2)
                (number? (get checkpoint "wal-size"))
                (not (nil? (get checkpoint "tables")))
@@ -678,7 +695,16 @@
                  (not (nil? (get checkpoint "catalog")))
                  (not (nil? (get checkpoint "databases"))))
           checkpoint
-          (throw "CATALOG_PAGE_CORRUPT"))))))
+          (throw "CATALOG_PAGE_CORRUPT"))))
+
+(defn afj-tcp-read-catalog-pages []
+  (if (nil? afj-tcp-catalog-page-path)
+    nil
+    (let [stored (afj-tcp-read-storage-text afj-tcp-catalog-page-path)]
+      (if (get stored "present")
+        (afj-tcp-decode-catalog
+          (afj-tcp-decode-page-set afj-tcp-catalog-page-path (get stored "text")))
+        nil))))
 
 (defn afj-tcp-recover-lines [lines index prepared final-newline]
   (loop [cursor index]
@@ -734,7 +760,7 @@
         (swap! afj-tcp-row-versions assoc table history))))
   true)
 
-(defn afj-tcp-recover []
+(defn afj-tcp-recover-core []
   (do
     (reset! engine-catalog {})
     (reset! engine-indexes {})
@@ -744,20 +770,27 @@
     (reset! afj-tcp-schema-revisions {})
     (reset! afj-tcp-row-versions {})
     (reset! afj-tcp-checkpoint-manifest nil)
-    (let [checkpoint (if (and (not (nil? afj-tcp-catalog-page-path))
-                              (file_exists afj-tcp-catalog-page-path))
-                       (afj-tcp-read-catalog-pages)
-                       nil)
-          raw (if (file_exists afj-tcp-wal) (file_read afj-tcp-wal) "")
+    (let [checkpoint (afj-tcp-read-catalog-pages)
+          raw (get (afj-tcp-read-storage-text afj-tcp-wal) "text")
           checkpoint-size (if (nil? checkpoint) 0
                              (get checkpoint "wal-size"))
           checkpoint-prefix (if (nil? checkpoint) nil
                                (get checkpoint "wal-prefix"))
           prefix-ok (and (not (nil? checkpoint))
+                         (integer? checkpoint-size)
+                         (>= checkpoint-size 0)
                          (<= checkpoint-size (count raw))
+                         (string? checkpoint-prefix)
+                         (or (= checkpoint-size 0)
+                             (str_ends_with (str-slice raw 0 checkpoint-size) "\n"))
                          (= checkpoint-prefix
                             (sha256 (str-slice raw 0 checkpoint-size))))
           replay-start (if prefix-ok checkpoint-size 0)]
+      ;; There is no WAL rotation/truncation protocol here. A checkpoint whose
+      ;; prefix is missing/replaced cannot be discarded as a fresh database.
+      (if (and (not (nil? checkpoint)) (not prefix-ok))
+        (throw "WAL_CORRUPT")
+        nil)
       (if prefix-ok
         (do
           (reset! afj-tcp-checkpoint-table-paths
@@ -793,6 +826,42 @@
       ;; registry side effect is evaluated before the outer result returns.
       (afj-tcp-rebuild-all-indexes))
     true))
+
+(defn afj-tcp-recovery-state []
+  {"catalog" (deref engine-catalog) "indexes" (deref engine-indexes)
+   "databases" (deref engine-databases)
+   "revision" (deref afj-tcp-commit-revision)
+   "table-revisions" (deref afj-tcp-table-revisions)
+   "schema-revisions" (deref afj-tcp-schema-revisions)
+   "row-versions" (deref afj-tcp-row-versions)
+   "manifest" (deref afj-tcp-checkpoint-manifest)
+   "paths" (deref afj-tcp-checkpoint-table-paths)
+   "page-pool" (deref afj-tcp-page-pool) "page-tick" (deref afj-tcp-page-pool-tick)
+   "lazy-cache" (deref afj-tcp-lazy-table-cache) "lazy-tick" (deref afj-tcp-lazy-table-tick)})
+
+(defn afj-tcp-restore-recovery-state [state]
+  (reset! engine-catalog (get state "catalog"))
+  (reset! engine-indexes (get state "indexes"))
+  (reset! engine-databases (get state "databases"))
+  (reset! afj-tcp-commit-revision (get state "revision"))
+  (reset! afj-tcp-table-revisions (get state "table-revisions"))
+  (reset! afj-tcp-schema-revisions (get state "schema-revisions"))
+  (reset! afj-tcp-row-versions (get state "row-versions"))
+  (reset! afj-tcp-checkpoint-manifest (get state "manifest"))
+  (reset! afj-tcp-checkpoint-table-paths (get state "paths"))
+  (reset! afj-tcp-page-pool (get state "page-pool"))
+  (reset! afj-tcp-page-pool-tick (get state "page-tick"))
+  (reset! afj-tcp-lazy-table-cache (get state "lazy-cache"))
+  (reset! afj-tcp-lazy-table-tick (get state "lazy-tick"))
+  true)
+
+(defn afj-tcp-recover []
+  (let [before (afj-tcp-recovery-state)]
+    (try
+      (afj-tcp-recover-core)
+      (catch [error]
+        (afj-tcp-restore-recovery-state before)
+        (throw error)))))
 
 (defn afj-tcp-record-asts [asts]
   (let [tx (uuid_short)
