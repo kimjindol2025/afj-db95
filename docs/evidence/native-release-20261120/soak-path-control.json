@@ -1,0 +1,26 @@
+{
+  "original_case": 25,
+  "original_failure": "Compiler input path contains apostrophe; protected fixture builds a single-quoted shell command without escaping it",
+  "change": "Same compiler bytes through a simple symlink path; no test/source/flag/threshold/time-limit changes",
+  "compiler_sha256": "170aa919713a8cbdfa8bfea1fdad47ae839ce40162643120fb291c3f480cbcbd",
+  "duration_ms": 300000,
+  "p95_ms": 15000,
+  "max_ms": 20000,
+  "outer_timeout_seconds": 360,
+  "result": "TIMEOUT",
+  "exit": 124,
+  "strict_source": {
+    "status": "FAIL",
+    "code": "FL1001",
+    "line": 168,
+    "unclosed_opening_line": 29,
+    "source_sha256": "5990030fce1a718bc37828f0a5f625e45cba4b86e2d3ba66a4acbf4b199d079a"
+  },
+  "runtime_error": "Uncaught error (line 131): [finally] Function not found: finally (at line 167, col 0)",
+  "interim_pass_lines_are_acceptance": false,
+  "original_whole_gate_unchanged": true,
+  "normal_compiler_rejection_fix": "candidate queued; unverified",
+  "compiler_path": "same accepted compiler through a simple symlink; private host path masked",
+  "source": "tests/tcp-long-soak.fls",
+  "protected_tests_modified": false
+}

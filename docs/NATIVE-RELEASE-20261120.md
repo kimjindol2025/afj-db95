@@ -74,8 +74,10 @@ Node and the following 3 distinct limitations. Their raw FAIL status is retained
   relocation-test path contains an apostrophe and LF, so daemon compilation
   failed at shell parsing. A separate control uses the same compiler bytes
   through a simple symlink path, preserving the 360-second limit and
-  300000/15000/20000 duration/p95/max values. It is pending and cannot replace
-  this raw result or establish sustained load acceptance.
+  300000/15000/20000 duration/p95/max values. That control ended with timeout
+  exit 124. Intermediate PASS lines were followed by an uncaught `finally`
+  lookup error; they do not establish acceptance. The raw whole-gate result
+  remains unchanged. See the [separate control receipt](evidence/native-release-20261120/soak-path-control.json).
 - Case 28's Native program exited 0 and printed compatibility baseline=88%.
   Its source only prints target PASS at 95% or higher. The original process-exit
   gate permits a positive baseline, whereas this diagnostic also requires PASS
@@ -87,6 +89,25 @@ Node and the following 3 distinct limitations. Their raw FAIL status is retained
   boundary was preserved. The original artifact-path assumption and the Native
   execution profile still need a faithful integration path; weakening file
   policy or removing the artifact assertion is not an accepted fix.
+
+## Follow-up source audit
+
+Strict, non-executing parsing of all 55 selected FreeLang sources yielded
+54 PASS / 1 FAIL / 0 observation timeouts. The sole failure is the existing
+Case 25 source: an opening parenthesis at line 29 remains unclosed at EOF,
+reported as FL1001 at line 168. All 52 successful whole-gate cases have valid
+source structure in this audit. The [source audit](evidence/native-release-20261120/strict-source-audit.json)
+records exact source hashes and separate results; it is not another runtime gate.
+
+The accepted positional compiler nevertheless generated C for Case 25. Its
+permissive delimiter parser allowed later forms to enter the wrong scope. The
+path-only control consequently printed intermediate PASS lines and ultimately
+raised `Function not found: finally`; its protected 360-second wrapper returned
+124. A scoped compiler correction is prepared to reject unclosed, mismatched
+and unexpected closing delimiters before writing generated output. That change
+is awaiting execution checks and a fresh canonical bootstrap. The protected
+fixture, runner, timeout and assertions were not edited, and there is no sustained
+load PASS from this control.
 
 ## What is established and what remains
 
