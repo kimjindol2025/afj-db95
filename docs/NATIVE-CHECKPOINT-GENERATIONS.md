@@ -119,8 +119,10 @@ already-corrupt legacy data and process ownership remain open. A checkpoint erro
 after the WAL transaction is durable but before a client ACK; the protocol
 must report/handle that uncertainty rather than encourage blind retries.
 
-The historical full Native gate was 51 PASS / 20 FAIL at the original source;
-it has not been rerun against this change. Unported JS/shell scenarios remain
+The historical full Native gate was 51 PASS / 20 FAIL at the original source.
+The latest whole Native diagnostic is 52 PASS / 19 FAIL against DB ed908d2;
+see NATIVE-RELEASE-20261120.md for the different SDK/environment and all failures.
+These totals are not an identical-environment before/after comparison. Unported JS/shell scenarios remain
 failures, not accepted omissions. No actual service was started, and no
 commercial readiness, complete recovery matrix or whole-language completion
 is claimed. Download/install/sudo, seed changes, global configuration,

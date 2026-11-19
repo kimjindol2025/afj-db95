@@ -71,7 +71,7 @@ isolated to the fixture WAL; they are not a claim about a physical device
 failure. New files measured mode 0600 in the tested environment; existing
 file permissions are not rewritten.
 
-Additional results with the same current compiler/runtime:
+Scoped results and a separately identified latest whole diagnostic:
 
 | Check | Result |
 |---|---|
@@ -83,7 +83,8 @@ Additional results with the same current compiler/runtime:
 | Existing silent TCP 3,200-record fixture | Exit 0; five original PASS markers, count/hash unchanged; 360-second original diagnostic bound |
 | Node executions / outbound connect calls in collected traces | 0 / 0 |
 | Existing tests/protected gate/seed / authored JS | Unchanged / 0 new JS |
-| Full Native 71-case gate / real service load | NOT_RUN |
+| Latest full Native 71-case diagnostic (separate SDK/profile) | 52 PASS / 19 FAIL; [source/profile and all failures](NATIVE-RELEASE-20261120.md) |
+| Real service sustained-load acceptance | Not established; Case 25 failed during setup, separate unchanged-bound path control pending |
 
 The 3,200-record fixture initially failed on the existing Native runtime's
 missing str_join_lines function. That language operation is now implemented
@@ -91,8 +92,10 @@ from its inspected reference and passes 24 public contracts. The old fixture
 was not rewritten around it. FX source commit:
 4dee8bca2430846e6cc524ff56f9bc237be9cfbc. Current compiler ELF SHA-256:
 eb23e2039163794c641d2f3f3f076ddf5cd3e3d6bff5800216ab638e39d2361b.
-Fresh Stage2=3=4 and the core suites pass; the latest generation-time criterion
-has a 42.36-second miss and remains open. See FX NATIVE-JOIN-LINES.md.
+Fresh Stage2=3=4 and the core suites pass; the generation-time observation
+in that receipt had a 42.36-second miss. Later FX SDK evidence in NATIVE-SSE.md
+passes both generations at 29.51/29.40 seconds. This historical timing is not the
+current whole DB release result; see NATIVE-RELEASE-20261120.md.
 
 ## Remaining commercial gates
 
