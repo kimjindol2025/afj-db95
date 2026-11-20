@@ -1,0 +1,99 @@
+{
+  "schema": "db95-native-standard-client-diagnostic/1",
+  "date": "2026-11-20",
+  "status": "SCOPED_PASS",
+  "commercialReadiness": "HOLD",
+  "production": "NOT_RUN",
+  "hostPathsAndOwners": "<가림>",
+  "scope": "Fresh AOT of unchanged FreeLang MariaDB daemon plus three installed standard-client processes. Private diagnostic orchestration; public FreeLang-only test host is not qualified by this receipt. Original JS Case68 remains FAIL in preserved71-case gate.",
+  "source": {
+    "dbHead": "fefddfa60a73b135f4989817e60d1bb56bc705d6",
+    "fxHead": "d8dc4c63adcfe2ac3f7d7edf69f890407c2dd4da",
+    "daemon": "tests/native-mariadb-daemon.fls",
+    "daemonSha256": "4aeb91c050734087a9b0e27bffd677cfe48f6bfb5068f39cbbce2efb4c01868d",
+    "originalReference": "tests/native-mariadb-smoke.js",
+    "originalReferenceSha256": "3b62e3dc4bc2d087a8306271b82a650e09741017c4fe89afad9c7a04ed64bbf1",
+    "moduleSha256": {
+      "engine.fls": "aa5fd27be0b450a349ba33fecdee8994df4c471bb3acf5dda25ee41f7a3694af",
+      "sql-core.fls": "e676a211efac76e1c46f001159de5d4a2efc4f9fe942889f820f4bc41d2780ae",
+      "mariadb-wire.fls": "ad22ba6ae03fa70388c6b3a0d1a930e574595b67e5cf58421ef3ea33b3c5c4ff",
+      "sha1.fls": "6fc4c3def2d56c4ff7eb76c7cd7917b6e268bdc070a75fe90959a49a08bf39cf"
+    },
+    "unchangedFrozenFiles": 383,
+    "protectedOriginalTestsChanged": false
+  },
+  "sdkSha256": {
+    "manifest": "e1f22e75e3a25b662411dc42d23e47049c31c0f5b80a75e4d3b4d75ee8708181",
+    "compiler": "42fc8355bf76b8e3087d05bc1b9a63c0c3f0e102ed5331bea11bb86aae0b08aa",
+    "runtimeArchive": "053971a3403cfdf0b1c15a0efa8e76a9eb5e5325df0fb4955279abe1bb6c6be4"
+  },
+  "limits": {
+    "freshGenerateLinkAndRuntimeSeconds": 120,
+    "addressSpaceBytes": 2147483648,
+    "markerSecondsAfterAot": 60,
+    "portRefusedRetries": 30,
+    "retryMilliseconds": 100,
+    "clientConnectSeconds": 5,
+    "ownedCleanupSeconds": 3,
+    "namespace": "own PID and loopback, host read-only except diagnostic artifacts"
+  },
+  "commands": [
+    {
+      "index": 1,
+      "statement": "CREATE TABLE native_wire_users (id INT PRIMARY KEY, name TEXT)",
+      "exit": 0,
+      "stdoutHex": ""
+    },
+    {
+      "index": 2,
+      "statement": "INSERT INTO native_wire_users (id,name) VALUES (1,'Kim')",
+      "exit": 0,
+      "stdoutHex": ""
+    },
+    {
+      "index": 3,
+      "statement": "SELECT * FROM native_wire_users",
+      "exit": 0,
+      "stdoutHex": "31094b696d0a"
+    }
+  ],
+  "expectedSelect": {
+    "utf8": "1\tKim\n",
+    "hex": "31094b696d0a"
+  },
+  "client": {
+    "program": "installed mariadb",
+    "protocol": "TCP",
+    "tls": "--skip-ssl; no TLS claim",
+    "authentication": "new synthetic development account only",
+    "extraOption": "--no-defaults prevents reading existing client config or credentials",
+    "otherOriginalArgumentsAndSqlPreserved": true
+  },
+  "execution": {
+    "rawExit": 0,
+    "decodedExecs": 16,
+    "allTerminalExecStatusesParsed": true,
+    "successfulNodeFamilyExecs": 0,
+    "privateControllerPythonExecs": 1,
+    "standardClientProcesses": 3,
+    "traceSha256": "e32b6671a7afe298c66a4ea5bd5433c90fdcfa3e0dad21bcee5ff5d251cffbad",
+    "daemonElfSha256": "8518f0e07409f358e578b9ad3ea613306e27e498ed36620649242bdf36dcd1c3",
+    "sourceAndSdkPreserved": true
+  },
+  "retainedFirstCohort": {
+    "sqlAndExactOutput": "PASS",
+    "compilerErrorScanner": "rg absent in private restrictedPATH; guard incomplete",
+    "fullyQualifiedHost": false,
+    "artifactsRetained": true,
+    "correction": "new fresh-build-v2 cohort, same controller/daemon/SQL/bounds; installed grep must return exactly1 for clean compiler output, any scanner error fails"
+  },
+  "notQualified": [
+    "TCP WAL/cold recovery",
+    "TLS or mTLS",
+    "auth rejection cases",
+    "prepared statements",
+    "full standard-client compatibility",
+    "writer ownership/root identity/backup operations",
+    "whole71-case gate or commercial release"
+  ]
+}
