@@ -1045,6 +1045,31 @@
     (engine-index-add-rows name updated-table rows old-count)
     {"ok" true "type" "insert" "count" (count new-rows)})))
 
+;; Internal recovery-only append. The ordinary INSERT executor stays unchanged.
+(defn engine-recovery-insert [ast]
+  (let [name (get ast "table")
+        table (engine-table name)
+        new-rows (if (has-key? ast "values")
+                   (map (fn [values] (engine-positional-row table values))
+                        (get ast "values"))
+                 (if (has-key? ast "rows")
+                   (get ast "rows")
+                   [(get ast "row")]))
+        existing (get table "rows")
+        candidate (atom existing)]
+    (doseq [row new-rows]
+      (engine-validate-row (get table "schema" {}) row (deref candidate))
+      (reset! candidate (conj (deref candidate) row)))
+    (let [rows (deref candidate)
+          old-count (count existing)
+          updated-table (dissoc (assoc table "rows" rows)
+                                "page-indexes")]
+    (reset! engine-catalog (assoc (deref engine-catalog) name updated-table))
+    ;; The complete recovery rebuild publishes every derived index once.
+    ;; All row/schema/foreign-key checks above are the original executor checks.
+    true
+    {"ok" true "type" "insert" "count" (count new-rows)})))
+
 ;; Keep the index lookup helper adjacent to the executor so the bootstrap
 ;; loader registers it before any self-test query invokes the planner.
 (defn engine-index-row-ids [name table where]

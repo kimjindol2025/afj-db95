@@ -768,6 +768,44 @@
               (afj-tcp-recover-lines lines (+ cursor 1) prepared final-newline)
               true)))))))
 
+;; Full recovery alone defers derived INSERT index maintenance. Direct replay
+;; callers keep the original function above and its immediate index semantics.
+(defn afj-tcp-recover-lines-deferred [lines index prepared final-newline deferred]
+  (let [cursor index]
+    (if (>= cursor (count lines))
+      true
+      (let [line (get lines cursor)
+            last-line (= cursor (- (count lines) 1))
+            _size-check (if (> (count line) afj-tcp-wal-record-limit)
+                          (throw "WAL_RECORD_TOO_LARGE")
+                          true)
+            event (try (json-parse line) (catch [error] nil))]
+        (if (nil? event)
+          (if (and last-line (not final-newline))
+            true
+            (throw "WAL_CORRUPT"))
+          (let [tx (get event "tx")
+                kind (get event "type")]
+            (if (nil? tx) (throw "WAL_CORRUPT") nil)
+            (if (= kind "prepare")
+              (if (afj-tcp-wal-record-valid? event (get event "body"))
+                (swap! prepared assoc tx event)
+                (throw "WAL_CORRUPT"))
+              (if (= kind "commit")
+                (let [pending (get (deref prepared) tx)
+                      body (if (nil? pending) nil (get pending "body"))]
+                  (if (and (not (nil? body))
+                           (afj-tcp-wal-record-valid? pending body)
+                           (afj-tcp-wal-record-valid? event body))
+                    (do (afj-tcp-replay-deferred-commit-body body deferred)
+                        (swap! prepared dissoc tx))
+                    (throw "WAL_CORRUPT")))
+                (throw "WAL_CORRUPT")))
+            (if (< (+ cursor 1) (count lines))
+              (afj-tcp-recover-lines-deferred
+                lines (+ cursor 1) prepared final-newline deferred)
+              true)))))))
+
 (defn afj-tcp-rebuild-all-indexes []
   (reset! engine-indexes {})
   (doseq [table (keys (deref engine-catalog))]
@@ -848,8 +886,8 @@
                 lines (if (str_ends_with tail "\n")
                         (take (- (count split) 1) split)
                         split)]
-            (afj-tcp-recover-lines lines 0 (atom {})
-                                   (str_ends_with tail "\n")))
+            (afj-tcp-recover-lines-deferred lines 0 (atom {})
+              (str_ends_with tail "\n") (atom {})))
           (catch [error] (throw "WAL_CORRUPT")))
         nil)
       ;; Keep rebuild as the final value of the recovery let-block so its
@@ -1176,6 +1214,38 @@
         (afj-tcp-ensure-table-loaded (get ast "table"))
         nil)
       (execute-ast ast))
+    (swap! afj-tcp-commit-revision (fn [revision] (+ revision 1)))
+    (afj-tcp-mark-table-revisions asts (deref afj-tcp-commit-revision))
+    (do
+      (afj-tcp-record-row-versions-for-asts
+        (deref engine-catalog) asts (deref afj-tcp-commit-revision))
+      true)
+    true))
+
+(defn afj-tcp-replay-flush-indexes [deferred]
+  (doseq [table (keys (deref deferred))]
+    (let [definition (get (deref engine-catalog) table)]
+      (if (nil? definition) nil
+        (engine-rebuild-table-indexes table definition))))
+  (reset! deferred {})
+  true)
+
+(defn afj-tcp-replay-deferred-commit-body [body deferred]
+  (let [asts (if (has-key? body "asts")
+               (get body "asts")
+               [(get body "ast")])]
+    (doseq [ast asts]
+      (if (not (nil? (get ast "table")))
+        (afj-tcp-ensure-table-loaded (get ast "table"))
+        nil)
+      (if (= (get ast "type") "insert")
+        (do
+          (engine-recovery-insert ast)
+          (swap! deferred assoc (get ast "table") true))
+        (do
+          ;; Indexed reads and all other ASTs observe the complete prior state.
+          (afj-tcp-replay-flush-indexes deferred)
+          (execute-ast ast))))
     (swap! afj-tcp-commit-revision (fn [revision] (+ revision 1)))
     (afj-tcp-mark-table-revisions asts (deref afj-tcp-commit-revision))
     (do

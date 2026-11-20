@@ -1,0 +1,31 @@
+(load "../src/tcp-server.fls")
+;; Stored IDs stay strings, as specified by the original WAL AST/parser.
+;; Sort by their numeric meaning while checking both raw and canonical pairs.
+(define recovered (afj-tcp-recover))
+(define recovered-rows (get (get (deref engine-catalog) "soak_users") "rows"))
+(define expected-count (str-to-num (env-get "AFJ_EXPECTED_ROWS")))
+(define ordered (sort-by (fn [row] (str-to-num (get row "id"))) recovered-rows))
+(if (not (= recovered true)) (throw "LOAD_RECOVERY_NOT_OK") nil)
+(if (not (= (count ordered) expected-count)) (throw "LOAD_RECOVERY_ROW_COUNT") nil)
+(if (not (= (deref afj-tcp-commit-revision) (+ expected-count 1)))
+  (throw "LOAD_RECOVERY_REVISION") nil)
+(doseq [index (range 0 expected-count)]
+  (let [row (get ordered index) id (get row "id") name (get row "name")]
+    (if (not (and (string? id) (= id (str index))))
+      (throw "LOAD_RECOVERY_RAW_STRING_ID") nil)
+    (if (not (and (string? name) (= name (str "soak-" index))))
+      (throw "LOAD_RECOVERY_NAME") nil)))
+(define raw-pairs (map (fn [row] [(get row "id") (get row "name")]) ordered))
+(define raw-digest (sha256 (json_str raw-pairs)))
+(if (not (= raw-digest (env-get "AFJ_EXPECTED_RAW_DIGEST")))
+  (throw "LOAD_RECOVERY_RAW_INDEPENDENT_DIGEST") nil)
+(define pairs (map (fn [row] [(str-to-num (get row "id")) (get row "name")]) ordered))
+(define digest (sha256 (json_str pairs)))
+(if (not (= digest (env-get "AFJ_EXPECTED_DIGEST")))
+  (throw "LOAD_RECOVERY_CANONICAL_INDEPENDENT_DIGEST") nil)
+(println (str "NATIVE_LOAD_RECOVERY_RESULT "
+              (json_str {"ok" true "native_field_predicate" engine-native-field-eq-available "reader_schema" 2 "stored_id_type" "string"
+                         "rows" (count ordered)
+                         "revision" (deref afj-tcp-commit-revision)
+                         "raw_pairs_digest" raw-digest
+                         "ordered_pairs_digest" digest})))

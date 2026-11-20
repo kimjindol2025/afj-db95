@@ -1,0 +1,621 @@
+{
+  "schema": "native-wal-bulk-recovery/1",
+  "scope": "Complete synthetic 18088-row cold recovery and existing 349 regressions; no application, release or global gate claim",
+  "baseCommit": "55a3a00674042006b6586cd18e7616d8c9b763e5",
+  "sourceSha256": {
+    "src/engine.fls": "691b86022ee95fe21736bab6f7025235d62b403d83c954d4f316c6451ad1fc19",
+    "src/tcp-server.fls": "b5f3988a48e8d1b38b9af60bc632d21498a326cdeb8294d2d6d9a5a3482a0982"
+  },
+  "publicReader": "tests/native-load-recovery-range.fls",
+  "publicReaderSha256": "78aba51c82421ddeb0352dedf3e42f2abb30ba7ce037d23258a4db43d70fe627",
+  "originalReaderBodyAndAssertionsUnchanged": true,
+  "noUnrelatedWireUTF8PatchApplied": true,
+  "coldRecovery": {
+    "status": "PASS",
+    "passed": 2,
+    "total": 2,
+    "rows": [
+      {
+        "turn": 1,
+        "exit": 0,
+        "passed": true,
+        "seconds": 100.66261948900501,
+        "result": {
+          "ok": true,
+          "native_field_predicate": true,
+          "reader_schema": 2,
+          "stored_id_type": "string",
+          "rows": 18088,
+          "revision": 18089,
+          "raw_pairs_digest": "f195bf49b9e54b91d7b2f2eb5bfc313fdd6fc051cffe66a23bf3fedac7eb2b23",
+          "ordered_pairs_digest": "2ad61f18e1fa697cb4c9509c25f82ddb1781a4f7c869822e6c6bd9849cb33071"
+        },
+        "trace": {
+          "traceSha256": "93344b6625695b3736b7589514b5ef28ecaf309dfa6e8cd486b64eeb81871b2f",
+          "decodedExecs": 3,
+          "resumedExecsJoined": 0,
+          "allTerminalExecStatusesParsed": true,
+          "successfulNodeFamilyExecs": 0,
+          "failedNodeFamilyAttempts": 0,
+          "successfulPythonExecs": 0,
+          "allowedPrivateControllerPythonExecs": 0,
+          "successfulBasenameCounts": {
+            "bwrap": 1,
+            "reader-bin": 1,
+            "timeout": 1
+          }
+        }
+      },
+      {
+        "turn": 2,
+        "exit": 0,
+        "passed": true,
+        "seconds": 95.1438743059989,
+        "result": {
+          "ok": true,
+          "native_field_predicate": true,
+          "reader_schema": 2,
+          "stored_id_type": "string",
+          "rows": 18088,
+          "revision": 18089,
+          "raw_pairs_digest": "f195bf49b9e54b91d7b2f2eb5bfc313fdd6fc051cffe66a23bf3fedac7eb2b23",
+          "ordered_pairs_digest": "2ad61f18e1fa697cb4c9509c25f82ddb1781a4f7c869822e6c6bd9849cb33071"
+        },
+        "trace": {
+          "traceSha256": "ae556a3b0398af1bd35f7c6dcb4ed29550c4b0b1bf8353d63b6576fa2621d284",
+          "decodedExecs": 3,
+          "resumedExecsJoined": 0,
+          "allTerminalExecStatusesParsed": true,
+          "successfulNodeFamilyExecs": 0,
+          "failedNodeFamilyAttempts": 0,
+          "successfulPythonExecs": 0,
+          "allowedPrivateControllerPythonExecs": 0,
+          "successfulBasenameCounts": {
+            "bwrap": 1,
+            "reader-bin": 1,
+            "timeout": 1
+          }
+        }
+      }
+    ],
+    "buildTrace": {
+      "traceSha256": "8b9aa196d7a58d8e59dd3a8c0af8dc8ed912622fa3f86cf7254b244bc233d83f",
+      "decodedExecs": 84,
+      "resumedExecsJoined": 0,
+      "allTerminalExecStatusesParsed": true,
+      "successfulNodeFamilyExecs": 0,
+      "failedNodeFamilyAttempts": 0,
+      "successfulPythonExecs": 0,
+      "allowedPrivateControllerPythonExecs": 0,
+      "successfulBasenameCounts": {
+        "as": 1,
+        "bash": 1,
+        "cc1": 1,
+        "collect2": 1,
+        "flc": 2,
+        "gcc": 1,
+        "grep": 1,
+        "ld": 1,
+        "timeout": 3
+      }
+    },
+    "originalFrozenSchema2ReaderSha256": "78aba51c82421ddeb0352dedf3e42f2abb30ba7ce037d23258a4db43d70fe627",
+    "all18088IdsNamesRevisionsRawAndCanonicalDigestsChecked": true,
+    "unchangedWalSha256": "ba26bf560b4c8ec6e501a4fcb0cc3ab4f0804a34609fb9e6c7ff9284c420e13e",
+    "sourceAndSdkUnchanged": true,
+    "originalSeconds": 120,
+    "addressSpaceBytes": 2147483648,
+    "sourceChanges": {
+      "src/engine.fls": "691b86022ee95fe21736bab6f7025235d62b403d83c954d4f316c6451ad1fc19",
+      "src/tcp-server.fls": "b5f3988a48e8d1b38b9af60bc632d21498a326cdeb8294d2d6d9a5a3482a0982"
+    },
+    "original349Regression": "349/349 PASS; see existingRegressions"
+  },
+  "independentCompleteWalOracle": {
+    "walSha256": "ba26bf560b4c8ec6e501a4fcb0cc3ab4f0804a34609fb9e6c7ff9284c420e13e",
+    "walBytes": 6996279,
+    "rows": 18088,
+    "revision": 18089,
+    "rawDigest": "f195bf49b9e54b91d7b2f2eb5bfc313fdd6fc051cffe66a23bf3fedac7eb2b23",
+    "canonicalDigest": "2ad61f18e1fa697cb4c9509c25f82ddb1781a4f7c869822e6c6bd9849cb33071",
+    "allChecksumsIdsNamesExact": true
+  },
+  "existingRegressions": {
+    "status": "PASS",
+    "passed": 349,
+    "total": 349,
+    "cohorts": [
+      {
+        "cohort": "wal/contract-results.json",
+        "passed": 25,
+        "total": 25
+      },
+      {
+        "cohort": "wal/unicode-results.json",
+        "passed": 4,
+        "total": 4
+      },
+      {
+        "cohort": "checkpoint/generation-results.json",
+        "passed": 15,
+        "total": 15
+      },
+      {
+        "cohort": "checkpoint/tail-results.json",
+        "passed": 13,
+        "total": 13
+      },
+      {
+        "cohort": "natural",
+        "passed": 28,
+        "total": 28
+      },
+      {
+        "cohort": "validation",
+        "passed": 12,
+        "total": 12
+      },
+      {
+        "cohort": "fault",
+        "passed": 220,
+        "total": 220
+      },
+      {
+        "cohort": "socket",
+        "passed": 32,
+        "total": 32
+      }
+    ],
+    "traces": [
+      {
+        "label": "sdk-before",
+        "traceSha256": "0bfc1c8e4ce470bcc428e3264f10e7f530abba72270babd4260953900cc2a27f",
+        "decodedExecs": 40,
+        "resumedExecsJoined": 0,
+        "allTerminalExecStatusesParsed": true,
+        "successfulNodeFamilyExecs": 0,
+        "failedNodeFamilyAttempts": 0,
+        "successfulPythonExecs": 0,
+        "allowedPrivateControllerPythonExecs": 0,
+        "successfulBasenameCounts": {
+          "bash": 1,
+          "readlink": 1,
+          "sha256sum": 1,
+          "verify.sh": 1
+        }
+      },
+      {
+        "label": "wal-generate",
+        "traceSha256": "9b597da73c400b16173a1be2d534fa387df1d12b82df19491d4eb0592c8d971c",
+        "decodedExecs": 2,
+        "resumedExecsJoined": 0,
+        "allTerminalExecStatusesParsed": true,
+        "successfulNodeFamilyExecs": 0,
+        "failedNodeFamilyAttempts": 0,
+        "successfulPythonExecs": 0,
+        "allowedPrivateControllerPythonExecs": 0,
+        "successfulBasenameCounts": {
+          "flc": 1,
+          "timeout": 1
+        }
+      },
+      {
+        "label": "wal-link",
+        "traceSha256": "d9baab9faecfabcda08a2e3d298fece7c40d539a31d64c8570b3c8b4f05e60dc",
+        "decodedExecs": 42,
+        "resumedExecsJoined": 0,
+        "allTerminalExecStatusesParsed": true,
+        "successfulNodeFamilyExecs": 0,
+        "failedNodeFamilyAttempts": 0,
+        "successfulPythonExecs": 0,
+        "allowedPrivateControllerPythonExecs": 0,
+        "successfulBasenameCounts": {
+          "as": 1,
+          "cc1": 1,
+          "collect2": 1,
+          "gcc": 1,
+          "ld": 1,
+          "timeout": 1
+        }
+      },
+      {
+        "label": "checkpoint-generate",
+        "traceSha256": "ca4b0531998f6220483cb526b8a6a0e1e951bcba4f0a388e4f869906b1af7a91",
+        "decodedExecs": 2,
+        "resumedExecsJoined": 0,
+        "allTerminalExecStatusesParsed": true,
+        "successfulNodeFamilyExecs": 0,
+        "failedNodeFamilyAttempts": 0,
+        "successfulPythonExecs": 0,
+        "allowedPrivateControllerPythonExecs": 0,
+        "successfulBasenameCounts": {
+          "flc": 1,
+          "timeout": 1
+        }
+      },
+      {
+        "label": "checkpoint-link",
+        "traceSha256": "026d82685a65d2ab47c5b309dfac4d0185fb97341da51e1b3c88a64a6b63cee3",
+        "decodedExecs": 42,
+        "resumedExecsJoined": 0,
+        "allTerminalExecStatusesParsed": true,
+        "successfulNodeFamilyExecs": 0,
+        "failedNodeFamilyAttempts": 0,
+        "successfulPythonExecs": 0,
+        "allowedPrivateControllerPythonExecs": 0,
+        "successfulBasenameCounts": {
+          "as": 1,
+          "cc1": 1,
+          "collect2": 1,
+          "gcc": 1,
+          "ld": 1,
+          "timeout": 1
+        }
+      },
+      {
+        "label": "tail-generate",
+        "traceSha256": "60aa1a976aa56c5e91eecae3c57e75cd34bf6c8b4cbbb08f5740cee5a7b6aa7d",
+        "decodedExecs": 2,
+        "resumedExecsJoined": 0,
+        "allTerminalExecStatusesParsed": true,
+        "successfulNodeFamilyExecs": 0,
+        "failedNodeFamilyAttempts": 0,
+        "successfulPythonExecs": 0,
+        "allowedPrivateControllerPythonExecs": 0,
+        "successfulBasenameCounts": {
+          "flc": 1,
+          "timeout": 1
+        }
+      },
+      {
+        "label": "tail-link",
+        "traceSha256": "e7c12f480d38fc80e18614ba2b5073505b3047316f768af6a05f21139b4756fc",
+        "decodedExecs": 42,
+        "resumedExecsJoined": 0,
+        "allTerminalExecStatusesParsed": true,
+        "successfulNodeFamilyExecs": 0,
+        "failedNodeFamilyAttempts": 0,
+        "successfulPythonExecs": 0,
+        "allowedPrivateControllerPythonExecs": 0,
+        "successfulBasenameCounts": {
+          "as": 1,
+          "cc1": 1,
+          "collect2": 1,
+          "gcc": 1,
+          "ld": 1,
+          "timeout": 1
+        }
+      },
+      {
+        "label": "health-generate",
+        "traceSha256": "66f5f47f34bc54f910380426c7a5dedc6dc4e16953d15a370b853e2737c5ac3d",
+        "decodedExecs": 2,
+        "resumedExecsJoined": 0,
+        "allTerminalExecStatusesParsed": true,
+        "successfulNodeFamilyExecs": 0,
+        "failedNodeFamilyAttempts": 0,
+        "successfulPythonExecs": 0,
+        "allowedPrivateControllerPythonExecs": 0,
+        "successfulBasenameCounts": {
+          "flc": 1,
+          "timeout": 1
+        }
+      },
+      {
+        "label": "health-link",
+        "traceSha256": "49153e0dbf86bb54e4970ff5ae313ab33c83ba9ab066306667d43ce67ae22652",
+        "decodedExecs": 42,
+        "resumedExecsJoined": 0,
+        "allTerminalExecStatusesParsed": true,
+        "successfulNodeFamilyExecs": 0,
+        "failedNodeFamilyAttempts": 0,
+        "successfulPythonExecs": 0,
+        "allowedPrivateControllerPythonExecs": 0,
+        "successfulBasenameCounts": {
+          "as": 1,
+          "cc1": 1,
+          "collect2": 1,
+          "gcc": 1,
+          "ld": 1,
+          "timeout": 1
+        }
+      },
+      {
+        "label": "validation-generate",
+        "traceSha256": "e8432602c89cb4a112ef252884fa31afc006d99f9afab09eff45846a2f1ed245",
+        "decodedExecs": 2,
+        "resumedExecsJoined": 0,
+        "allTerminalExecStatusesParsed": true,
+        "successfulNodeFamilyExecs": 0,
+        "failedNodeFamilyAttempts": 0,
+        "successfulPythonExecs": 0,
+        "allowedPrivateControllerPythonExecs": 0,
+        "successfulBasenameCounts": {
+          "flc": 1,
+          "timeout": 1
+        }
+      },
+      {
+        "label": "validation-link",
+        "traceSha256": "4be9e063cc820d8d90a705fc468af394ca496677d9adde8b5301f7388b89cb03",
+        "decodedExecs": 42,
+        "resumedExecsJoined": 0,
+        "allTerminalExecStatusesParsed": true,
+        "successfulNodeFamilyExecs": 0,
+        "failedNodeFamilyAttempts": 0,
+        "successfulPythonExecs": 0,
+        "allowedPrivateControllerPythonExecs": 0,
+        "successfulBasenameCounts": {
+          "as": 1,
+          "cc1": 1,
+          "collect2": 1,
+          "gcc": 1,
+          "ld": 1,
+          "timeout": 1
+        }
+      },
+      {
+        "label": "socket-generate",
+        "traceSha256": "47d1d9fda0b95b8ec874b3d1b5556371d43a2476f15e2fc5540bb37d17c01654",
+        "decodedExecs": 2,
+        "resumedExecsJoined": 0,
+        "allTerminalExecStatusesParsed": true,
+        "successfulNodeFamilyExecs": 0,
+        "failedNodeFamilyAttempts": 0,
+        "successfulPythonExecs": 0,
+        "allowedPrivateControllerPythonExecs": 0,
+        "successfulBasenameCounts": {
+          "flc": 1,
+          "timeout": 1
+        }
+      },
+      {
+        "label": "socket-link",
+        "traceSha256": "8921838c173df307053bf11de345ccb26f0f70586c65df57d5d8cfb5baf62efe",
+        "decodedExecs": 42,
+        "resumedExecsJoined": 0,
+        "allTerminalExecStatusesParsed": true,
+        "successfulNodeFamilyExecs": 0,
+        "failedNodeFamilyAttempts": 0,
+        "successfulPythonExecs": 0,
+        "allowedPrivateControllerPythonExecs": 0,
+        "successfulBasenameCounts": {
+          "as": 1,
+          "cc1": 1,
+          "collect2": 1,
+          "gcc": 1,
+          "ld": 1,
+          "timeout": 1
+        }
+      },
+      {
+        "label": "wal25",
+        "traceSha256": "af4d5c7851a8b192a25da393215e87331ff1ee08a23ef034d4c5d1e230bf9e2a",
+        "decodedExecs": 42,
+        "resumedExecsJoined": 0,
+        "allTerminalExecStatusesParsed": true,
+        "successfulNodeFamilyExecs": 0,
+        "failedNodeFamilyAttempts": 0,
+        "successfulPythonExecs": 1,
+        "allowedPrivateControllerPythonExecs": 1,
+        "successfulBasenameCounts": {
+          "bwrap": 1,
+          "driver": 40,
+          "python3": 1
+        }
+      },
+      {
+        "label": "unicode4",
+        "traceSha256": "c9e6163af1ca81008b6686250d0d7c7435280d162afa6ec63a6d3fc42a32dd47",
+        "decodedExecs": 12,
+        "resumedExecsJoined": 0,
+        "allTerminalExecStatusesParsed": true,
+        "successfulNodeFamilyExecs": 0,
+        "failedNodeFamilyAttempts": 0,
+        "successfulPythonExecs": 1,
+        "allowedPrivateControllerPythonExecs": 1,
+        "successfulBasenameCounts": {
+          "bwrap": 1,
+          "driver": 10,
+          "python3": 1
+        }
+      },
+      {
+        "label": "checkpoint15",
+        "traceSha256": "c8935ddac3494537e230e709c6ce2e79a6fa769d203b33a2d0982625c3fa5f8e",
+        "decodedExecs": 73,
+        "resumedExecsJoined": 0,
+        "allTerminalExecStatusesParsed": true,
+        "successfulNodeFamilyExecs": 0,
+        "failedNodeFamilyAttempts": 0,
+        "successfulPythonExecs": 1,
+        "allowedPrivateControllerPythonExecs": 1,
+        "successfulBasenameCounts": {
+          "bwrap": 1,
+          "fixture-bin": 71,
+          "python3": 1
+        }
+      },
+      {
+        "label": "tail13",
+        "traceSha256": "f1dd8c2b2a16ddb56cca7cbe6f7d2edf96ff130f2c223b0916bc0e458b149cd1",
+        "decodedExecs": 54,
+        "resumedExecsJoined": 0,
+        "allTerminalExecStatusesParsed": true,
+        "successfulNodeFamilyExecs": 0,
+        "failedNodeFamilyAttempts": 0,
+        "successfulPythonExecs": 1,
+        "allowedPrivateControllerPythonExecs": 1,
+        "successfulBasenameCounts": {
+          "bwrap": 1,
+          "fixture-bin": 13,
+          "python3": 1,
+          "tail-bin": 39
+        }
+      },
+      {
+        "label": "natural-controls",
+        "traceSha256": "ec789f39bae716344c82fb098553b17a7b7dbb50454018d4ee75e828220dd03e",
+        "decodedExecs": 10,
+        "resumedExecsJoined": 0,
+        "allTerminalExecStatusesParsed": true,
+        "successfulNodeFamilyExecs": 0,
+        "failedNodeFamilyAttempts": 0,
+        "successfulPythonExecs": 1,
+        "allowedPrivateControllerPythonExecs": 1,
+        "successfulBasenameCounts": {
+          "bwrap": 1,
+          "health-bin": 8,
+          "python3": 1
+        }
+      },
+      {
+        "label": "validation-controls",
+        "traceSha256": "b40c69b1de8782b42e43c8f69d85cee95344518b36241ff92acdeff807bafbcd",
+        "decodedExecs": 4,
+        "resumedExecsJoined": 0,
+        "allTerminalExecStatusesParsed": true,
+        "successfulNodeFamilyExecs": 0,
+        "failedNodeFamilyAttempts": 0,
+        "successfulPythonExecs": 1,
+        "allowedPrivateControllerPythonExecs": 1,
+        "successfulBasenameCounts": {
+          "bwrap": 1,
+          "python3": 1,
+          "validation-bin": 2
+        }
+      },
+      {
+        "label": "fault-controls",
+        "traceSha256": "13840d96010bb851f370ceeae95555e00eb4113a8243cf96383c3ecea7c8b30b",
+        "decodedExecs": 62,
+        "resumedExecsJoined": 0,
+        "allTerminalExecStatusesParsed": true,
+        "successfulNodeFamilyExecs": 0,
+        "failedNodeFamilyAttempts": 0,
+        "successfulPythonExecs": 1,
+        "allowedPrivateControllerPythonExecs": 1,
+        "successfulBasenameCounts": {
+          "bwrap": 1,
+          "health-bin": 60,
+          "python3": 1
+        }
+      },
+      {
+        "label": "socket-controls",
+        "traceSha256": "6259c397dd8a45c3ba7081bca48af5770814518a3f5134c67f295b1c3394fcfd",
+        "decodedExecs": 6,
+        "resumedExecsJoined": 0,
+        "allTerminalExecStatusesParsed": true,
+        "successfulNodeFamilyExecs": 0,
+        "failedNodeFamilyAttempts": 0,
+        "successfulPythonExecs": 1,
+        "allowedPrivateControllerPythonExecs": 1,
+        "successfulBasenameCounts": {
+          "bwrap": 1,
+          "python3": 1,
+          "socket-bin": 4
+        }
+      },
+      {
+        "label": "sdk-after",
+        "traceSha256": "8e37c1dcd29b413cc8024df77e003f45c7e7948b820ef2224dbb6e84e6ed9c50",
+        "decodedExecs": 40,
+        "resumedExecsJoined": 0,
+        "allTerminalExecStatusesParsed": true,
+        "successfulNodeFamilyExecs": 0,
+        "failedNodeFamilyAttempts": 0,
+        "successfulPythonExecs": 0,
+        "allowedPrivateControllerPythonExecs": 0,
+        "successfulBasenameCounts": {
+          "bash": 1,
+          "readlink": 1,
+          "sha256sum": 1,
+          "verify.sh": 1
+        }
+      }
+    ],
+    "originalBodiesControllersAssertionsBoundsUnchanged": true,
+    "sourceModuleSha256": "b5f3988a48e8d1b38b9af60bc632d21498a326cdeb8294d2d6d9a5a3482a0982",
+    "sdkManifestSha256": "c5c90ed5234dc8d5d321fe63950c6c20f87f9f12ac9e51bc4c2edc4ef0101233"
+  },
+  "publicFunctionsPreserved": {
+    "functions": [
+      {
+        "function": "execute-insert",
+        "sha256": "ef5e3ee6503db24c43125b3a9e46177a01e4366f49ceb92f11c7ee455101f13f",
+        "unchanged": true
+      },
+      {
+        "function": "engine-validate-row",
+        "sha256": "ca3eaf3854d7c2d1e46089375b66a696926e579c4f292aadeba4935ae4d9c27c",
+        "unchanged": true
+      },
+      {
+        "function": "engine-rebuild-table-indexes",
+        "sha256": "509fb572d43b3447309f7602ff69e7b8164eea4b4b9e44da3ede8721d4939924",
+        "unchanged": true
+      },
+      {
+        "function": "afj-tcp-recover-lines",
+        "sha256": "f75159ea072a410099ff64c2596dc942a989f2efa7d03172c2c90ae3e3981063",
+        "unchanged": true
+      },
+      {
+        "function": "afj-tcp-replay-commit-body",
+        "sha256": "3aa9773e8721f5d7d48a95d3a1b4495af6f5b0b0e7fbf02281e740613b79637f",
+        "unchanged": true
+      },
+      {
+        "function": "afj-tcp-rebuild-all-indexes",
+        "sha256": "d9326a4f992406e5b6e43e3210d41768ac1e936c755f9b16c83e1bd7263ac0b0",
+        "unchanged": true
+      }
+    ],
+    "finalCanonicalRebuildCallRetained": true
+  },
+  "retainedFailures": {
+    "priorFullWalTimeouts": {
+      "attempts": 2,
+      "exit": 124,
+      "secondsEach": 120,
+      "profile": "native-db-wire-utf8-20261121/current-service-v1",
+      "moduleSha256": "1ee0c94b8476aacdec27b447ada43509348c1481678e29bb719ee94e972cf8b4",
+      "note": "Prior observed profile included an unrelated private wire codec patch; final qualified subject uses accepted 55a3a006 base without that patch. Not a matched throughput benchmark."
+    },
+    "firstRefactorCandidate": {
+      "profile": "candidate-v1",
+      "failedOriginalSchemaSelfTest": true,
+      "notQualified": true
+    },
+    "phaseDiagnostic": {
+      "diagnosticExit": 124,
+      "phases": [
+        "COLD_PHASE BEGIN_RECOVER 1795211733544",
+        "COLD_PHASE WAL_RECORD 4096 1795211736558",
+        "COLD_PHASE WAL_RECORD 8192 1795211741652",
+        "COLD_PHASE WAL_RECORD 12288 1795211749188",
+        "COLD_PHASE WAL_RECORD 16384 1795211759094",
+        "COLD_PHASE WAL_RECORD 20480 1795211771283",
+        "COLD_PHASE WAL_RECORD 24576 1795211784572",
+        "COLD_PHASE WAL_RECORD 28672 1795211800303",
+        "COLD_PHASE WAL_RECORD 32768 1795211818156",
+        "COLD_PHASE BEGIN_INDEX_REBUILD 1795211835087"
+      ],
+      "notQualification": true,
+      "allRows": 18088,
+      "runtimeSeconds": 120,
+      "addressSpaceBytes": 2147483648,
+      "walUnchanged": true
+    }
+  },
+  "boundaries": {
+    "productImplementationLanguage": "FreeLang",
+    "fxFrontendSourcesModified": false,
+    "originalInputsControllersExpectedValuesAndBoundsModified": false,
+    "seedModified": false,
+    "runtimeArchiveModified": false,
+    "additionalFeaturePortsStarted": false
+  },
+  "privatePythonControllersExplicitlyCounted": 8
+}
