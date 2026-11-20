@@ -44,6 +44,24 @@ base and selects the output base only for runtime artifact reads. C10 path
 validation is unchanged. Original JS Case 68 and the 71-case gate stay intact;
 this new runnable case does not rewrite their recorded failures.
 
+## Startup-log readiness follow-up
+
+The Native MariaDB controller now uses the shared startup-log policy from
+[Native startup-log readiness](NATIVE-STARTUP-READINESS.md). It discards only
+`FILE_CHANGED` snapshots, keeps other read errors fatal, requires the explicit
+runtime file base and latches a marker from a successful complete snapshot.
+Its existing 60-second deadline still starts before AOT, with the same 25 ms
+marker polling, 31 port attempts, 3.1-second port cap and five-second client
+connection limit. The fixed Bash host is unchanged.
+
+A fresh cohort on the unchanged accepted DB core and R25 SDK passes all three
+standard-client SQL requests within the original 120-second envelope. SELECT
+remains exactly `1\tKim\n`. All 63 execve records are decoded with terminal
+statuses; Node-family and Python executions are zero. Source and SDK checks
+pass before and after. See [the follow-up evidence](evidence/native-mariadb-readiness-20261121.json).
+This is a plaintext readiness/client case; original JS Case 68 and TLS,
+prepared-statement and authentication-rejection coverage remain separate.
+
 ## Earlier private diagnostic
 
 An unchanged FreeLang MariaDB daemon, freshly AOT-compiled with the accepted

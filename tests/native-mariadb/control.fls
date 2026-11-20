@@ -1,3 +1,4 @@
+(load "../native-service/log-readiness.fls")
 ;; Protocol requests, readiness and exact output policy stay in FreeLang.
 (defn wire-case-assert [ok message]
   (if (= ok true) true (throw message)))
@@ -12,15 +13,14 @@
   (let [log (env-get "AFJ_NATIVE_MARIADB_LOG")
         started (str-to-num (str_trim (file_read
                     (env-get "AFJ_NATIVE_MARIADB_START_FILE"))))
-        deadline (+ started 60000)]
-    (while (and (< (now-ms) deadline)
-                (not (str-includes (file_read log)
-                                   "afj-db95 native MariaDB STARTED")))
-      (sleep_ms 25))
-    (wire-case-assert
-      (and (<= (now-ms) deadline)
-           (str-includes (file_read log) "afj-db95 native MariaDB STARTED"))
-      "NATIVE_MARIADB_START_TIMEOUT")
+        deadline (+ started 60000) marker-seen (atom false)]
+    (while (and (< (now-ms) deadline) (not (deref marker-seen)))
+      (if (str-includes (native-ready-log-text log)
+                        "afj-db95 native MariaDB STARTED")
+        (reset! marker-seen true)
+        (sleep_ms 25)))
+    (wire-case-assert (and (deref marker-seen) (<= (now-ms) deadline))
+                     "NATIVE_MARIADB_START_TIMEOUT")
     (let [ready (atom false) attempts (atom 0)
           port-deadline (+ (now-ms) 3100) port (wire-case-port)]
       (while (and (< (deref attempts) 31) (< (now-ms) port-deadline)
