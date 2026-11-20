@@ -26,7 +26,7 @@
 | 영역 | 현재 Native 증거 | 현재 상태 |
 |---|---|---|
 | 전체 회귀 | 원본 71개 사례 모두 시도; 52 PASS / 19 FAIL | FAIL |
-| 저장·복구 | commit-I/O 292항목 및 기존 회귀 57항목 scoped 통과; 실제 14,664행 WAL의 새 프로세스 복구 2회 모두 2GiB 안에서 할당 실패; 소유권·root·회수·디스크 한도 미완료 | FAIL |
+| 저장·복구 | commit-I/O 292항목 및 기존 회귀 57항목 scoped 통과; 실제 14,664/13,424/16,224행 WAL 각각 새 프로세스 2회 전체 복구 통과(120초·2GiB); 소유권·root·회수·디스크 한도 미완료 | FAIL |
 | SQL·격리·인덱스 | 성공한 원본 Native 사례 목록 보존; 호환성 baseline 88%, 경로 계약 차이 미해결 | UNRESOLVED |
 | 실제 프로토콜·TLS·동시 접속 | 별도 Native 8연결·8행 및 plaintext 5분 시험 통과; 원본 JS/TLS/client 시나리오의 전체 이식·검증 미완료 | BLOCKED |
 | 장기 부하 | 별도 사전 빌드 Native 5분 runtime 통과; 빌드 포함 360초 시도는 TIMEOUT 보존; 원본 malformed Case 25는 FAIL 유지 | FAIL |
@@ -37,12 +37,13 @@
 새 저장소 안전성 변경의 전후 대조·실제 TCP 오류 응답·범위 제한은
 [Native commit health](NATIVE-COMMIT-HEALTH.md)에 별도로 기록했다.
 추가 [Native 서비스 부하와 대량 복구](NATIVE-SERVICE-LOAD.md)는 원본 게이트와
-별도 cohort로 기록하며, 부하 통과로 복구 실패를 대체하지 않는다.
+별도 cohort로 기록한다. 기존 복구 실패를 보존하며, 후속 전체 복구 통과는
+[별도 수정 근거](NATIVE-REPLAY-TAIL.md)로 기록한다.
 [Native MariaDB 표준 클라이언트 시험](NATIVE-MARIADB-CLIENT.md)은 원본의
 세 SQL 요청·정확한 출력을 FreeLang/고정 Bash 경로에서 통과했다. 전체 63개
 execve 기록의 Node/Python 실행은 0회다. 이는 plaintext 표준 클라이언트의
-별도 scoped 증거이며, 원본 JS Case 68 실패나 TLS·인증 거부·prepared 및
-대량 WAL 복구 관문을 통과로 바꾸지 않는다.
+별도 scoped 증거다. 원본 JS Case 68 실패와 TLS·인증 거부·prepared의
+미완료 상태는 유지하며, 대량 WAL 복구는 별도의 전체 데이터 검증을 따른다.
 
 ## 판정 규칙
 

@@ -730,8 +730,11 @@
           (afj-tcp-decode-page-set afj-tcp-catalog-page-path (get stored "text")))
         nil))))
 
+;; A direct conditional tail call uses the Native trampoline's per-step
+;; temporary arena. The immutable input/prepared atom survive each step;
+;; record order, validation and torn-final-record behavior stay unchanged.
 (defn afj-tcp-recover-lines [lines index prepared final-newline]
-  (loop [cursor index]
+  (let [cursor index]
     (if (>= cursor (count lines))
       true
       (let [line (get lines cursor)
@@ -761,7 +764,9 @@
                         (swap! prepared dissoc tx))
                     (throw "WAL_CORRUPT")))
                 (throw "WAL_CORRUPT")))
-            (recur (+ cursor 1))))))))
+            (if (< (+ cursor 1) (count lines))
+              (afj-tcp-recover-lines lines (+ cursor 1) prepared final-newline)
+              true)))))))
 
 (defn afj-tcp-rebuild-all-indexes []
   (reset! engine-indexes {})

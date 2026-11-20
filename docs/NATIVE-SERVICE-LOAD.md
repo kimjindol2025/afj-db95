@@ -1,15 +1,14 @@
 # Native service clients and sustained load
 
-SCOPED_RUNTIME=PASS; LARGE_COLD_RECOVERY=FAIL; COMMERCIAL_READINESS=HOLD;
+SCOPED_RUNTIME=PASS; LARGE_COLD_RECOVERY=PASS_AFTER_CORRECTION; COMMERCIAL_READINESS=HOLD;
 DEPLOYMENT=NO. Host paths/owners: <가림>. All data and accounts were synthetic.
 
-The current TCP core can complete the recorded eight-client five-minute load,
-but two fresh Native processes fail to recover its actual 14,664-row WAL under
-the unchanged 2 GiB limit. They raise `regex allocation failed` inside recovery.
-The WAL stays byte-identical. An independent disk-record oracle verifies every
-checksum, all 14,665 commits, all 14,664 inserted ID/name pairs and their digest.
-This does **not** turn the failed Native recovery into a pass. Large-store cold
-recovery is a current release blocker.
+The qualified replay/index tail-call correction now recovers every row of the
+original 14,664-row WAL, the retained 13,424-row WAL, and a fresh 16,224-row WAL,
+each in two new Native processes under the unchanged 120-second/2 GiB limits.
+Every raw ID/name, revision and both independent digests match. Details and
+remaining gates are in [Native complete WAL replay](NATIVE-REPLAY-TAIL.md).
+The earlier failures below remain historical cohort results.
 
 ## Runnable Native cases
 
@@ -22,8 +21,8 @@ weights and bounds remain unchanged; the original 71-case result is still
 The Native TCP readiness policy now retries only an explicitly changed log
 snapshot within the original deadline. Its paired SDK policy checks and fresh
 eight-client check on the unchanged accepted core are recorded separately in
-[Native startup-log readiness](NATIVE-STARTUP-READINESS.md). That correction does
-not close the large-store recovery blocker described here.
+[Native startup-log readiness](NATIVE-STARTUP-READINESS.md). That correction
+does not itself qualify large-store recovery; the separate correction above does.
 
 Use an already installed matching Native SDK on Linux with existing GCC,
 bubblewrap and GNU command-line tools. Activate its `env.sh`, then provide a
@@ -102,11 +101,12 @@ The actual first load WAL is 5,667,767 bytes. Its independent ordered pair
 digest is `006ad83f82dab3e913175dd61eb1b30550a39cf1bb92ccc3c31a67af91b2cf8e`;
 expected row count is 14,664 and commit revision is 14,665. A private marker-only
 probe completed all 29,331 split lines and last reported revision 7,000 before
-allocation failure during replay. No successful full recovery is claimed.
+allocation failure during replay. That earlier failed cohort is retained; the later
+full-data correction above supplies separate successful recovery evidence.
 
-A correction must recover the unchanged complete data in two fresh Native
-processes within the same limits, verify every ID/name, revision and independent
-digest, preserve the WAL, and retain the existing corruption, checkpoint,
+The correction above recovers the unchanged complete data in two fresh Native
+processes within the same limits, verifies every ID/name, revision and independent
+digest, preserves the WAL, and retains the existing corruption, checkpoint,
 Unicode, commit-health and whole-service checks. The original 3,200-record
 fixture pads prepares and commits only two ASTs; it does not cover this actual
 large-write recovery scenario.

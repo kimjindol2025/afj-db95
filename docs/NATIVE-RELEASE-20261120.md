@@ -140,11 +140,12 @@ before any build/workload began; their first setup failures are separate.
 
 Subsequent [separate Native service cases](NATIVE-SERVICE-LOAD.md) establish
 eight-client plaintext concurrency and a prebuilt five-minute runtime cohort.
-The first fresh-build-plus-load360 attempt timed out. Two fresh Native
-recoveries of the actual 14,664-row WAL fail allocation at the unchanged2GiB
-cap while an independent disk oracle validates all committed rows/checksums.
-This is an additional release blocker, not a changed row or pass in the
-original71 diagnostic above.
+The first fresh-build-plus-load360 attempt timed out and the earlier actual
+14,664-row recovery cohort failed allocation at the unchanged 2 GiB cap.
+The later [complete WAL replay correction](NATIVE-REPLAY-TAIL.md) passes two
+fresh full-data recoveries of each actual 14,664/13,424/16,224-row WAL at the
+same limits, including every raw ID/name and both independent digests. Earlier
+failures remain recorded and no original71 diagnostic row is relabeled.
 
 Native equivalents of every original real protocol/TLS/auth/client scenario,
 complete service-load/recovery qualification, writer ownership, production storage-root

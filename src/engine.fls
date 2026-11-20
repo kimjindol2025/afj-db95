@@ -5,6 +5,12 @@
 (define engine-databases (atom {}))
 (define engine-indexes (atom {}))
 
+;; A real runtime probe keeps the existing callback path on older hosts.
+;; This is an optional generic collection operation, not a constraint bypass.
+(define engine-native-field-eq-available
+  (try (= (native-try-some-field-eq [] "" nil) false)
+       (catch [error] false)))
+
 (defn engine-index-columns [table]
   (let [schema (get table "schema" {})
         primary (get schema "primary-key")
@@ -120,16 +126,19 @@
   (get (get table "schema" {}) "unique-groups" []))
 
 (defn engine-build-index [rows column row-id index]
-  (loop [current row-id result index]
-    (if (>= current (count rows))
-      result
-      (let [row (get rows current)
-            key (get row column)
-            key-token (str key)
-            existing-bucket (get result key-token)
-            bucket (if (nil? existing-bucket) [] existing-bucket)]
-        (recur (+ current 1)
-               (assoc result key-token (conj bucket current)))))))
+  ;; The Native tail trampoline releases each step's temporary immutable map.
+  ;; Keep the same complete scan, key spelling and ordered row-id buckets.
+  (if (>= row-id (count rows))
+    index
+    (let [row (get rows row-id)
+          key (get row column)
+          key-token (str key)
+          existing-bucket (get index key-token)
+          bucket (if (nil? existing-bucket) [] existing-bucket)
+          next-index (assoc index key-token (conj bucket row-id))]
+      (if (= row-id (- (count rows) 1))
+        next-index
+        (engine-build-index rows column (+ row-id 1) next-index)))))
 
 (defn engine-build-composite-index [rows columns row-id index]
   (if (>= row-id (count rows))
@@ -923,17 +932,27 @@
           (throw (str "TYPE_VIOLATION: " name))
           nil))))
   (let [primary (get schema "primary-key")]
-    (if (and (not (nil? primary))
-             (not (nil? (get row primary)))
-             (any? (fn [old] (= (get old primary) (get row primary))) existing))
-      (throw "PRIMARY_KEY_VIOLATION")
-      nil))
+    (if (nil? primary)
+      nil
+      (let [value (get row primary)]
+        (if (nil? value)
+          nil
+          (let [native-result (if engine-native-field-eq-available
+                                (native-try-some-field-eq existing primary value) nil)
+                duplicate (if (nil? native-result)
+                            (any? (fn [old] (= (get old primary) value)) existing)
+                            native-result)]
+            (if duplicate (throw "PRIMARY_KEY_VIOLATION") nil))))))
   (doseq [column (get schema "unique-columns" [])]
     (let [value (get row column)]
-      (if (and (not (nil? value))
-               (any? (fn [old] (= (get old column) value)) existing))
-        (throw (str "UNIQUE_VIOLATION: " column))
-        nil)))
+      (if (nil? value)
+        nil
+        (let [native-result (if engine-native-field-eq-available
+                              (native-try-some-field-eq existing column value) nil)
+              duplicate (if (nil? native-result)
+                          (any? (fn [old] (= (get old column) value)) existing)
+                          native-result)]
+          (if duplicate (throw (str "UNIQUE_VIOLATION: " column)) nil)))))
   (doseq [columns (get schema "unique-groups" [])]
     (let [duplicate (and (not (engine-row-has-null-column? row columns 0))
                          (engine-any-row-matches-columns?
