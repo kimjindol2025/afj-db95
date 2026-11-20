@@ -1,7 +1,11 @@
 ;; New process, no socket or write to the recorded WAL.
 (load "../src/tcp-server.fls")
+(define remediation-wal-env (env-get "AFJ_DB_REMEDIATION_WAL"))
 (define afj-tcp-wal
-  (str_trim (file_read "../docs/remediation-recovery-path.txt")))
+  (str_trim (file_read
+    (if (nil? remediation-wal-env)
+      "../docs/remediation-recovery-path.txt"
+      (str remediation-wal-env ".recovery-path.txt")))))
 (let [expected (json-parse (file_read (str afj-tcp-wal ".expected.json")))]
   (afj-tcp-recover)
   (if (and (= (get expected "catalog") (deref engine-catalog))

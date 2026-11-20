@@ -127,7 +127,11 @@
 ;; Preserve the snapshot for an independent-process reader.
 (file_write (str afj-tcp-wal ".expected.json")
   (json_str {"catalog" (deref engine-catalog) "databases" (deref engine-databases)}))
-(file_write "../docs/remediation-recovery-path.txt" afj-tcp-wal)
+(file_write
+  (if (nil? remediation-wal-env)
+    "../docs/remediation-recovery-path.txt"
+    (str remediation-wal-env ".recovery-path.txt"))
+  afj-tcp-wal)
 (let [before (afj-tcp-copy (deref engine-catalog))
       databases (afj-tcp-copy (deref engine-databases))]
   (afj-tcp-recover)

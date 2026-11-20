@@ -1,0 +1,268 @@
+{
+  "schema": "db95-remediation-recovery-pointer/1",
+  "scope": "Case30 and existing independent Native recovery reader; only two approved fixture path selections change. No gate mapping, policy or product core change.",
+  "baseCommit": "51e80d82087be9ac4de5d28e306388bdd874fe11",
+  "authorization": "msg_ccc90720b04a: SHA exception for two fixture path selections only",
+  "sourceChanges": {
+    "tests/mariadb-remediation-regression.fls": {
+      "beforeSha256": "622d251613c4444474658adc9e796371aa55e82523ea5b1548ad01e83dff59cd",
+      "afterSha256": "bde7265ea4989a5651038095bfa8ebfb5efe02c78cea46221a128e9c680d3db6"
+    },
+    "tests/mariadb-recovery-reader.fls": {
+      "beforeSha256": "a0f0f3f3432a146d3a40acb644f2bfe5ef3d07fd04aab6dfee84d4a3004b4f6c",
+      "afterSha256": "045bdd977c47d357b9c0a6da3cb8ade43ed3b4991c6bf541a82e18116bc86565"
+    }
+  },
+  "exactApprovedSubstitutionsOnly": true,
+  "contract": {
+    "configuredPointer": "AFJ_DB_REMEDIATION_WAL + .recovery-path.txt",
+    "unconfiguredLegacyPointer": "../docs/remediation-recovery-path.txt",
+    "all25OriginalSemanticAssertionNamesAndOrderPreserved": true,
+    "semanticAssertions": [
+      "missing database DROP preserves legacy dotted table",
+      "database namespace collision preserves legacy table",
+      "database session isolation",
+      "legacy catalog preserved",
+      "duplicate database leaves WAL unchanged",
+      "missing database leaves selection unchanged",
+      "failed USE keeps selected database",
+      "too few values rejected atomically",
+      "too many values rejected atomically",
+      "duplicate in multi-row insert rejected atomically",
+      "BOOLEAN type violation leaves WAL unchanged",
+      "typed ADD preserves rows and adds nullable schema",
+      "duplicate existing schema column rejected",
+      "duplicate added column rejected",
+      "unknown ADD type is not silently accepted",
+      "positional insert uses schema after ALTER",
+      "explicit SELECT projects only requested columns",
+      "SQL rollback restores row and writes no WAL",
+      "SQL commit preserves row and releases locks",
+      "idle SQL COMMIT and ROLLBACK succeed",
+      "legacy tx endpoint keeps idle error contract",
+      "authentication still required",
+      "read-only role selects but cannot insert",
+      "DROP DATABASE only removes selected database tables",
+      "WAL replays legacy, database, typed schema and committed SQL"
+    ],
+    "expectedSnapshotGenerationAndFormatUnchanged": true,
+    "pointerContentIsActualWalPath": true,
+    "independentReaderCatalogAndDatabaseEqualityUnchanged": true,
+    "strictDotdotRejectionUnchanged": true,
+    "nativeFilePolicySha256": "cbee9d94cfbfd9059beb70e176e43cd1208093a775ecce76a61d53b0ba6ec08a",
+    "originalRunnersSha256": {
+      "tests/native-release-gate.sh": "662e50036dbc8ec5abd7fafe6e3179f1a91427dc32fe3d1cfe4b36190888c250",
+      "tests/release-gate.sh": "e464a355883b76a7780707f5acb2a19f187a21961f6eaa2653abe828aa583f99"
+    }
+  },
+  "retainedOriginalFailure": {
+    "case": 30,
+    "status": "FAIL_REPRODUCED",
+    "passed": 0,
+    "failed": 1,
+    "exit": 1,
+    "seconds": 85.02020327100036,
+    "firstError": "Uncaught error (line 7107): [file_write] file_write failed: PATH_OR_ACCESS_DENIED (at line 130, col 0)",
+    "originalSemanticAssertionsBeforeFailure": {
+      "passed": 24,
+      "total": 25,
+      "names": [
+        "missing database DROP preserves legacy dotted table",
+        "database namespace collision preserves legacy table",
+        "database session isolation",
+        "legacy catalog preserved",
+        "duplicate database leaves WAL unchanged",
+        "missing database leaves selection unchanged",
+        "failed USE keeps selected database",
+        "too few values rejected atomically",
+        "too many values rejected atomically",
+        "duplicate in multi-row insert rejected atomically",
+        "BOOLEAN type violation leaves WAL unchanged",
+        "typed ADD preserves rows and adds nullable schema",
+        "duplicate existing schema column rejected",
+        "duplicate added column rejected",
+        "unknown ADD type is not silently accepted",
+        "positional insert uses schema after ALTER",
+        "explicit SELECT projects only requested columns",
+        "SQL rollback restores row and writes no WAL",
+        "SQL commit preserves row and releases locks",
+        "idle SQL COMMIT and ROLLBACK succeed",
+        "legacy tx endpoint keeps idle error contract",
+        "authentication still required",
+        "read-only role selects but cannot insert",
+        "DROP DATABASE only removes selected database tables"
+      ]
+    },
+    "retainedSyntheticArtifactsSha256": {
+      "remediation.wal": "b7aba2eea2628325afe9e080e8382f9c3c95968a47129283d503f01acab95841",
+      "remediation.wal.expected.json": "6dabae2c09ed83d26b825f3789efe9464f2d0446e5f7397c2680378f8f815c0c"
+    },
+    "inputSha256": "622d251613c4444474658adc9e796371aa55e82523ea5b1548ad01e83dff59cd",
+    "runtimePolicySha256": "cbee9d94cfbfd9059beb70e176e43cd1208093a775ecce76a61d53b0ba6ec08a",
+    "originalInputRunnersExpectationsAndPolicyUnchanged": true,
+    "allTrackedDbRuntimeAndSdkUnchanged": true,
+    "ordinaryCaseSeconds": 120,
+    "addressSpaceBytes": 2147483648,
+    "traceAudit": {
+      "traceSha256": "1a3fbea319a02ebf48880357a11ce46c811f2f8eac3e4cfbb1f9ceb92741e68e",
+      "decodedExecs": 56,
+      "resumedExecsJoined": 0,
+      "allTerminalExecStatusesParsed": true,
+      "successfulNodeFamilyExecs": 0,
+      "failedNodeFamilyAttempts": 0,
+      "successfulPythonExecs": 0,
+      "allowedPrivateControllerPythonExecs": 0,
+      "successfulBasenameCounts": {
+        "as": 21,
+        "bash": 1,
+        "bwrap": 1,
+        "case-bin": 1,
+        "cc1": 22,
+        "collect2": 1,
+        "dirname": 1,
+        "flc": 1,
+        "gcc": 2,
+        "ld": 1,
+        "mkdir": 3,
+        "timeout": 1
+      }
+    },
+    "privatePythonControllerOutsideTrace": 1,
+    "logSha256": "e27f94f657a26f39d3dcd85507a072a983076b0a4cee6ac902096fb1d3ae740f",
+    "implementationChanges": false
+  },
+  "qualified": {
+    "status": "PASS",
+    "case30": {
+      "passed": 1,
+      "total": 1,
+      "exit": 0,
+      "seconds": 84.73775057199964,
+      "semanticAssertionsPassed": 25,
+      "semanticAssertionsTotal": 25,
+      "traceAudit": {
+        "traceSha256": "407f24c18c4735cf9702e665d587fd6eb3df52d8bed6dde801052d646de12c5c",
+        "decodedExecs": 57,
+        "resumedExecsJoined": 0,
+        "allTerminalExecStatusesParsed": true,
+        "successfulNodeFamilyExecs": 0,
+        "failedNodeFamilyAttempts": 0,
+        "successfulPythonExecs": 0,
+        "allowedPrivateControllerPythonExecs": 0,
+        "successfulBasenameCounts": {
+          "as": 21,
+          "bash": 1,
+          "bwrap": 1,
+          "case-bin": 1,
+          "cc1": 22,
+          "collect2": 1,
+          "dirname": 1,
+          "flc": 1,
+          "gcc": 2,
+          "ld": 1,
+          "mkdir": 3,
+          "rg": 1,
+          "timeout": 1
+        }
+      },
+      "outputSha256": "4579c1f19f4c72f2d824f7300bf0fbdc258cbd3b594332fff8c422d194415fda"
+    },
+    "independentReader": {
+      "passed": 1,
+      "total": 1,
+      "exit": 0,
+      "seconds": 80.87979800299945,
+      "traceAudit": {
+        "traceSha256": "0f265a79ba226649b047b90a3f096812b725cd59587ba23e7c1ebafee569b82e",
+        "decodedExecs": 52,
+        "resumedExecsJoined": 0,
+        "allTerminalExecStatusesParsed": true,
+        "successfulNodeFamilyExecs": 0,
+        "failedNodeFamilyAttempts": 0,
+        "successfulPythonExecs": 0,
+        "allowedPrivateControllerPythonExecs": 0,
+        "successfulBasenameCounts": {
+          "as": 21,
+          "bash": 1,
+          "bwrap": 1,
+          "cc1": 22,
+          "collect2": 1,
+          "flc": 1,
+          "gcc": 2,
+          "ld": 1,
+          "reader-bin": 1,
+          "timeout": 1
+        }
+      },
+      "outputSha256": "8948e94617e87494b425dbc779bd2f130366d0f2ce9e6e09e43e39c6af45345b",
+      "freshProcess": true,
+      "writerArtifactDirectoryMountedReadOnly": true,
+      "catalogAndDatabaseEqualityMarkerObserved": true
+    },
+    "pointer": {
+      "contentEqualsActualWalPathBytes": true,
+      "sha256": "e13cabb29cb09197d87a9154348ee1390a66171a0ba5a44956d8df434fc66974",
+      "unchangedAfterIndependentReader": true,
+      "artifactRelativePath": "Artifacts ' 한글 %$\n/logs/case-30/remediation.wal.recovery-path.txt"
+    },
+    "wal": {
+      "sha256BeforeReader": "7314008056b3ecd7673fa39ee9bc2d16845a0e233ca7a089aa24f9baedde93bc",
+      "sha256AfterReader": "7314008056b3ecd7673fa39ee9bc2d16845a0e233ca7a089aa24f9baedde93bc",
+      "unchanged": true,
+      "artifactRelativePath": "Artifacts ' 한글 %$\n/logs/case-30/remediation.wal"
+    },
+    "expectedSnapshot": {
+      "sha256": "6dabae2c09ed83d26b825f3789efe9464f2d0446e5f7397c2680378f8f815c0c",
+      "unchanged": true,
+      "artifactRelativePath": "Artifacts ' 한글 %$\n/logs/case-30/remediation.wal.expected.json"
+    },
+    "writerReaderOriginalAssertionsAndExpectedFormatUnchanged": true,
+    "onlyApprovedTwoFixturePathSelectionsChanged": true,
+    "originalRunnerMappingAndStrictDotdotPolicyUnchanged": true,
+    "strictDotdotPolicySha256": "cbee9d94cfbfd9059beb70e176e43cd1208093a775ecce76a61d53b0ba6ec08a",
+    "allTrackedSourcesRuntimeAndSdkUnchangedDuringRuns": true,
+    "ordinarySecondsPerWriterOrReaderBuildAndRun": 120,
+    "addressSpaceBytes": 2147483648,
+    "privatePythonControllerOutsideTraces": 1,
+    "literalPaths": "SDK and artifact paths contain spaces, apostrophes, Korean, percent/dollar and LF; artifact and reader roots end LF",
+    "originalFailurePreserved": "case30-v1/results.private.json"
+  },
+  "buildProfile": {
+    "compilerSdkManifestSha256": "c5c90ed5234dc8d5d321fe63950c6c20f87f9f12ac9e51bc4c2edc4ef0101233",
+    "runtimeSources": "Original20runtimeC sources compiled for each ELF; not an SDK archive-link claim",
+    "runtimeSourceManifestSha256": "cd5d2fd8ce9fbee14cec1ae8d7da00c30ca8a3dcc738f16c1196ad011445207b",
+    "readerHostSha256": "6d8bb9d5ab2441a92fe5d552d1c8f7dab8c7a03d35d5b6472a58bee825190d53",
+    "writerUsesUnchangedOriginalNativeWorker": true,
+    "readerHostIsPrivateFixedBashArgvOnly": true
+  },
+  "retainedPrivateSetupCorrection": {
+    "detail": "Private wrapper initially captured genuine stdout at a different pathname. A hard link exposed the same live stdout inode at the unchanged worker expected case/output.log before its marker check. No marker was synthesized; final log bytes match actual stdout.",
+    "actualStdoutAndWorkerLogSha256": "4579c1f19f4c72f2d824f7300bf0fbdc258cbd3b594332fff8c422d194415fda",
+    "originalTestsPolicyAndAssertionsChangedForThisCorrection": false,
+    "rerun": false
+  },
+  "preserved": {
+    "previouslyTrackedFilesExceptApprovedTwoFixturesUnchanged": true,
+    "walQualifiedCoreSha256": {
+      "src/engine.fls": "691b86022ee95fe21736bab6f7025235d62b403d83c954d4f316c6451ad1fc19",
+      "src/tcp-server.fls": "b5f3988a48e8d1b38b9af60bc632d21498a326cdeb8294d2d6d9a5a3482a0982"
+    },
+    "walRecoveryCommit": "1e55d063fe11b3905d79b2ca203f5eb384a7e317",
+    "originalRegression349": {
+      "passed": 349,
+      "total": 349,
+      "rerunForFixturePathChange": false,
+      "productCoreAndOriginalRegressionInputsUnchanged": true
+    },
+    "case28Commit": "51e80d82087be9ac4de5d28e306388bdd874fe11",
+    "case28SourceSha256": "19b87d622e3252ba723db20c31ed4b42a675ea403e1988652b91b91836b79b42",
+    "case24DiagnosisCommit": "adbe97e07cd2502ff64f3ada37915f40ad548f95",
+    "full71Rerun": false,
+    "commercial": "HOLD",
+    "production": "NO"
+  },
+  "privatePythonTestControllersOutsideTraces": {
+    "retainedFailure": 1,
+    "writerAndIndependentReaderQualification": 1
+  }
+}
