@@ -14,6 +14,12 @@ FreeLang Script의 공식 관계형 데이터베이스를 목표로 하는 프�
 
 현재는 실행 가능한 관계형 코어, JSON Lines WAL, fd_fsync 기반 durable
 transaction 복구 기준선을 제공합니다. 아직 공식 1.0 DB는 아닙니다.
+현재 Native 상용 준비는 HOLD입니다. 전체 원본 시험의 실패와 실행 프로필은
+[`Native 전체 진단`](docs/NATIVE-RELEASE-20261120.md)에 보존합니다.
+TCP SQL 커밋 결과가 불확실하면 `COMMIT_OUTCOME_UNKNOWN`을 반환하고 이후
+접근을 차단하며, 새 프로세스 복구와 결과 확인이 필요합니다.
+[`커밋 안전성 근거`](docs/NATIVE-COMMIT-HEALTH.md)의 scoped 통과를 실제
+프로토콜·TLS·장기 부하·운영 검증 완료로 합치지 않습니다.
 
 - 테이블 생성
 - 행 삽입

@@ -120,10 +120,18 @@ after the WAL transaction is durable but before a client ACK; the protocol
 must report/handle that uncertainty rather than encourage blind retries.
 
 The historical full Native gate was 51 PASS / 20 FAIL at the original source.
-The latest whole Native diagnostic is 52 PASS / 19 FAIL against DB ed908d2;
-see NATIVE-RELEASE-20261120.md for the different SDK/environment and all failures.
-These totals are not an identical-environment before/after comparison. Unported JS/shell scenarios remain
-failures, not accepted omissions. No actual service was started, and no
+The earlier 52 PASS / 19 FAIL diagnostic used DB ed908d2. The current source,
+SDK/profile, all failures and retained historical receipts are recorded in
+NATIVE-RELEASE-20261120.md. These totals are not an identical-environment
+before/after comparison. Unported JS/shell scenarios remain failures, not
+accepted omissions. No actual service was started in this historical
+checkpoint receipt, and no
 commercial readiness, complete recovery matrix or whole-language completion
 is claimed. Download/install/sudo, seed changes, global configuration,
 deployment and other-server work were not performed.
+
+The follow-up NATIVE-COMMIT-HEALTH.md separately verifies TCP SQL outcome
+quarantine and real Native TCP error/cleanup behavior. Its unchanged 15/13
+checkpoint/tail contracts pass on the current commit-health source. It does
+not supply writer ownership, generation collection, disk bounds or physical
+power-loss guarantees.

@@ -1,0 +1,507 @@
+{
+  "schema": "db95-native-release-baseline-profile-limitation/1",
+  "status": "RAW_DIAGNOSTIC_WITH_PROFILE_LIMITATION",
+  "raw71": {
+    "schema": "db95-latest-native-diagnostic/1",
+    "scope": "Exact current DB/FX source plus accepted compiler; original71cases and120/360s bounds; gate links its original20 current runtime C sources directly, not SDK runtime.a",
+    "dbHead": "6fbd2f0208baf114349036a0ee5d94903ff41296",
+    "fxHead": "d8dc4c63adcfe2ac3f7d7edf69f890407c2dd4da",
+    "sdkManifestSha256": "e1f22e75e3a25b662411dc42d23e47049c31c0f5b80a75e4d3b4d75ee8708181",
+    "compilerSha256": "42fc8355bf76b8e3087d05bc1b9a63c0c3f0e102ed5331bea11bb86aae0b08aa",
+    "summary": {
+      "pass": 52,
+      "fail": 19,
+      "timeout": 0,
+      "skip": 0,
+      "total": 71
+    },
+    "cases": [
+      {
+        "number": 1,
+        "status": "PASS",
+        "exit": 0,
+        "label": "syntax: tcp-server"
+      },
+      {
+        "number": 2,
+        "status": "PASS",
+        "exit": 0,
+        "label": "syntax: afj-db95"
+      },
+      {
+        "number": 3,
+        "status": "PASS",
+        "exit": 0,
+        "label": "raw binary boundary"
+      },
+      {
+        "number": 4,
+        "status": "PASS",
+        "exit": 0,
+        "label": "MariaDB packet codec"
+      },
+      {
+        "number": 5,
+        "status": "PASS",
+        "exit": 0,
+        "label": "MariaDB charset contract"
+      },
+      {
+        "number": 6,
+        "status": "PASS",
+        "exit": 0,
+        "label": "COLLATE contract"
+      },
+      {
+        "number": 7,
+        "status": "PASS",
+        "exit": 0,
+        "label": "page/WAL smoke"
+      },
+      {
+        "number": 8,
+        "status": "PASS",
+        "exit": 0,
+        "label": "metrics contract"
+      },
+      {
+        "number": 9,
+        "status": "FAIL",
+        "exit": 127,
+        "label": "local canary rollback"
+      },
+      {
+        "number": 10,
+        "status": "PASS",
+        "exit": 0,
+        "label": "large corpus"
+      },
+      {
+        "number": 11,
+        "status": "PASS",
+        "exit": 0,
+        "label": "TCP catalog pages"
+      },
+      {
+        "number": 12,
+        "status": "PASS",
+        "exit": 0,
+        "label": "TCP lazy catalog eviction"
+      },
+      {
+        "number": 13,
+        "status": "PASS",
+        "exit": 0,
+        "label": "persistent recursive B+Tree"
+      },
+      {
+        "number": 14,
+        "status": "PASS",
+        "exit": 0,
+        "label": "bounded B+Tree range"
+      },
+      {
+        "number": 15,
+        "status": "PASS",
+        "exit": 0,
+        "label": "compound unique index"
+      },
+      {
+        "number": 16,
+        "status": "PASS",
+        "exit": 0,
+        "label": "compound predicate range"
+      },
+      {
+        "number": 17,
+        "status": "PASS",
+        "exit": 0,
+        "label": "schema MVCC merge"
+      },
+      {
+        "number": 18,
+        "status": "PASS",
+        "exit": 0,
+        "label": "composite type order"
+      },
+      {
+        "number": 19,
+        "status": "PASS",
+        "exit": 0,
+        "label": "composite NULL order"
+      },
+      {
+        "number": 20,
+        "status": "PASS",
+        "exit": 0,
+        "label": "schema-aware composite order"
+      },
+      {
+        "number": 21,
+        "status": "PASS",
+        "exit": 0,
+        "label": "mixed declared composite types"
+      },
+      {
+        "number": 22,
+        "status": "PASS",
+        "exit": 0,
+        "label": "composite reopen rebuild"
+      },
+      {
+        "number": 23,
+        "status": "PASS",
+        "exit": 0,
+        "label": "schema-aware composite range"
+      },
+      {
+        "number": 24,
+        "status": "FAIL",
+        "exit": 1,
+        "label": "TCP concurrency"
+      },
+      {
+        "number": 25,
+        "status": "FAIL",
+        "exit": 1,
+        "label": "TCP 5m performance envelope"
+      },
+      {
+        "number": 26,
+        "status": "PASS",
+        "exit": 0,
+        "label": "backup smoke"
+      },
+      {
+        "number": 27,
+        "status": "PASS",
+        "exit": 0,
+        "label": "backup restore soak"
+      },
+      {
+        "number": 28,
+        "status": "FAIL",
+        "exit": 1,
+        "label": "compatibility scorecard"
+      },
+      {
+        "number": 29,
+        "status": "PASS",
+        "exit": 0,
+        "label": "AFJ error token mapping"
+      },
+      {
+        "number": 30,
+        "status": "FAIL",
+        "exit": 1,
+        "label": "MariaDB remediation regression"
+      },
+      {
+        "number": 31,
+        "status": "PASS",
+        "exit": 0,
+        "label": "MariaDB unsupported contract"
+      },
+      {
+        "number": 32,
+        "status": "PASS",
+        "exit": 0,
+        "label": "TCP database session scope"
+      },
+      {
+        "number": 33,
+        "status": "PASS",
+        "exit": 0,
+        "label": "WAL format"
+      },
+      {
+        "number": 34,
+        "status": "FAIL",
+        "exit": 2,
+        "label": "forced-kill WAL recovery"
+      },
+      {
+        "number": 35,
+        "status": "FAIL",
+        "exit": 1,
+        "label": "TCP transaction forced-kill recovery"
+      },
+      {
+        "number": 36,
+        "status": "PASS",
+        "exit": 0,
+        "label": "transaction isolation"
+      },
+      {
+        "number": 37,
+        "status": "PASS",
+        "exit": 0,
+        "label": "isolation levels"
+      },
+      {
+        "number": 38,
+        "status": "PASS",
+        "exit": 0,
+        "label": "MVCC conflicts"
+      },
+      {
+        "number": 39,
+        "status": "PASS",
+        "exit": 0,
+        "label": "range predicate conflict"
+      },
+      {
+        "number": 40,
+        "status": "PASS",
+        "exit": 0,
+        "label": "row-version MVCC core"
+      },
+      {
+        "number": 41,
+        "status": "PASS",
+        "exit": 0,
+        "label": "row-version WAL recovery"
+      },
+      {
+        "number": 42,
+        "status": "PASS",
+        "exit": 0,
+        "label": "row-version catalog checkpoint"
+      },
+      {
+        "number": 43,
+        "status": "PASS",
+        "exit": 0,
+        "label": "savepoint"
+      },
+      {
+        "number": 44,
+        "status": "PASS",
+        "exit": 0,
+        "label": "deadlock"
+      },
+      {
+        "number": 45,
+        "status": "PASS",
+        "exit": 0,
+        "label": "lock timeout"
+      },
+      {
+        "number": 46,
+        "status": "PASS",
+        "exit": 0,
+        "label": "prepared JSON adapter"
+      },
+      {
+        "number": 47,
+        "status": "PASS",
+        "exit": 0,
+        "label": "request limits"
+      },
+      {
+        "number": 48,
+        "status": "PASS",
+        "exit": 0,
+        "label": "slow request timeout"
+      },
+      {
+        "number": 49,
+        "status": "PASS",
+        "exit": 0,
+        "label": "auth lockout"
+      },
+      {
+        "number": 50,
+        "status": "PASS",
+        "exit": 0,
+        "label": "auth lockout reset"
+      },
+      {
+        "number": 51,
+        "status": "PASS",
+        "exit": 0,
+        "label": "auth state recovery"
+      },
+      {
+        "number": 52,
+        "status": "PASS",
+        "exit": 0,
+        "label": "session cleanup"
+      },
+      {
+        "number": 53,
+        "status": "PASS",
+        "exit": 0,
+        "label": "session TTL"
+      },
+      {
+        "number": 54,
+        "status": "PASS",
+        "exit": 0,
+        "label": "connection rate limit"
+      },
+      {
+        "number": 55,
+        "status": "PASS",
+        "exit": 0,
+        "label": "peer IP rate limit"
+      },
+      {
+        "number": 56,
+        "status": "FAIL",
+        "exit": 1,
+        "label": "runtime peer IP rate limit"
+      },
+      {
+        "number": 57,
+        "status": "PASS",
+        "exit": 0,
+        "label": "fragmented TCP requests"
+      },
+      {
+        "number": 58,
+        "status": "PASS",
+        "exit": 0,
+        "label": "SQL error mapping"
+      },
+      {
+        "number": 59,
+        "status": "FAIL",
+        "exit": 2,
+        "label": "production TLS boundary"
+      },
+      {
+        "number": 60,
+        "status": "FAIL",
+        "exit": 1,
+        "label": "native TLS listener"
+      },
+      {
+        "number": 61,
+        "status": "FAIL",
+        "exit": 1,
+        "label": "native TLS mTLS/reload"
+      },
+      {
+        "number": 62,
+        "status": "FAIL",
+        "exit": 1,
+        "label": "production native TLS integration"
+      },
+      {
+        "number": 63,
+        "status": "FAIL",
+        "exit": 1,
+        "label": "TLS adapter handshake/reload"
+      },
+      {
+        "number": 64,
+        "status": "FAIL",
+        "exit": 1,
+        "label": "MariaDB wire packet unit"
+      },
+      {
+        "number": 65,
+        "status": "PASS",
+        "exit": 0,
+        "label": "MariaDB mysql_native_password SHA-1"
+      },
+      {
+        "number": 66,
+        "status": "FAIL",
+        "exit": 1,
+        "label": "MariaDB wire prepared"
+      },
+      {
+        "number": 67,
+        "status": "FAIL",
+        "exit": 1,
+        "label": "MariaDB standard-client smoke"
+      },
+      {
+        "number": 68,
+        "status": "FAIL",
+        "exit": 1,
+        "label": "native MariaDB wire"
+      },
+      {
+        "number": 69,
+        "status": "FAIL",
+        "exit": 1,
+        "label": "native MariaDB auth rejection"
+      },
+      {
+        "number": 70,
+        "status": "PASS",
+        "exit": 0,
+        "label": "native MariaDB decoder"
+      },
+      {
+        "number": 71,
+        "status": "FAIL",
+        "exit": 1,
+        "label": "native MariaDB prepared"
+      }
+    ],
+    "sourceUnchanged": true,
+    "executionProfileLimitation": "Initial compile-bin accidentally omitted ln, so unchanged nativegate could not initialize worker native-path. Shell rows9/34/59 fail setup rather than intended Node exclusion. Preserve first71raw; do not claim these scenarios executed or same-profile whole acceptance. Corrected exact-worker controls have every original native-path command plus outer ln; running environment unchanged. Later full after-change gate must include ln.",
+    "interpretation": "Raw71case first attempt; missing private outer ln prevented3shell workers from initializing. This is not a clean same-profile whole qualification. Raw rows retained; corrected original-shell controls separate, no fake combined run.",
+    "trace": {
+      "decodedExecs": 3266,
+      "successfulNonNativeExecs": 0,
+      "failedOrRejectedNonNativeAttempts": 0,
+      "network": "private loopback namespace"
+    },
+    "limits": {
+      "addressSpaceBytes": 2147483648,
+      "ordinaryCaseSeconds": 120,
+      "soakCaseSeconds": 360,
+      "soakMilliseconds": 300000,
+      "p95Milliseconds": 15000,
+      "maxMilliseconds": 20000
+    },
+    "commercial": "HOLD",
+    "production": "NOT_RUN",
+    "case25": "Protected malformed source is strictly rejected before any5m workload; no raw soak retry or fixture/runner/threshold edit."
+  },
+  "separateCorrectedThreeShellWorkers": {
+    "scope": "Separate original9/34/59workers after fixing only private PATH initialization; not combined into a fictitious single71case run",
+    "rows": [
+      {
+        "number": 9,
+        "status": "FAIL",
+        "exit": 127,
+        "classification": "Actual original shell path reaches unavailable Node; no Native equivalent executed. Not a pass.",
+        "outputSha256": "213160f75934ebdc3269d19b9b01e468145cf5979b90eff72ef68be4721d4782"
+      },
+      {
+        "number": 34,
+        "status": "FAIL",
+        "exit": 1,
+        "classification": "Actual original shell path reaches unavailable Node; no Native equivalent executed. Not a pass.",
+        "outputSha256": "7f69369622bd3f3bdb20c24ce6edda30cc07a3a26c50a5702fc755716141e97f"
+      },
+      {
+        "number": 59,
+        "status": "FAIL",
+        "exit": 1,
+        "classification": "Actual original shell path reaches unavailable Node; no Native equivalent executed. Not a pass.",
+        "outputSha256": "28dec3da08000d1bc8a652fea3807f861c329dd89f55880894f16f220e9ca4b5"
+      }
+    ],
+    "protectedRunnerUnchanged": true,
+    "seconds": 120,
+    "network": "private loopback",
+    "pids": "private namespace",
+    "commercial": "HOLD"
+  },
+  "combinedSingleProfileClaim": false,
+  "pathsOwners": "<가림>",
+  "privateRawArtifactSha256": {
+    "gate.log": "cd4d827b98f7bfc197b73930dc74786e6fc3d29d297b7df8d401e5656622c107",
+    "gate.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "status.txt": "28b00b4f8dbefadfbe091100459011a04145b40a5f97b510e74f93ba19158fe6",
+    "results.private.json": "7edc8fe3b899e1e4dd75c85eb9298e6408aaed59bad8772a75bf7bdb4ebf699e",
+    "shell-control-v1/results.private.json": "9de5415cbbafeaadf43233feb361080c7b3210c13ecf6b56dc232d0352c4645c"
+  }
+}

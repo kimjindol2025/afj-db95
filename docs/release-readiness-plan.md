@@ -11,6 +11,11 @@
 
 아래 내용은 2026-10-05 초기 실행 당시의 기록이다. 최신 상용 판정은
 [`commercial-readiness-matrix.md`](commercial-readiness-matrix.md)를 따른다.
+이 문서의 기존 AFJ/Node 5분 부하 및 전체 gate PASS를 현재 Native PASS로
+합치지 않는다. 현재 Native 원본 Case 25는 보호된 fixture의 문법 오류로
+부하 본문 전에 거부되며, [최신 전체 진단](NATIVE-RELEASE-20261120.md)에
+그 실패를 보존한다. [커밋 불확실성 후 접근 차단](NATIVE-COMMIT-HEALTH.md)의
+scoped 통과도 전체 서비스·운영 관문을 면제하지 않는다.
 
 ### 개발용 — 현재 가능
 

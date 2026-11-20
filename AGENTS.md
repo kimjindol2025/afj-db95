@@ -14,4 +14,6 @@
 코드의 존재와 Native 상용 검증 완료를 구분합니다. 최신 전체 Native 진단은
 52 PASS / 19 FAIL이며, 근거와 미완료 관문은
 `docs/NATIVE-RELEASE-20261120.md` 및 `docs/commercial-readiness-matrix.md`에 있습니다.
+TCP SQL 커밋 불확실성 후 접근 차단은 `docs/NATIVE-COMMIT-HEALTH.md`의 별도
+scoped 근거를 따릅니다. 이 통과를 전체 서비스·운영 관문 통과로 합치지 않습니다.
 상용 준비는 HOLD이고 운영 배포는 별도 승인 전까지 하지 않습니다.

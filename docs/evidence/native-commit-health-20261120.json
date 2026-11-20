@@ -1,0 +1,2484 @@
+{
+  "schema": "db95-native-commit-health/1",
+  "status": "SCOPED_PASS",
+  "goal": "ACTIVE",
+  "commercial": "HOLD",
+  "deployment": "NO",
+  "pathsOwners": "<가림>",
+  "source": {
+    "dbBaseHead": "6fbd2f0208baf114349036a0ee5d94903ff41296",
+    "changedSource": [
+      "src/tcp-server.fls"
+    ],
+    "beforeModuleSha256": "10543a0e8899ce055fd8addf68877ddec17271a37131c3344e1495749879faae",
+    "afterModuleSha256": "e153fb7f21830a69975bb177929cd28ea30f2b0cb5e0c99dd6fab3bb937a742c",
+    "fxHead": "d8dc4c63adcfe2ac3f7d7edf69f890407c2dd4da",
+    "sdkManifestSha256": "e1f22e75e3a25b662411dc42d23e47049c31c0f5b80a75e4d3b4d75ee8708181",
+    "compilerSha256": "42fc8355bf76b8e3087d05bc1b9a63c0c3f0e102ed5331bea11bb86aae0b08aa",
+    "runtimeArchiveSha256": "053971a3403cfdf0b1c15a0efa8e76a9eb5e5325df0fb4955279abe1bb6c6be4",
+    "scopedLinking": "SDK runtime.a, whole-archive; isolated development synthetic data; private orchestration Python, fault boundary C; product policy FreeLang only"
+  },
+  "cohorts": [
+    {
+      "cohort": "natural-permission",
+      "before": {
+        "passed": 7,
+        "observedChecks": 28,
+        "status": "FAIL",
+        "checks": [
+          {
+            "name": "autocommit-wal first failure explicitly unknown",
+            "pass": false
+          },
+          {
+            "name": "autocommit-wal pre-call13state domains restored",
+            "pass": false
+          },
+          {
+            "name": "autocommit-wal health recovery required",
+            "pass": false
+          },
+          {
+            "name": "autocommit-wal every later read/write/commit/rollback/begin/prepare blocked",
+            "pass": false
+          },
+          {
+            "name": "autocommit-wal later operations never append WAL",
+            "pass": true
+          },
+          {
+            "name": "autocommit-wal live recovery cannot clear quarantine",
+            "pass": false
+          },
+          {
+            "name": "autocommit-wal independent restart recovers exact allowed rows once",
+            "pass": true
+          },
+          {
+            "name": "transaction-wal first failure explicitly unknown",
+            "pass": false
+          },
+          {
+            "name": "transaction-wal pre-call13state domains restored",
+            "pass": true
+          },
+          {
+            "name": "transaction-wal health recovery required",
+            "pass": false
+          },
+          {
+            "name": "transaction-wal every later read/write/commit/rollback/begin/prepare blocked",
+            "pass": false
+          },
+          {
+            "name": "transaction-wal later operations never append WAL",
+            "pass": true
+          },
+          {
+            "name": "transaction-wal live recovery cannot clear quarantine",
+            "pass": false
+          },
+          {
+            "name": "transaction-wal independent restart recovers exact allowed rows once",
+            "pass": true
+          },
+          {
+            "name": "autocommit-checkpoint first failure explicitly unknown",
+            "pass": false
+          },
+          {
+            "name": "autocommit-checkpoint pre-call13state domains restored",
+            "pass": false
+          },
+          {
+            "name": "autocommit-checkpoint health recovery required",
+            "pass": false
+          },
+          {
+            "name": "autocommit-checkpoint every later read/write/commit/rollback/begin/prepare blocked",
+            "pass": false
+          },
+          {
+            "name": "autocommit-checkpoint later operations never append WAL",
+            "pass": false
+          },
+          {
+            "name": "autocommit-checkpoint live recovery cannot clear quarantine",
+            "pass": false
+          },
+          {
+            "name": "autocommit-checkpoint independent restart recovers exact allowed rows once",
+            "pass": false
+          },
+          {
+            "name": "transaction-checkpoint first failure explicitly unknown",
+            "pass": false
+          },
+          {
+            "name": "transaction-checkpoint pre-call13state domains restored",
+            "pass": false
+          },
+          {
+            "name": "transaction-checkpoint health recovery required",
+            "pass": false
+          },
+          {
+            "name": "transaction-checkpoint every later read/write/commit/rollback/begin/prepare blocked",
+            "pass": false
+          },
+          {
+            "name": "transaction-checkpoint later operations never append WAL",
+            "pass": true
+          },
+          {
+            "name": "transaction-checkpoint live recovery cannot clear quarantine",
+            "pass": false
+          },
+          {
+            "name": "transaction-checkpoint independent restart recovers exact allowed rows once",
+            "pass": true
+          }
+        ]
+      },
+      "after": {
+        "passed": 28,
+        "observedChecks": 28,
+        "status": "PASS",
+        "checks": [
+          {
+            "name": "autocommit-wal first failure explicitly unknown",
+            "pass": true
+          },
+          {
+            "name": "autocommit-wal pre-call13state domains restored",
+            "pass": true
+          },
+          {
+            "name": "autocommit-wal health recovery required",
+            "pass": true
+          },
+          {
+            "name": "autocommit-wal every later read/write/commit/rollback/begin/prepare blocked",
+            "pass": true
+          },
+          {
+            "name": "autocommit-wal later operations never append WAL",
+            "pass": true
+          },
+          {
+            "name": "autocommit-wal live recovery cannot clear quarantine",
+            "pass": true
+          },
+          {
+            "name": "autocommit-wal independent restart recovers exact allowed rows once",
+            "pass": true
+          },
+          {
+            "name": "transaction-wal first failure explicitly unknown",
+            "pass": true
+          },
+          {
+            "name": "transaction-wal pre-call13state domains restored",
+            "pass": true
+          },
+          {
+            "name": "transaction-wal health recovery required",
+            "pass": true
+          },
+          {
+            "name": "transaction-wal every later read/write/commit/rollback/begin/prepare blocked",
+            "pass": true
+          },
+          {
+            "name": "transaction-wal later operations never append WAL",
+            "pass": true
+          },
+          {
+            "name": "transaction-wal live recovery cannot clear quarantine",
+            "pass": true
+          },
+          {
+            "name": "transaction-wal independent restart recovers exact allowed rows once",
+            "pass": true
+          },
+          {
+            "name": "autocommit-checkpoint first failure explicitly unknown",
+            "pass": true
+          },
+          {
+            "name": "autocommit-checkpoint pre-call13state domains restored",
+            "pass": true
+          },
+          {
+            "name": "autocommit-checkpoint health recovery required",
+            "pass": true
+          },
+          {
+            "name": "autocommit-checkpoint every later read/write/commit/rollback/begin/prepare blocked",
+            "pass": true
+          },
+          {
+            "name": "autocommit-checkpoint later operations never append WAL",
+            "pass": true
+          },
+          {
+            "name": "autocommit-checkpoint live recovery cannot clear quarantine",
+            "pass": true
+          },
+          {
+            "name": "autocommit-checkpoint independent restart recovers exact allowed rows once",
+            "pass": true
+          },
+          {
+            "name": "transaction-checkpoint first failure explicitly unknown",
+            "pass": true
+          },
+          {
+            "name": "transaction-checkpoint pre-call13state domains restored",
+            "pass": true
+          },
+          {
+            "name": "transaction-checkpoint health recovery required",
+            "pass": true
+          },
+          {
+            "name": "transaction-checkpoint every later read/write/commit/rollback/begin/prepare blocked",
+            "pass": true
+          },
+          {
+            "name": "transaction-checkpoint later operations never append WAL",
+            "pass": true
+          },
+          {
+            "name": "transaction-checkpoint live recovery cannot clear quarantine",
+            "pass": true
+          },
+          {
+            "name": "transaction-checkpoint independent restart recovers exact allowed rows once",
+            "pass": true
+          }
+        ]
+      }
+    },
+    {
+      "cohort": "validation",
+      "before": {
+        "passed": 10,
+        "observedChecks": 12,
+        "status": "FAIL",
+        "checks": [
+          {
+            "name": "duplicate original rejection token",
+            "pass": true
+          },
+          {
+            "name": "duplicate leaves state and WAL unchanged",
+            "pass": true
+          },
+          {
+            "name": "mismatch original rejection token",
+            "pass": true
+          },
+          {
+            "name": "mismatch leaves state and WAL unchanged",
+            "pass": true
+          },
+          {
+            "name": "sqlSize original rejection token",
+            "pass": true
+          },
+          {
+            "name": "sqlSize leaves state and WAL unchanged",
+            "pass": true
+          },
+          {
+            "name": "walSize original rejection token",
+            "pass": true
+          },
+          {
+            "name": "walSize leaves state and WAL unchanged",
+            "pass": false
+          },
+          {
+            "name": "validation rejection leaves storage healthy",
+            "pass": true
+          },
+          {
+            "name": "following valid write succeeds with exact rows",
+            "pass": false
+          },
+          {
+            "name": "read-only transaction remains valid without WAL commit",
+            "pass": true
+          },
+          {
+            "name": "fresh process recovers both accepted rows once",
+            "pass": true
+          }
+        ]
+      },
+      "after": {
+        "passed": 12,
+        "observedChecks": 12,
+        "status": "PASS",
+        "checks": [
+          {
+            "name": "duplicate original rejection token",
+            "pass": true
+          },
+          {
+            "name": "duplicate leaves state and WAL unchanged",
+            "pass": true
+          },
+          {
+            "name": "mismatch original rejection token",
+            "pass": true
+          },
+          {
+            "name": "mismatch leaves state and WAL unchanged",
+            "pass": true
+          },
+          {
+            "name": "sqlSize original rejection token",
+            "pass": true
+          },
+          {
+            "name": "sqlSize leaves state and WAL unchanged",
+            "pass": true
+          },
+          {
+            "name": "walSize original rejection token",
+            "pass": true
+          },
+          {
+            "name": "walSize leaves state and WAL unchanged",
+            "pass": true
+          },
+          {
+            "name": "validation rejection leaves storage healthy",
+            "pass": true
+          },
+          {
+            "name": "following valid write succeeds with exact rows",
+            "pass": true
+          },
+          {
+            "name": "read-only transaction remains valid without WAL commit",
+            "pass": true
+          },
+          {
+            "name": "fresh process recovers both accepted rows once",
+            "pass": true
+          }
+        ]
+      }
+    },
+    {
+      "cohort": "exact-file-fault",
+      "before": {
+        "passed": 82,
+        "observedChecks": 220,
+        "status": "FAIL",
+        "checks": [
+          {
+            "name": "autocommit-prepare-write-eio actual exact-file fault observed",
+            "pass": true
+          },
+          {
+            "name": "autocommit-prepare-write-eio initial outcome explicitly unknown",
+            "pass": false
+          },
+          {
+            "name": "autocommit-prepare-write-eio provisional13domains restored",
+            "pass": false
+          },
+          {
+            "name": "autocommit-prepare-write-eio storage health closes",
+            "pass": false
+          },
+          {
+            "name": "autocommit-prepare-write-eio subsequent operations all blocked",
+            "pass": false
+          },
+          {
+            "name": "autocommit-prepare-write-eio subsequent operations cannot append",
+            "pass": false
+          },
+          {
+            "name": "autocommit-prepare-write-eio live recovery cannot clear latch",
+            "pass": false
+          },
+          {
+            "name": "autocommit-prepare-write-eio independent WAL complete-record oracle",
+            "pass": true
+          },
+          {
+            "name": "autocommit-prepare-write-eio fresh recovery1 exact rows/revision",
+            "pass": false
+          },
+          {
+            "name": "autocommit-prepare-write-eio fresh recovery2 exact rows/revision",
+            "pass": false
+          },
+          {
+            "name": "autocommit-prepare-write-eio repeated recovery is read-only and identical",
+            "pass": true
+          },
+          {
+            "name": "autocommit-prepare-partial-eio actual exact-file fault observed",
+            "pass": true
+          },
+          {
+            "name": "autocommit-prepare-partial-eio initial outcome explicitly unknown",
+            "pass": false
+          },
+          {
+            "name": "autocommit-prepare-partial-eio provisional13domains restored",
+            "pass": false
+          },
+          {
+            "name": "autocommit-prepare-partial-eio storage health closes",
+            "pass": false
+          },
+          {
+            "name": "autocommit-prepare-partial-eio subsequent operations all blocked",
+            "pass": false
+          },
+          {
+            "name": "autocommit-prepare-partial-eio subsequent operations cannot append",
+            "pass": true
+          },
+          {
+            "name": "autocommit-prepare-partial-eio live recovery cannot clear latch",
+            "pass": false
+          },
+          {
+            "name": "autocommit-prepare-partial-eio independent WAL complete-record oracle",
+            "pass": true
+          },
+          {
+            "name": "autocommit-prepare-partial-eio fresh recovery1 exact rows/revision",
+            "pass": true
+          },
+          {
+            "name": "autocommit-prepare-partial-eio fresh recovery2 exact rows/revision",
+            "pass": true
+          },
+          {
+            "name": "autocommit-prepare-partial-eio repeated recovery is read-only and identical",
+            "pass": true
+          },
+          {
+            "name": "autocommit-prepare-close-eio actual exact-file fault observed",
+            "pass": true
+          },
+          {
+            "name": "autocommit-prepare-close-eio initial outcome explicitly unknown",
+            "pass": false
+          },
+          {
+            "name": "autocommit-prepare-close-eio provisional13domains restored",
+            "pass": false
+          },
+          {
+            "name": "autocommit-prepare-close-eio storage health closes",
+            "pass": false
+          },
+          {
+            "name": "autocommit-prepare-close-eio subsequent operations all blocked",
+            "pass": false
+          },
+          {
+            "name": "autocommit-prepare-close-eio subsequent operations cannot append",
+            "pass": false
+          },
+          {
+            "name": "autocommit-prepare-close-eio live recovery cannot clear latch",
+            "pass": false
+          },
+          {
+            "name": "autocommit-prepare-close-eio independent WAL complete-record oracle",
+            "pass": true
+          },
+          {
+            "name": "autocommit-prepare-close-eio fresh recovery1 exact rows/revision",
+            "pass": false
+          },
+          {
+            "name": "autocommit-prepare-close-eio fresh recovery2 exact rows/revision",
+            "pass": false
+          },
+          {
+            "name": "autocommit-prepare-close-eio repeated recovery is read-only and identical",
+            "pass": true
+          },
+          {
+            "name": "autocommit-commit-write-eio actual exact-file fault observed",
+            "pass": true
+          },
+          {
+            "name": "autocommit-commit-write-eio initial outcome explicitly unknown",
+            "pass": false
+          },
+          {
+            "name": "autocommit-commit-write-eio provisional13domains restored",
+            "pass": false
+          },
+          {
+            "name": "autocommit-commit-write-eio storage health closes",
+            "pass": false
+          },
+          {
+            "name": "autocommit-commit-write-eio subsequent operations all blocked",
+            "pass": false
+          },
+          {
+            "name": "autocommit-commit-write-eio subsequent operations cannot append",
+            "pass": false
+          },
+          {
+            "name": "autocommit-commit-write-eio live recovery cannot clear latch",
+            "pass": false
+          },
+          {
+            "name": "autocommit-commit-write-eio independent WAL complete-record oracle",
+            "pass": true
+          },
+          {
+            "name": "autocommit-commit-write-eio fresh recovery1 exact rows/revision",
+            "pass": false
+          },
+          {
+            "name": "autocommit-commit-write-eio fresh recovery2 exact rows/revision",
+            "pass": false
+          },
+          {
+            "name": "autocommit-commit-write-eio repeated recovery is read-only and identical",
+            "pass": true
+          },
+          {
+            "name": "autocommit-commit-partial-eio actual exact-file fault observed",
+            "pass": true
+          },
+          {
+            "name": "autocommit-commit-partial-eio initial outcome explicitly unknown",
+            "pass": false
+          },
+          {
+            "name": "autocommit-commit-partial-eio provisional13domains restored",
+            "pass": false
+          },
+          {
+            "name": "autocommit-commit-partial-eio storage health closes",
+            "pass": false
+          },
+          {
+            "name": "autocommit-commit-partial-eio subsequent operations all blocked",
+            "pass": false
+          },
+          {
+            "name": "autocommit-commit-partial-eio subsequent operations cannot append",
+            "pass": true
+          },
+          {
+            "name": "autocommit-commit-partial-eio live recovery cannot clear latch",
+            "pass": false
+          },
+          {
+            "name": "autocommit-commit-partial-eio independent WAL complete-record oracle",
+            "pass": true
+          },
+          {
+            "name": "autocommit-commit-partial-eio fresh recovery1 exact rows/revision",
+            "pass": true
+          },
+          {
+            "name": "autocommit-commit-partial-eio fresh recovery2 exact rows/revision",
+            "pass": true
+          },
+          {
+            "name": "autocommit-commit-partial-eio repeated recovery is read-only and identical",
+            "pass": true
+          },
+          {
+            "name": "autocommit-file-fsync-before-eio actual exact-file fault observed",
+            "pass": true
+          },
+          {
+            "name": "autocommit-file-fsync-before-eio initial outcome explicitly unknown",
+            "pass": false
+          },
+          {
+            "name": "autocommit-file-fsync-before-eio provisional13domains restored",
+            "pass": false
+          },
+          {
+            "name": "autocommit-file-fsync-before-eio storage health closes",
+            "pass": false
+          },
+          {
+            "name": "autocommit-file-fsync-before-eio subsequent operations all blocked",
+            "pass": false
+          },
+          {
+            "name": "autocommit-file-fsync-before-eio subsequent operations cannot append",
+            "pass": false
+          },
+          {
+            "name": "autocommit-file-fsync-before-eio live recovery cannot clear latch",
+            "pass": false
+          },
+          {
+            "name": "autocommit-file-fsync-before-eio independent WAL complete-record oracle",
+            "pass": true
+          },
+          {
+            "name": "autocommit-file-fsync-before-eio fresh recovery1 exact rows/revision",
+            "pass": false
+          },
+          {
+            "name": "autocommit-file-fsync-before-eio fresh recovery2 exact rows/revision",
+            "pass": false
+          },
+          {
+            "name": "autocommit-file-fsync-before-eio repeated recovery is read-only and identical",
+            "pass": true
+          },
+          {
+            "name": "autocommit-file-fsync-after-eio actual exact-file fault observed",
+            "pass": true
+          },
+          {
+            "name": "autocommit-file-fsync-after-eio initial outcome explicitly unknown",
+            "pass": false
+          },
+          {
+            "name": "autocommit-file-fsync-after-eio provisional13domains restored",
+            "pass": false
+          },
+          {
+            "name": "autocommit-file-fsync-after-eio storage health closes",
+            "pass": false
+          },
+          {
+            "name": "autocommit-file-fsync-after-eio subsequent operations all blocked",
+            "pass": false
+          },
+          {
+            "name": "autocommit-file-fsync-after-eio subsequent operations cannot append",
+            "pass": false
+          },
+          {
+            "name": "autocommit-file-fsync-after-eio live recovery cannot clear latch",
+            "pass": false
+          },
+          {
+            "name": "autocommit-file-fsync-after-eio independent WAL complete-record oracle",
+            "pass": true
+          },
+          {
+            "name": "autocommit-file-fsync-after-eio fresh recovery1 exact rows/revision",
+            "pass": false
+          },
+          {
+            "name": "autocommit-file-fsync-after-eio fresh recovery2 exact rows/revision",
+            "pass": false
+          },
+          {
+            "name": "autocommit-file-fsync-after-eio repeated recovery is read-only and identical",
+            "pass": true
+          },
+          {
+            "name": "autocommit-parent-fsync-before-eio actual exact-file fault observed",
+            "pass": true
+          },
+          {
+            "name": "autocommit-parent-fsync-before-eio initial outcome explicitly unknown",
+            "pass": false
+          },
+          {
+            "name": "autocommit-parent-fsync-before-eio provisional13domains restored",
+            "pass": false
+          },
+          {
+            "name": "autocommit-parent-fsync-before-eio storage health closes",
+            "pass": false
+          },
+          {
+            "name": "autocommit-parent-fsync-before-eio subsequent operations all blocked",
+            "pass": false
+          },
+          {
+            "name": "autocommit-parent-fsync-before-eio subsequent operations cannot append",
+            "pass": false
+          },
+          {
+            "name": "autocommit-parent-fsync-before-eio live recovery cannot clear latch",
+            "pass": false
+          },
+          {
+            "name": "autocommit-parent-fsync-before-eio independent WAL complete-record oracle",
+            "pass": true
+          },
+          {
+            "name": "autocommit-parent-fsync-before-eio fresh recovery1 exact rows/revision",
+            "pass": false
+          },
+          {
+            "name": "autocommit-parent-fsync-before-eio fresh recovery2 exact rows/revision",
+            "pass": false
+          },
+          {
+            "name": "autocommit-parent-fsync-before-eio repeated recovery is read-only and identical",
+            "pass": true
+          },
+          {
+            "name": "autocommit-parent-fsync-after-eio actual exact-file fault observed",
+            "pass": true
+          },
+          {
+            "name": "autocommit-parent-fsync-after-eio initial outcome explicitly unknown",
+            "pass": false
+          },
+          {
+            "name": "autocommit-parent-fsync-after-eio provisional13domains restored",
+            "pass": false
+          },
+          {
+            "name": "autocommit-parent-fsync-after-eio storage health closes",
+            "pass": false
+          },
+          {
+            "name": "autocommit-parent-fsync-after-eio subsequent operations all blocked",
+            "pass": false
+          },
+          {
+            "name": "autocommit-parent-fsync-after-eio subsequent operations cannot append",
+            "pass": false
+          },
+          {
+            "name": "autocommit-parent-fsync-after-eio live recovery cannot clear latch",
+            "pass": false
+          },
+          {
+            "name": "autocommit-parent-fsync-after-eio independent WAL complete-record oracle",
+            "pass": true
+          },
+          {
+            "name": "autocommit-parent-fsync-after-eio fresh recovery1 exact rows/revision",
+            "pass": false
+          },
+          {
+            "name": "autocommit-parent-fsync-after-eio fresh recovery2 exact rows/revision",
+            "pass": false
+          },
+          {
+            "name": "autocommit-parent-fsync-after-eio repeated recovery is read-only and identical",
+            "pass": true
+          },
+          {
+            "name": "autocommit-commit-close-eio actual exact-file fault observed",
+            "pass": true
+          },
+          {
+            "name": "autocommit-commit-close-eio initial outcome explicitly unknown",
+            "pass": false
+          },
+          {
+            "name": "autocommit-commit-close-eio provisional13domains restored",
+            "pass": false
+          },
+          {
+            "name": "autocommit-commit-close-eio storage health closes",
+            "pass": false
+          },
+          {
+            "name": "autocommit-commit-close-eio subsequent operations all blocked",
+            "pass": false
+          },
+          {
+            "name": "autocommit-commit-close-eio subsequent operations cannot append",
+            "pass": false
+          },
+          {
+            "name": "autocommit-commit-close-eio live recovery cannot clear latch",
+            "pass": false
+          },
+          {
+            "name": "autocommit-commit-close-eio independent WAL complete-record oracle",
+            "pass": true
+          },
+          {
+            "name": "autocommit-commit-close-eio fresh recovery1 exact rows/revision",
+            "pass": false
+          },
+          {
+            "name": "autocommit-commit-close-eio fresh recovery2 exact rows/revision",
+            "pass": false
+          },
+          {
+            "name": "autocommit-commit-close-eio repeated recovery is read-only and identical",
+            "pass": true
+          },
+          {
+            "name": "transaction-prepare-write-eio actual exact-file fault observed",
+            "pass": true
+          },
+          {
+            "name": "transaction-prepare-write-eio initial outcome explicitly unknown",
+            "pass": false
+          },
+          {
+            "name": "transaction-prepare-write-eio provisional13domains restored",
+            "pass": true
+          },
+          {
+            "name": "transaction-prepare-write-eio storage health closes",
+            "pass": false
+          },
+          {
+            "name": "transaction-prepare-write-eio subsequent operations all blocked",
+            "pass": false
+          },
+          {
+            "name": "transaction-prepare-write-eio subsequent operations cannot append",
+            "pass": false
+          },
+          {
+            "name": "transaction-prepare-write-eio live recovery cannot clear latch",
+            "pass": false
+          },
+          {
+            "name": "transaction-prepare-write-eio independent WAL complete-record oracle",
+            "pass": true
+          },
+          {
+            "name": "transaction-prepare-write-eio fresh recovery1 exact rows/revision",
+            "pass": false
+          },
+          {
+            "name": "transaction-prepare-write-eio fresh recovery2 exact rows/revision",
+            "pass": false
+          },
+          {
+            "name": "transaction-prepare-write-eio repeated recovery is read-only and identical",
+            "pass": true
+          },
+          {
+            "name": "transaction-prepare-partial-eio actual exact-file fault observed",
+            "pass": true
+          },
+          {
+            "name": "transaction-prepare-partial-eio initial outcome explicitly unknown",
+            "pass": false
+          },
+          {
+            "name": "transaction-prepare-partial-eio provisional13domains restored",
+            "pass": true
+          },
+          {
+            "name": "transaction-prepare-partial-eio storage health closes",
+            "pass": false
+          },
+          {
+            "name": "transaction-prepare-partial-eio subsequent operations all blocked",
+            "pass": false
+          },
+          {
+            "name": "transaction-prepare-partial-eio subsequent operations cannot append",
+            "pass": true
+          },
+          {
+            "name": "transaction-prepare-partial-eio live recovery cannot clear latch",
+            "pass": false
+          },
+          {
+            "name": "transaction-prepare-partial-eio independent WAL complete-record oracle",
+            "pass": true
+          },
+          {
+            "name": "transaction-prepare-partial-eio fresh recovery1 exact rows/revision",
+            "pass": true
+          },
+          {
+            "name": "transaction-prepare-partial-eio fresh recovery2 exact rows/revision",
+            "pass": true
+          },
+          {
+            "name": "transaction-prepare-partial-eio repeated recovery is read-only and identical",
+            "pass": true
+          },
+          {
+            "name": "transaction-prepare-close-eio actual exact-file fault observed",
+            "pass": true
+          },
+          {
+            "name": "transaction-prepare-close-eio initial outcome explicitly unknown",
+            "pass": false
+          },
+          {
+            "name": "transaction-prepare-close-eio provisional13domains restored",
+            "pass": true
+          },
+          {
+            "name": "transaction-prepare-close-eio storage health closes",
+            "pass": false
+          },
+          {
+            "name": "transaction-prepare-close-eio subsequent operations all blocked",
+            "pass": false
+          },
+          {
+            "name": "transaction-prepare-close-eio subsequent operations cannot append",
+            "pass": false
+          },
+          {
+            "name": "transaction-prepare-close-eio live recovery cannot clear latch",
+            "pass": false
+          },
+          {
+            "name": "transaction-prepare-close-eio independent WAL complete-record oracle",
+            "pass": true
+          },
+          {
+            "name": "transaction-prepare-close-eio fresh recovery1 exact rows/revision",
+            "pass": false
+          },
+          {
+            "name": "transaction-prepare-close-eio fresh recovery2 exact rows/revision",
+            "pass": false
+          },
+          {
+            "name": "transaction-prepare-close-eio repeated recovery is read-only and identical",
+            "pass": true
+          },
+          {
+            "name": "transaction-commit-write-eio actual exact-file fault observed",
+            "pass": true
+          },
+          {
+            "name": "transaction-commit-write-eio initial outcome explicitly unknown",
+            "pass": false
+          },
+          {
+            "name": "transaction-commit-write-eio provisional13domains restored",
+            "pass": true
+          },
+          {
+            "name": "transaction-commit-write-eio storage health closes",
+            "pass": false
+          },
+          {
+            "name": "transaction-commit-write-eio subsequent operations all blocked",
+            "pass": false
+          },
+          {
+            "name": "transaction-commit-write-eio subsequent operations cannot append",
+            "pass": false
+          },
+          {
+            "name": "transaction-commit-write-eio live recovery cannot clear latch",
+            "pass": false
+          },
+          {
+            "name": "transaction-commit-write-eio independent WAL complete-record oracle",
+            "pass": true
+          },
+          {
+            "name": "transaction-commit-write-eio fresh recovery1 exact rows/revision",
+            "pass": false
+          },
+          {
+            "name": "transaction-commit-write-eio fresh recovery2 exact rows/revision",
+            "pass": false
+          },
+          {
+            "name": "transaction-commit-write-eio repeated recovery is read-only and identical",
+            "pass": true
+          },
+          {
+            "name": "transaction-commit-partial-eio actual exact-file fault observed",
+            "pass": true
+          },
+          {
+            "name": "transaction-commit-partial-eio initial outcome explicitly unknown",
+            "pass": false
+          },
+          {
+            "name": "transaction-commit-partial-eio provisional13domains restored",
+            "pass": true
+          },
+          {
+            "name": "transaction-commit-partial-eio storage health closes",
+            "pass": false
+          },
+          {
+            "name": "transaction-commit-partial-eio subsequent operations all blocked",
+            "pass": false
+          },
+          {
+            "name": "transaction-commit-partial-eio subsequent operations cannot append",
+            "pass": true
+          },
+          {
+            "name": "transaction-commit-partial-eio live recovery cannot clear latch",
+            "pass": false
+          },
+          {
+            "name": "transaction-commit-partial-eio independent WAL complete-record oracle",
+            "pass": true
+          },
+          {
+            "name": "transaction-commit-partial-eio fresh recovery1 exact rows/revision",
+            "pass": true
+          },
+          {
+            "name": "transaction-commit-partial-eio fresh recovery2 exact rows/revision",
+            "pass": true
+          },
+          {
+            "name": "transaction-commit-partial-eio repeated recovery is read-only and identical",
+            "pass": true
+          },
+          {
+            "name": "transaction-file-fsync-before-eio actual exact-file fault observed",
+            "pass": true
+          },
+          {
+            "name": "transaction-file-fsync-before-eio initial outcome explicitly unknown",
+            "pass": false
+          },
+          {
+            "name": "transaction-file-fsync-before-eio provisional13domains restored",
+            "pass": true
+          },
+          {
+            "name": "transaction-file-fsync-before-eio storage health closes",
+            "pass": false
+          },
+          {
+            "name": "transaction-file-fsync-before-eio subsequent operations all blocked",
+            "pass": false
+          },
+          {
+            "name": "transaction-file-fsync-before-eio subsequent operations cannot append",
+            "pass": false
+          },
+          {
+            "name": "transaction-file-fsync-before-eio live recovery cannot clear latch",
+            "pass": false
+          },
+          {
+            "name": "transaction-file-fsync-before-eio independent WAL complete-record oracle",
+            "pass": true
+          },
+          {
+            "name": "transaction-file-fsync-before-eio fresh recovery1 exact rows/revision",
+            "pass": false
+          },
+          {
+            "name": "transaction-file-fsync-before-eio fresh recovery2 exact rows/revision",
+            "pass": false
+          },
+          {
+            "name": "transaction-file-fsync-before-eio repeated recovery is read-only and identical",
+            "pass": true
+          },
+          {
+            "name": "transaction-file-fsync-after-eio actual exact-file fault observed",
+            "pass": true
+          },
+          {
+            "name": "transaction-file-fsync-after-eio initial outcome explicitly unknown",
+            "pass": false
+          },
+          {
+            "name": "transaction-file-fsync-after-eio provisional13domains restored",
+            "pass": true
+          },
+          {
+            "name": "transaction-file-fsync-after-eio storage health closes",
+            "pass": false
+          },
+          {
+            "name": "transaction-file-fsync-after-eio subsequent operations all blocked",
+            "pass": false
+          },
+          {
+            "name": "transaction-file-fsync-after-eio subsequent operations cannot append",
+            "pass": false
+          },
+          {
+            "name": "transaction-file-fsync-after-eio live recovery cannot clear latch",
+            "pass": false
+          },
+          {
+            "name": "transaction-file-fsync-after-eio independent WAL complete-record oracle",
+            "pass": true
+          },
+          {
+            "name": "transaction-file-fsync-after-eio fresh recovery1 exact rows/revision",
+            "pass": false
+          },
+          {
+            "name": "transaction-file-fsync-after-eio fresh recovery2 exact rows/revision",
+            "pass": false
+          },
+          {
+            "name": "transaction-file-fsync-after-eio repeated recovery is read-only and identical",
+            "pass": true
+          },
+          {
+            "name": "transaction-parent-fsync-before-eio actual exact-file fault observed",
+            "pass": true
+          },
+          {
+            "name": "transaction-parent-fsync-before-eio initial outcome explicitly unknown",
+            "pass": false
+          },
+          {
+            "name": "transaction-parent-fsync-before-eio provisional13domains restored",
+            "pass": true
+          },
+          {
+            "name": "transaction-parent-fsync-before-eio storage health closes",
+            "pass": false
+          },
+          {
+            "name": "transaction-parent-fsync-before-eio subsequent operations all blocked",
+            "pass": false
+          },
+          {
+            "name": "transaction-parent-fsync-before-eio subsequent operations cannot append",
+            "pass": false
+          },
+          {
+            "name": "transaction-parent-fsync-before-eio live recovery cannot clear latch",
+            "pass": false
+          },
+          {
+            "name": "transaction-parent-fsync-before-eio independent WAL complete-record oracle",
+            "pass": true
+          },
+          {
+            "name": "transaction-parent-fsync-before-eio fresh recovery1 exact rows/revision",
+            "pass": false
+          },
+          {
+            "name": "transaction-parent-fsync-before-eio fresh recovery2 exact rows/revision",
+            "pass": false
+          },
+          {
+            "name": "transaction-parent-fsync-before-eio repeated recovery is read-only and identical",
+            "pass": true
+          },
+          {
+            "name": "transaction-parent-fsync-after-eio actual exact-file fault observed",
+            "pass": true
+          },
+          {
+            "name": "transaction-parent-fsync-after-eio initial outcome explicitly unknown",
+            "pass": false
+          },
+          {
+            "name": "transaction-parent-fsync-after-eio provisional13domains restored",
+            "pass": true
+          },
+          {
+            "name": "transaction-parent-fsync-after-eio storage health closes",
+            "pass": false
+          },
+          {
+            "name": "transaction-parent-fsync-after-eio subsequent operations all blocked",
+            "pass": false
+          },
+          {
+            "name": "transaction-parent-fsync-after-eio subsequent operations cannot append",
+            "pass": false
+          },
+          {
+            "name": "transaction-parent-fsync-after-eio live recovery cannot clear latch",
+            "pass": false
+          },
+          {
+            "name": "transaction-parent-fsync-after-eio independent WAL complete-record oracle",
+            "pass": true
+          },
+          {
+            "name": "transaction-parent-fsync-after-eio fresh recovery1 exact rows/revision",
+            "pass": false
+          },
+          {
+            "name": "transaction-parent-fsync-after-eio fresh recovery2 exact rows/revision",
+            "pass": false
+          },
+          {
+            "name": "transaction-parent-fsync-after-eio repeated recovery is read-only and identical",
+            "pass": true
+          },
+          {
+            "name": "transaction-commit-close-eio actual exact-file fault observed",
+            "pass": true
+          },
+          {
+            "name": "transaction-commit-close-eio initial outcome explicitly unknown",
+            "pass": false
+          },
+          {
+            "name": "transaction-commit-close-eio provisional13domains restored",
+            "pass": true
+          },
+          {
+            "name": "transaction-commit-close-eio storage health closes",
+            "pass": false
+          },
+          {
+            "name": "transaction-commit-close-eio subsequent operations all blocked",
+            "pass": false
+          },
+          {
+            "name": "transaction-commit-close-eio subsequent operations cannot append",
+            "pass": false
+          },
+          {
+            "name": "transaction-commit-close-eio live recovery cannot clear latch",
+            "pass": false
+          },
+          {
+            "name": "transaction-commit-close-eio independent WAL complete-record oracle",
+            "pass": true
+          },
+          {
+            "name": "transaction-commit-close-eio fresh recovery1 exact rows/revision",
+            "pass": false
+          },
+          {
+            "name": "transaction-commit-close-eio fresh recovery2 exact rows/revision",
+            "pass": false
+          },
+          {
+            "name": "transaction-commit-close-eio repeated recovery is read-only and identical",
+            "pass": true
+          }
+        ]
+      },
+      "after": {
+        "passed": 220,
+        "observedChecks": 220,
+        "status": "PASS",
+        "checks": [
+          {
+            "name": "autocommit-prepare-write-eio actual exact-file fault observed",
+            "pass": true
+          },
+          {
+            "name": "autocommit-prepare-write-eio initial outcome explicitly unknown",
+            "pass": true
+          },
+          {
+            "name": "autocommit-prepare-write-eio provisional13domains restored",
+            "pass": true
+          },
+          {
+            "name": "autocommit-prepare-write-eio storage health closes",
+            "pass": true
+          },
+          {
+            "name": "autocommit-prepare-write-eio subsequent operations all blocked",
+            "pass": true
+          },
+          {
+            "name": "autocommit-prepare-write-eio subsequent operations cannot append",
+            "pass": true
+          },
+          {
+            "name": "autocommit-prepare-write-eio live recovery cannot clear latch",
+            "pass": true
+          },
+          {
+            "name": "autocommit-prepare-write-eio independent WAL complete-record oracle",
+            "pass": true
+          },
+          {
+            "name": "autocommit-prepare-write-eio fresh recovery1 exact rows/revision",
+            "pass": true
+          },
+          {
+            "name": "autocommit-prepare-write-eio fresh recovery2 exact rows/revision",
+            "pass": true
+          },
+          {
+            "name": "autocommit-prepare-write-eio repeated recovery is read-only and identical",
+            "pass": true
+          },
+          {
+            "name": "autocommit-prepare-partial-eio actual exact-file fault observed",
+            "pass": true
+          },
+          {
+            "name": "autocommit-prepare-partial-eio initial outcome explicitly unknown",
+            "pass": true
+          },
+          {
+            "name": "autocommit-prepare-partial-eio provisional13domains restored",
+            "pass": true
+          },
+          {
+            "name": "autocommit-prepare-partial-eio storage health closes",
+            "pass": true
+          },
+          {
+            "name": "autocommit-prepare-partial-eio subsequent operations all blocked",
+            "pass": true
+          },
+          {
+            "name": "autocommit-prepare-partial-eio subsequent operations cannot append",
+            "pass": true
+          },
+          {
+            "name": "autocommit-prepare-partial-eio live recovery cannot clear latch",
+            "pass": true
+          },
+          {
+            "name": "autocommit-prepare-partial-eio independent WAL complete-record oracle",
+            "pass": true
+          },
+          {
+            "name": "autocommit-prepare-partial-eio fresh recovery1 exact rows/revision",
+            "pass": true
+          },
+          {
+            "name": "autocommit-prepare-partial-eio fresh recovery2 exact rows/revision",
+            "pass": true
+          },
+          {
+            "name": "autocommit-prepare-partial-eio repeated recovery is read-only and identical",
+            "pass": true
+          },
+          {
+            "name": "autocommit-prepare-close-eio actual exact-file fault observed",
+            "pass": true
+          },
+          {
+            "name": "autocommit-prepare-close-eio initial outcome explicitly unknown",
+            "pass": true
+          },
+          {
+            "name": "autocommit-prepare-close-eio provisional13domains restored",
+            "pass": true
+          },
+          {
+            "name": "autocommit-prepare-close-eio storage health closes",
+            "pass": true
+          },
+          {
+            "name": "autocommit-prepare-close-eio subsequent operations all blocked",
+            "pass": true
+          },
+          {
+            "name": "autocommit-prepare-close-eio subsequent operations cannot append",
+            "pass": true
+          },
+          {
+            "name": "autocommit-prepare-close-eio live recovery cannot clear latch",
+            "pass": true
+          },
+          {
+            "name": "autocommit-prepare-close-eio independent WAL complete-record oracle",
+            "pass": true
+          },
+          {
+            "name": "autocommit-prepare-close-eio fresh recovery1 exact rows/revision",
+            "pass": true
+          },
+          {
+            "name": "autocommit-prepare-close-eio fresh recovery2 exact rows/revision",
+            "pass": true
+          },
+          {
+            "name": "autocommit-prepare-close-eio repeated recovery is read-only and identical",
+            "pass": true
+          },
+          {
+            "name": "autocommit-commit-write-eio actual exact-file fault observed",
+            "pass": true
+          },
+          {
+            "name": "autocommit-commit-write-eio initial outcome explicitly unknown",
+            "pass": true
+          },
+          {
+            "name": "autocommit-commit-write-eio provisional13domains restored",
+            "pass": true
+          },
+          {
+            "name": "autocommit-commit-write-eio storage health closes",
+            "pass": true
+          },
+          {
+            "name": "autocommit-commit-write-eio subsequent operations all blocked",
+            "pass": true
+          },
+          {
+            "name": "autocommit-commit-write-eio subsequent operations cannot append",
+            "pass": true
+          },
+          {
+            "name": "autocommit-commit-write-eio live recovery cannot clear latch",
+            "pass": true
+          },
+          {
+            "name": "autocommit-commit-write-eio independent WAL complete-record oracle",
+            "pass": true
+          },
+          {
+            "name": "autocommit-commit-write-eio fresh recovery1 exact rows/revision",
+            "pass": true
+          },
+          {
+            "name": "autocommit-commit-write-eio fresh recovery2 exact rows/revision",
+            "pass": true
+          },
+          {
+            "name": "autocommit-commit-write-eio repeated recovery is read-only and identical",
+            "pass": true
+          },
+          {
+            "name": "autocommit-commit-partial-eio actual exact-file fault observed",
+            "pass": true
+          },
+          {
+            "name": "autocommit-commit-partial-eio initial outcome explicitly unknown",
+            "pass": true
+          },
+          {
+            "name": "autocommit-commit-partial-eio provisional13domains restored",
+            "pass": true
+          },
+          {
+            "name": "autocommit-commit-partial-eio storage health closes",
+            "pass": true
+          },
+          {
+            "name": "autocommit-commit-partial-eio subsequent operations all blocked",
+            "pass": true
+          },
+          {
+            "name": "autocommit-commit-partial-eio subsequent operations cannot append",
+            "pass": true
+          },
+          {
+            "name": "autocommit-commit-partial-eio live recovery cannot clear latch",
+            "pass": true
+          },
+          {
+            "name": "autocommit-commit-partial-eio independent WAL complete-record oracle",
+            "pass": true
+          },
+          {
+            "name": "autocommit-commit-partial-eio fresh recovery1 exact rows/revision",
+            "pass": true
+          },
+          {
+            "name": "autocommit-commit-partial-eio fresh recovery2 exact rows/revision",
+            "pass": true
+          },
+          {
+            "name": "autocommit-commit-partial-eio repeated recovery is read-only and identical",
+            "pass": true
+          },
+          {
+            "name": "autocommit-file-fsync-before-eio actual exact-file fault observed",
+            "pass": true
+          },
+          {
+            "name": "autocommit-file-fsync-before-eio initial outcome explicitly unknown",
+            "pass": true
+          },
+          {
+            "name": "autocommit-file-fsync-before-eio provisional13domains restored",
+            "pass": true
+          },
+          {
+            "name": "autocommit-file-fsync-before-eio storage health closes",
+            "pass": true
+          },
+          {
+            "name": "autocommit-file-fsync-before-eio subsequent operations all blocked",
+            "pass": true
+          },
+          {
+            "name": "autocommit-file-fsync-before-eio subsequent operations cannot append",
+            "pass": true
+          },
+          {
+            "name": "autocommit-file-fsync-before-eio live recovery cannot clear latch",
+            "pass": true
+          },
+          {
+            "name": "autocommit-file-fsync-before-eio independent WAL complete-record oracle",
+            "pass": true
+          },
+          {
+            "name": "autocommit-file-fsync-before-eio fresh recovery1 exact rows/revision",
+            "pass": true
+          },
+          {
+            "name": "autocommit-file-fsync-before-eio fresh recovery2 exact rows/revision",
+            "pass": true
+          },
+          {
+            "name": "autocommit-file-fsync-before-eio repeated recovery is read-only and identical",
+            "pass": true
+          },
+          {
+            "name": "autocommit-file-fsync-after-eio actual exact-file fault observed",
+            "pass": true
+          },
+          {
+            "name": "autocommit-file-fsync-after-eio initial outcome explicitly unknown",
+            "pass": true
+          },
+          {
+            "name": "autocommit-file-fsync-after-eio provisional13domains restored",
+            "pass": true
+          },
+          {
+            "name": "autocommit-file-fsync-after-eio storage health closes",
+            "pass": true
+          },
+          {
+            "name": "autocommit-file-fsync-after-eio subsequent operations all blocked",
+            "pass": true
+          },
+          {
+            "name": "autocommit-file-fsync-after-eio subsequent operations cannot append",
+            "pass": true
+          },
+          {
+            "name": "autocommit-file-fsync-after-eio live recovery cannot clear latch",
+            "pass": true
+          },
+          {
+            "name": "autocommit-file-fsync-after-eio independent WAL complete-record oracle",
+            "pass": true
+          },
+          {
+            "name": "autocommit-file-fsync-after-eio fresh recovery1 exact rows/revision",
+            "pass": true
+          },
+          {
+            "name": "autocommit-file-fsync-after-eio fresh recovery2 exact rows/revision",
+            "pass": true
+          },
+          {
+            "name": "autocommit-file-fsync-after-eio repeated recovery is read-only and identical",
+            "pass": true
+          },
+          {
+            "name": "autocommit-parent-fsync-before-eio actual exact-file fault observed",
+            "pass": true
+          },
+          {
+            "name": "autocommit-parent-fsync-before-eio initial outcome explicitly unknown",
+            "pass": true
+          },
+          {
+            "name": "autocommit-parent-fsync-before-eio provisional13domains restored",
+            "pass": true
+          },
+          {
+            "name": "autocommit-parent-fsync-before-eio storage health closes",
+            "pass": true
+          },
+          {
+            "name": "autocommit-parent-fsync-before-eio subsequent operations all blocked",
+            "pass": true
+          },
+          {
+            "name": "autocommit-parent-fsync-before-eio subsequent operations cannot append",
+            "pass": true
+          },
+          {
+            "name": "autocommit-parent-fsync-before-eio live recovery cannot clear latch",
+            "pass": true
+          },
+          {
+            "name": "autocommit-parent-fsync-before-eio independent WAL complete-record oracle",
+            "pass": true
+          },
+          {
+            "name": "autocommit-parent-fsync-before-eio fresh recovery1 exact rows/revision",
+            "pass": true
+          },
+          {
+            "name": "autocommit-parent-fsync-before-eio fresh recovery2 exact rows/revision",
+            "pass": true
+          },
+          {
+            "name": "autocommit-parent-fsync-before-eio repeated recovery is read-only and identical",
+            "pass": true
+          },
+          {
+            "name": "autocommit-parent-fsync-after-eio actual exact-file fault observed",
+            "pass": true
+          },
+          {
+            "name": "autocommit-parent-fsync-after-eio initial outcome explicitly unknown",
+            "pass": true
+          },
+          {
+            "name": "autocommit-parent-fsync-after-eio provisional13domains restored",
+            "pass": true
+          },
+          {
+            "name": "autocommit-parent-fsync-after-eio storage health closes",
+            "pass": true
+          },
+          {
+            "name": "autocommit-parent-fsync-after-eio subsequent operations all blocked",
+            "pass": true
+          },
+          {
+            "name": "autocommit-parent-fsync-after-eio subsequent operations cannot append",
+            "pass": true
+          },
+          {
+            "name": "autocommit-parent-fsync-after-eio live recovery cannot clear latch",
+            "pass": true
+          },
+          {
+            "name": "autocommit-parent-fsync-after-eio independent WAL complete-record oracle",
+            "pass": true
+          },
+          {
+            "name": "autocommit-parent-fsync-after-eio fresh recovery1 exact rows/revision",
+            "pass": true
+          },
+          {
+            "name": "autocommit-parent-fsync-after-eio fresh recovery2 exact rows/revision",
+            "pass": true
+          },
+          {
+            "name": "autocommit-parent-fsync-after-eio repeated recovery is read-only and identical",
+            "pass": true
+          },
+          {
+            "name": "autocommit-commit-close-eio actual exact-file fault observed",
+            "pass": true
+          },
+          {
+            "name": "autocommit-commit-close-eio initial outcome explicitly unknown",
+            "pass": true
+          },
+          {
+            "name": "autocommit-commit-close-eio provisional13domains restored",
+            "pass": true
+          },
+          {
+            "name": "autocommit-commit-close-eio storage health closes",
+            "pass": true
+          },
+          {
+            "name": "autocommit-commit-close-eio subsequent operations all blocked",
+            "pass": true
+          },
+          {
+            "name": "autocommit-commit-close-eio subsequent operations cannot append",
+            "pass": true
+          },
+          {
+            "name": "autocommit-commit-close-eio live recovery cannot clear latch",
+            "pass": true
+          },
+          {
+            "name": "autocommit-commit-close-eio independent WAL complete-record oracle",
+            "pass": true
+          },
+          {
+            "name": "autocommit-commit-close-eio fresh recovery1 exact rows/revision",
+            "pass": true
+          },
+          {
+            "name": "autocommit-commit-close-eio fresh recovery2 exact rows/revision",
+            "pass": true
+          },
+          {
+            "name": "autocommit-commit-close-eio repeated recovery is read-only and identical",
+            "pass": true
+          },
+          {
+            "name": "transaction-prepare-write-eio actual exact-file fault observed",
+            "pass": true
+          },
+          {
+            "name": "transaction-prepare-write-eio initial outcome explicitly unknown",
+            "pass": true
+          },
+          {
+            "name": "transaction-prepare-write-eio provisional13domains restored",
+            "pass": true
+          },
+          {
+            "name": "transaction-prepare-write-eio storage health closes",
+            "pass": true
+          },
+          {
+            "name": "transaction-prepare-write-eio subsequent operations all blocked",
+            "pass": true
+          },
+          {
+            "name": "transaction-prepare-write-eio subsequent operations cannot append",
+            "pass": true
+          },
+          {
+            "name": "transaction-prepare-write-eio live recovery cannot clear latch",
+            "pass": true
+          },
+          {
+            "name": "transaction-prepare-write-eio independent WAL complete-record oracle",
+            "pass": true
+          },
+          {
+            "name": "transaction-prepare-write-eio fresh recovery1 exact rows/revision",
+            "pass": true
+          },
+          {
+            "name": "transaction-prepare-write-eio fresh recovery2 exact rows/revision",
+            "pass": true
+          },
+          {
+            "name": "transaction-prepare-write-eio repeated recovery is read-only and identical",
+            "pass": true
+          },
+          {
+            "name": "transaction-prepare-partial-eio actual exact-file fault observed",
+            "pass": true
+          },
+          {
+            "name": "transaction-prepare-partial-eio initial outcome explicitly unknown",
+            "pass": true
+          },
+          {
+            "name": "transaction-prepare-partial-eio provisional13domains restored",
+            "pass": true
+          },
+          {
+            "name": "transaction-prepare-partial-eio storage health closes",
+            "pass": true
+          },
+          {
+            "name": "transaction-prepare-partial-eio subsequent operations all blocked",
+            "pass": true
+          },
+          {
+            "name": "transaction-prepare-partial-eio subsequent operations cannot append",
+            "pass": true
+          },
+          {
+            "name": "transaction-prepare-partial-eio live recovery cannot clear latch",
+            "pass": true
+          },
+          {
+            "name": "transaction-prepare-partial-eio independent WAL complete-record oracle",
+            "pass": true
+          },
+          {
+            "name": "transaction-prepare-partial-eio fresh recovery1 exact rows/revision",
+            "pass": true
+          },
+          {
+            "name": "transaction-prepare-partial-eio fresh recovery2 exact rows/revision",
+            "pass": true
+          },
+          {
+            "name": "transaction-prepare-partial-eio repeated recovery is read-only and identical",
+            "pass": true
+          },
+          {
+            "name": "transaction-prepare-close-eio actual exact-file fault observed",
+            "pass": true
+          },
+          {
+            "name": "transaction-prepare-close-eio initial outcome explicitly unknown",
+            "pass": true
+          },
+          {
+            "name": "transaction-prepare-close-eio provisional13domains restored",
+            "pass": true
+          },
+          {
+            "name": "transaction-prepare-close-eio storage health closes",
+            "pass": true
+          },
+          {
+            "name": "transaction-prepare-close-eio subsequent operations all blocked",
+            "pass": true
+          },
+          {
+            "name": "transaction-prepare-close-eio subsequent operations cannot append",
+            "pass": true
+          },
+          {
+            "name": "transaction-prepare-close-eio live recovery cannot clear latch",
+            "pass": true
+          },
+          {
+            "name": "transaction-prepare-close-eio independent WAL complete-record oracle",
+            "pass": true
+          },
+          {
+            "name": "transaction-prepare-close-eio fresh recovery1 exact rows/revision",
+            "pass": true
+          },
+          {
+            "name": "transaction-prepare-close-eio fresh recovery2 exact rows/revision",
+            "pass": true
+          },
+          {
+            "name": "transaction-prepare-close-eio repeated recovery is read-only and identical",
+            "pass": true
+          },
+          {
+            "name": "transaction-commit-write-eio actual exact-file fault observed",
+            "pass": true
+          },
+          {
+            "name": "transaction-commit-write-eio initial outcome explicitly unknown",
+            "pass": true
+          },
+          {
+            "name": "transaction-commit-write-eio provisional13domains restored",
+            "pass": true
+          },
+          {
+            "name": "transaction-commit-write-eio storage health closes",
+            "pass": true
+          },
+          {
+            "name": "transaction-commit-write-eio subsequent operations all blocked",
+            "pass": true
+          },
+          {
+            "name": "transaction-commit-write-eio subsequent operations cannot append",
+            "pass": true
+          },
+          {
+            "name": "transaction-commit-write-eio live recovery cannot clear latch",
+            "pass": true
+          },
+          {
+            "name": "transaction-commit-write-eio independent WAL complete-record oracle",
+            "pass": true
+          },
+          {
+            "name": "transaction-commit-write-eio fresh recovery1 exact rows/revision",
+            "pass": true
+          },
+          {
+            "name": "transaction-commit-write-eio fresh recovery2 exact rows/revision",
+            "pass": true
+          },
+          {
+            "name": "transaction-commit-write-eio repeated recovery is read-only and identical",
+            "pass": true
+          },
+          {
+            "name": "transaction-commit-partial-eio actual exact-file fault observed",
+            "pass": true
+          },
+          {
+            "name": "transaction-commit-partial-eio initial outcome explicitly unknown",
+            "pass": true
+          },
+          {
+            "name": "transaction-commit-partial-eio provisional13domains restored",
+            "pass": true
+          },
+          {
+            "name": "transaction-commit-partial-eio storage health closes",
+            "pass": true
+          },
+          {
+            "name": "transaction-commit-partial-eio subsequent operations all blocked",
+            "pass": true
+          },
+          {
+            "name": "transaction-commit-partial-eio subsequent operations cannot append",
+            "pass": true
+          },
+          {
+            "name": "transaction-commit-partial-eio live recovery cannot clear latch",
+            "pass": true
+          },
+          {
+            "name": "transaction-commit-partial-eio independent WAL complete-record oracle",
+            "pass": true
+          },
+          {
+            "name": "transaction-commit-partial-eio fresh recovery1 exact rows/revision",
+            "pass": true
+          },
+          {
+            "name": "transaction-commit-partial-eio fresh recovery2 exact rows/revision",
+            "pass": true
+          },
+          {
+            "name": "transaction-commit-partial-eio repeated recovery is read-only and identical",
+            "pass": true
+          },
+          {
+            "name": "transaction-file-fsync-before-eio actual exact-file fault observed",
+            "pass": true
+          },
+          {
+            "name": "transaction-file-fsync-before-eio initial outcome explicitly unknown",
+            "pass": true
+          },
+          {
+            "name": "transaction-file-fsync-before-eio provisional13domains restored",
+            "pass": true
+          },
+          {
+            "name": "transaction-file-fsync-before-eio storage health closes",
+            "pass": true
+          },
+          {
+            "name": "transaction-file-fsync-before-eio subsequent operations all blocked",
+            "pass": true
+          },
+          {
+            "name": "transaction-file-fsync-before-eio subsequent operations cannot append",
+            "pass": true
+          },
+          {
+            "name": "transaction-file-fsync-before-eio live recovery cannot clear latch",
+            "pass": true
+          },
+          {
+            "name": "transaction-file-fsync-before-eio independent WAL complete-record oracle",
+            "pass": true
+          },
+          {
+            "name": "transaction-file-fsync-before-eio fresh recovery1 exact rows/revision",
+            "pass": true
+          },
+          {
+            "name": "transaction-file-fsync-before-eio fresh recovery2 exact rows/revision",
+            "pass": true
+          },
+          {
+            "name": "transaction-file-fsync-before-eio repeated recovery is read-only and identical",
+            "pass": true
+          },
+          {
+            "name": "transaction-file-fsync-after-eio actual exact-file fault observed",
+            "pass": true
+          },
+          {
+            "name": "transaction-file-fsync-after-eio initial outcome explicitly unknown",
+            "pass": true
+          },
+          {
+            "name": "transaction-file-fsync-after-eio provisional13domains restored",
+            "pass": true
+          },
+          {
+            "name": "transaction-file-fsync-after-eio storage health closes",
+            "pass": true
+          },
+          {
+            "name": "transaction-file-fsync-after-eio subsequent operations all blocked",
+            "pass": true
+          },
+          {
+            "name": "transaction-file-fsync-after-eio subsequent operations cannot append",
+            "pass": true
+          },
+          {
+            "name": "transaction-file-fsync-after-eio live recovery cannot clear latch",
+            "pass": true
+          },
+          {
+            "name": "transaction-file-fsync-after-eio independent WAL complete-record oracle",
+            "pass": true
+          },
+          {
+            "name": "transaction-file-fsync-after-eio fresh recovery1 exact rows/revision",
+            "pass": true
+          },
+          {
+            "name": "transaction-file-fsync-after-eio fresh recovery2 exact rows/revision",
+            "pass": true
+          },
+          {
+            "name": "transaction-file-fsync-after-eio repeated recovery is read-only and identical",
+            "pass": true
+          },
+          {
+            "name": "transaction-parent-fsync-before-eio actual exact-file fault observed",
+            "pass": true
+          },
+          {
+            "name": "transaction-parent-fsync-before-eio initial outcome explicitly unknown",
+            "pass": true
+          },
+          {
+            "name": "transaction-parent-fsync-before-eio provisional13domains restored",
+            "pass": true
+          },
+          {
+            "name": "transaction-parent-fsync-before-eio storage health closes",
+            "pass": true
+          },
+          {
+            "name": "transaction-parent-fsync-before-eio subsequent operations all blocked",
+            "pass": true
+          },
+          {
+            "name": "transaction-parent-fsync-before-eio subsequent operations cannot append",
+            "pass": true
+          },
+          {
+            "name": "transaction-parent-fsync-before-eio live recovery cannot clear latch",
+            "pass": true
+          },
+          {
+            "name": "transaction-parent-fsync-before-eio independent WAL complete-record oracle",
+            "pass": true
+          },
+          {
+            "name": "transaction-parent-fsync-before-eio fresh recovery1 exact rows/revision",
+            "pass": true
+          },
+          {
+            "name": "transaction-parent-fsync-before-eio fresh recovery2 exact rows/revision",
+            "pass": true
+          },
+          {
+            "name": "transaction-parent-fsync-before-eio repeated recovery is read-only and identical",
+            "pass": true
+          },
+          {
+            "name": "transaction-parent-fsync-after-eio actual exact-file fault observed",
+            "pass": true
+          },
+          {
+            "name": "transaction-parent-fsync-after-eio initial outcome explicitly unknown",
+            "pass": true
+          },
+          {
+            "name": "transaction-parent-fsync-after-eio provisional13domains restored",
+            "pass": true
+          },
+          {
+            "name": "transaction-parent-fsync-after-eio storage health closes",
+            "pass": true
+          },
+          {
+            "name": "transaction-parent-fsync-after-eio subsequent operations all blocked",
+            "pass": true
+          },
+          {
+            "name": "transaction-parent-fsync-after-eio subsequent operations cannot append",
+            "pass": true
+          },
+          {
+            "name": "transaction-parent-fsync-after-eio live recovery cannot clear latch",
+            "pass": true
+          },
+          {
+            "name": "transaction-parent-fsync-after-eio independent WAL complete-record oracle",
+            "pass": true
+          },
+          {
+            "name": "transaction-parent-fsync-after-eio fresh recovery1 exact rows/revision",
+            "pass": true
+          },
+          {
+            "name": "transaction-parent-fsync-after-eio fresh recovery2 exact rows/revision",
+            "pass": true
+          },
+          {
+            "name": "transaction-parent-fsync-after-eio repeated recovery is read-only and identical",
+            "pass": true
+          },
+          {
+            "name": "transaction-commit-close-eio actual exact-file fault observed",
+            "pass": true
+          },
+          {
+            "name": "transaction-commit-close-eio initial outcome explicitly unknown",
+            "pass": true
+          },
+          {
+            "name": "transaction-commit-close-eio provisional13domains restored",
+            "pass": true
+          },
+          {
+            "name": "transaction-commit-close-eio storage health closes",
+            "pass": true
+          },
+          {
+            "name": "transaction-commit-close-eio subsequent operations all blocked",
+            "pass": true
+          },
+          {
+            "name": "transaction-commit-close-eio subsequent operations cannot append",
+            "pass": true
+          },
+          {
+            "name": "transaction-commit-close-eio live recovery cannot clear latch",
+            "pass": true
+          },
+          {
+            "name": "transaction-commit-close-eio independent WAL complete-record oracle",
+            "pass": true
+          },
+          {
+            "name": "transaction-commit-close-eio fresh recovery1 exact rows/revision",
+            "pass": true
+          },
+          {
+            "name": "transaction-commit-close-eio fresh recovery2 exact rows/revision",
+            "pass": true
+          },
+          {
+            "name": "transaction-commit-close-eio repeated recovery is read-only and identical",
+            "pass": true
+          }
+        ]
+      }
+    },
+    {
+      "cohort": "real-native-socket",
+      "before": {
+        "passed": 7,
+        "observedChecks": 20,
+        "status": "FAIL",
+        "checks": [
+          {
+            "name": "autocommit-wal real Native socket starts within30s",
+            "pass": true
+          },
+          {
+            "name": "autocommit-wal initial wire error reports unknown commit",
+            "pass": false
+          },
+          {
+            "name": "autocommit-wal server remains alive and unhealthy",
+            "pass": false
+          },
+          {
+            "name": "autocommit-wal later wire operations all reject within3s each",
+            "pass": false
+          },
+          {
+            "name": "autocommit-wal metrics expose recovery alert",
+            "pass": false
+          },
+          {
+            "name": "autocommit-wal rejected requests preserve WAL and acknowledged prefix",
+            "pass": true
+          },
+          {
+            "name": "autocommit-wal disconnect cleanup keeps unhealthy service alive",
+            "pass": false
+          },
+          {
+            "name": "autocommit-wal authenticated shutdown remains available within3s",
+            "pass": true
+          },
+          {
+            "name": "transaction-wal real Native socket starts within30s",
+            "pass": true
+          },
+          {
+            "name": "transaction-wal complete real socket flow",
+            "pass": false
+          },
+          {
+            "name": "autocommit-checkpoint real Native socket starts within30s",
+            "pass": true
+          },
+          {
+            "name": "autocommit-checkpoint initial wire error reports unknown commit",
+            "pass": false
+          },
+          {
+            "name": "autocommit-checkpoint server remains alive and unhealthy",
+            "pass": false
+          },
+          {
+            "name": "autocommit-checkpoint later wire operations all reject within3s each",
+            "pass": false
+          },
+          {
+            "name": "autocommit-checkpoint metrics expose recovery alert",
+            "pass": false
+          },
+          {
+            "name": "autocommit-checkpoint rejected requests preserve WAL and acknowledged prefix",
+            "pass": false
+          },
+          {
+            "name": "autocommit-checkpoint disconnect cleanup keeps unhealthy service alive",
+            "pass": false
+          },
+          {
+            "name": "autocommit-checkpoint authenticated shutdown remains available within3s",
+            "pass": true
+          },
+          {
+            "name": "transaction-checkpoint real Native socket starts within30s",
+            "pass": true
+          },
+          {
+            "name": "transaction-checkpoint complete real socket flow",
+            "pass": false
+          }
+        ]
+      },
+      "after": {
+        "passed": 32,
+        "observedChecks": 32,
+        "status": "PASS",
+        "checks": [
+          {
+            "name": "autocommit-wal real Native socket starts within30s",
+            "pass": true
+          },
+          {
+            "name": "autocommit-wal initial wire error reports unknown commit",
+            "pass": true
+          },
+          {
+            "name": "autocommit-wal server remains alive and unhealthy",
+            "pass": true
+          },
+          {
+            "name": "autocommit-wal later wire operations all reject within3s each",
+            "pass": true
+          },
+          {
+            "name": "autocommit-wal metrics expose recovery alert",
+            "pass": true
+          },
+          {
+            "name": "autocommit-wal rejected requests preserve WAL and acknowledged prefix",
+            "pass": true
+          },
+          {
+            "name": "autocommit-wal disconnect cleanup keeps unhealthy service alive",
+            "pass": true
+          },
+          {
+            "name": "autocommit-wal authenticated shutdown remains available within3s",
+            "pass": true
+          },
+          {
+            "name": "transaction-wal real Native socket starts within30s",
+            "pass": true
+          },
+          {
+            "name": "transaction-wal initial wire error reports unknown commit",
+            "pass": true
+          },
+          {
+            "name": "transaction-wal server remains alive and unhealthy",
+            "pass": true
+          },
+          {
+            "name": "transaction-wal later wire operations all reject within3s each",
+            "pass": true
+          },
+          {
+            "name": "transaction-wal metrics expose recovery alert",
+            "pass": true
+          },
+          {
+            "name": "transaction-wal rejected requests preserve WAL and acknowledged prefix",
+            "pass": true
+          },
+          {
+            "name": "transaction-wal disconnect cleanup keeps unhealthy service alive",
+            "pass": true
+          },
+          {
+            "name": "transaction-wal authenticated shutdown remains available within3s",
+            "pass": true
+          },
+          {
+            "name": "autocommit-checkpoint real Native socket starts within30s",
+            "pass": true
+          },
+          {
+            "name": "autocommit-checkpoint initial wire error reports unknown commit",
+            "pass": true
+          },
+          {
+            "name": "autocommit-checkpoint server remains alive and unhealthy",
+            "pass": true
+          },
+          {
+            "name": "autocommit-checkpoint later wire operations all reject within3s each",
+            "pass": true
+          },
+          {
+            "name": "autocommit-checkpoint metrics expose recovery alert",
+            "pass": true
+          },
+          {
+            "name": "autocommit-checkpoint rejected requests preserve WAL and acknowledged prefix",
+            "pass": true
+          },
+          {
+            "name": "autocommit-checkpoint disconnect cleanup keeps unhealthy service alive",
+            "pass": true
+          },
+          {
+            "name": "autocommit-checkpoint authenticated shutdown remains available within3s",
+            "pass": true
+          },
+          {
+            "name": "transaction-checkpoint real Native socket starts within30s",
+            "pass": true
+          },
+          {
+            "name": "transaction-checkpoint initial wire error reports unknown commit",
+            "pass": true
+          },
+          {
+            "name": "transaction-checkpoint server remains alive and unhealthy",
+            "pass": true
+          },
+          {
+            "name": "transaction-checkpoint later wire operations all reject within3s each",
+            "pass": true
+          },
+          {
+            "name": "transaction-checkpoint metrics expose recovery alert",
+            "pass": true
+          },
+          {
+            "name": "transaction-checkpoint rejected requests preserve WAL and acknowledged prefix",
+            "pass": true
+          },
+          {
+            "name": "transaction-checkpoint disconnect cleanup keeps unhealthy service alive",
+            "pass": true
+          },
+          {
+            "name": "transaction-checkpoint authenticated shutdown remains available within3s",
+            "pass": true
+          }
+        ]
+      },
+      "baselineEarlyAbort": "Both explicit transaction flows abort on original uncaught handler error; only20controls observed; all4scenarios fail. No32check baseline claim."
+    }
+  ],
+  "unchangedRegressions": [
+    {
+      "cohort": "wal-contracts",
+      "pass": 25,
+      "total": 25,
+      "originalFixturesControllersAndBoundsUnchanged": true,
+      "resultArtifactSha256": "629a0b3892ad5c8eca33edc30181e8ebe913815d3ae1dbdec2cec17dc9ae7b1f"
+    },
+    {
+      "cohort": "unicode",
+      "pass": 4,
+      "total": 4,
+      "originalFixturesControllersAndBoundsUnchanged": true,
+      "resultArtifactSha256": "b06c3a1d059f601606fc110fdec5a47ab17140637e13439d574d812b34f28186"
+    },
+    {
+      "cohort": "checkpoint",
+      "pass": 15,
+      "total": 15,
+      "originalFixturesControllersAndBoundsUnchanged": true,
+      "resultArtifactSha256": "2797c14cc1fafdcf6345addd2e6d35987eb43b18c374d48077eaf7fe4759173b"
+    },
+    {
+      "cohort": "wal-tail",
+      "pass": 13,
+      "total": 13,
+      "originalFixturesControllersAndBoundsUnchanged": true,
+      "resultArtifactSha256": "687475a75779ebd5b5ea78072269cfd96ac92abe5a0cdfd74bf48416fe58fab8"
+    }
+  ],
+  "newAfterChecks": 292,
+  "unchangedRegressionChecks": 57,
+  "totalAfterChecks": 349,
+  "totalIsIndependentProductionScenarios": false,
+  "limits": {
+    "addressSpaceBytes": 2147483648,
+    "controlAndProgramSeconds": 20,
+    "socketStartupSeconds": 30,
+    "socketRequestSeconds": 3,
+    "socketShutdownSeconds": 3,
+    "sqlCharacters": 262144,
+    "walRecordCharacters": 1048576,
+    "repeatedWalErrorIterations": 96
+  },
+  "powerLoss": "NOT_QUALIFIED: fresh process in same running OS; before-fsync faults can retain dirty OS cache",
+  "metadata": {
+    "legacy-wal-regression-v1/inputs.private.json": {
+      "oldFixtureSha256": "c9d65aae3f33a84ea731d09f8a490be1cbd51cc13f15b19e79053f7a5b11681c",
+      "fixtureCopiedByteIdentical": true,
+      "oldControllerSha256": "a3b70a6d73f7e39a4cd339bb6e7820d7091ec5b30c6429fed6b4c6db8bd61313",
+      "faultHelperSha256": "5f6fa4c5926949cce6021109e7ced87e1261e34c181f0ee74324991d39185d45",
+      "candidateModuleSha256": "e153fb7f21830a69975bb177929cd28ea30f2b0cb5e0c99dd6fab3bb937a742c"
+    },
+    "legacy-checkpoint-v1/inputs.private.json": {
+      "sourceFixturesCopiedByteIdentical": {
+        "checkpoint": "33ea96d7818df5d07e9f2355f538ba64863580118d9e4ae18045f0937221b6ff",
+        "tail": "0910b6b940847c7c8190797055bd9853d15f5cd6125495c16688923f050ff4e1"
+      },
+      "controller": {
+        "cases.py": "303b43e41ad76c9958767a7cdeff9765a5d65a81e28c165deac1bb90e2138f85",
+        "tail-cases.py": "615c3436253661d76fca434ba702b6226cc9efaad4f0dcdbf3ac6d8686523ef8"
+      },
+      "faultHelperSha256": "11aa353584eb1d5f605c2674064f0c1cb6853bb0254bd1fb2e2eeb9f3fabe487",
+      "snapshotSelectionSame": true,
+      "currentSubjectSnapshotCapturedBeforeExecution": true
+    },
+    "candidate-v1-socket-source.private.json": {
+      "moduleSha256": "e153fb7f21830a69975bb177929cd28ea30f2b0cb5e0c99dd6fab3bb937a742c",
+      "bodySha256": "7a2dcc44d60253ab47b7eee49814f70321f5c306cdc7171818ee13dd1a55304e",
+      "controllerSha256": "3d4a28d161b16255f319484fbdfb060c3192ace63ae9f1e03024f5b9f00564db"
+    }
+  },
+  "privateDiagnosticArtifactSha256": {
+    "fixture-body.fl": "efadd612c60748c3d02350b869e88f2615f15b1b7c7aaae5c152527189d2e765",
+    "validation-body.fl": "4186af1df1c5cf83a5e36b092ee547d017edaf0b57c3aa09e07f2c7f432b9764",
+    "socket-daemon-body.fl": "7a2dcc44d60253ab47b7eee49814f70321f5c306cdc7171818ee13dd1a55304e",
+    "natural-cases.py": "16d9e7b8210340f33f8280f7981669c3daff1ecac5fafc4f6a3b24fa9f31097f",
+    "validation-cases.py": "f5ab62f3c3645e23f96d6c4e80ccfcad2d4c4708d238fa91d589f1d700fe68e4",
+    "fault-cases.py": "72fd693b0b30831071b860133579653f7932475f56645b09234867d82581ea0d",
+    "socket-cases.py": "3d4a28d161b16255f319484fbdfb060c3192ace63ae9f1e03024f5b9f00564db",
+    "commit-fault.c": "a3e389c2d88fbb06199d40ea19486fb386c55a01b2d57429531d4dfcbfeb6656",
+    "build-baseline.sh": "5fe78bd4c0fe8a4a5084493c3a9655dedc1ee6f1cd41aa90f6c8a74e9c7140f9",
+    "test-candidate-v1.sh": "cf0873fd578fc2d8ea3dc80328bd14b461ed4a0a64d0beaac220c887521a9fa7",
+    "socket-pipeline-v1.sh": "60124bd53107398d2e448fe69b4daa38023ffb71c807988a284e281a65b0acc7",
+    "legacy-wal-v1.sh": "de26d2ae02df11dc991470a68c65694072a94e7ea119182276628f9fc399ad6a",
+    "legacy-checkpoint-v1.sh": "cd1b20e91ddbc88c0d7b4ab0a7c5027aa1ef5ca33162657f03e8c34bcd85a455",
+    "tail-recovery-v2.sh": "c14d5b267adaae0534a4d802791c518cdc1bc0c6aa95c6e123a578616d465345",
+    "baseline-status.txt": "57c05e4bb686a32b3af61a82951ec90c27cb2d90a40d5f23e321da931fb70607",
+    "candidate-v1-status.txt": "e7cec15a2940b1c1a269fdea8d96da89f5300521b9a02458c3ba175f1a8444f7",
+    "socket-pipeline-v1-status.txt": "e983f295b178c7d9fdc9a616ae8477936221df2854a0a9b63392b6deb89e609a",
+    "legacy-wal-v1-status.txt": "53eeb5cea8ee69bb5d097b7de5a213d240c55093fc95e3090a9601cc1bf28f73",
+    "legacy-checkpoint-v1-status.txt": "b629a7918a6f269fadd1d272b0546ad713ddac37fe88458704080d99e6020ada",
+    "tail-recovery-v2-status.txt": "d872c018fc683274215fe99b451f06ae4e162a428dbd21872e3964676c2316c5",
+    "strict-exec-audit.py": "b675daed6494ee6ced439f4369fcd6499a1c1fae9c4105b2c152cdcfbe081c0c",
+    "source-review.private.json": "7e0b4bfcc5b64315baecc4299b642756f0a896f35f3715b515fadefc30c45713"
+  },
+  "retainedFailures": [
+    "New candidate parse-v1 missing close, fixed before code execution",
+    "New private validation parse-v1 missing close, fixed before execution",
+    "Original tail-controller packaging missed cases.py; failed before cases; byte-identical oracle copied; same ELF/controller/13cases/bounds rerun PASS"
+  ],
+  "protectedTestsRunnersFixturesAssertionsBoundsChanged": false,
+  "newProductJsTsPython": false,
+  "wholeGate": "Separate full diagnostic; scoped checks do not waive any whole-gate FAIL"
+}

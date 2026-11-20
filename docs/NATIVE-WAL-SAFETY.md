@@ -84,7 +84,7 @@ Scoped results and a separately identified latest whole diagnostic:
 | Node executions / outbound connect calls in collected traces | 0 / 0 |
 | Existing tests/protected gate/seed / authored JS | Unchanged / 0 new JS |
 | Latest full Native 71-case diagnostic (separate SDK/profile) | 52 PASS / 19 FAIL; [source/profile and all failures](NATIVE-RELEASE-20261120.md) |
-| Real service sustained-load acceptance | Not established; Case 25 failed during setup, separate unchanged-bound path control pending |
+| Real service sustained-load acceptance | Not established; protected Case 25 has an unclosed delimiter and current strict compiler rejects it before workload |
 
 The 3,200-record fixture initially failed on the existing Native runtime's
 missing str_join_lines function. That language operation is now implemented
@@ -106,11 +106,14 @@ power-loss certification. Generations and failed candidates are retained;
 disk usage remains unbounded. Concurrency, sustained service load, production
 security/operations and the full Native suite remain unaccepted.
 
-The SQL commit path still mutates its live catalog before the WAL outcome.
-This receipt proves low-level failure propagation and recovery rollback; it
-does not prove protocol-wide rollback/health latching after failed commits.
-Writes whose durability becomes uncertain must be handled explicitly before
-deployment rather than blindly retried. Other standalone storage/WAL modules
-are outside this TCP-WAL edit and need their own audit. No customer DB,
+The subsequent [Native commit-health change](NATIVE-COMMIT-HEALTH.md) now
+quarantines the TCP SQL process after uncertain commit/publication failures,
+reports COMMIT_OUTCOME_UNKNOWN and rejects later access until fresh-process
+recovery. It passes 292 new scoped controls plus 57 unchanged WAL, Unicode and
+checkpoint regression controls. This original low-level receipt alone did not
+establish that behavior; the follow-up records its own source and before/after
+evidence. An uncertain write must still be reconciled rather than blindly
+retried. Other standalone storage/WAL modules are outside this TCP-WAL edit
+and need their own audit. No customer DB,
 service/deployment, package install, seed regeneration or global configuration
 change was performed.

@@ -62,6 +62,20 @@
 (define afj-tcp-metrics
   (atom {"queries" 0 "commits" 0 "rollbacks" 0 "errors" 0}))
 (define afj-tcp-transactions (atom {}))
+;; A persistence failure cannot be interpreted as an ordinary SQL rejection.
+;; Keep the first uncertain outcome until a fresh process has recovered storage.
+(define afj-tcp-storage-failure (atom nil))
+(defn afj-tcp-storage-healthy? [] (nil? (deref afj-tcp-storage-failure)))
+(defn afj-tcp-require-storage []
+  (if (afj-tcp-storage-healthy?) true (throw "STORAGE_RECOVERY_REQUIRED")))
+(defn afj-tcp-quarantine-storage [phase error]
+  (if (afj-tcp-storage-healthy?)
+    (reset! afj-tcp-storage-failure
+            {"phase" phase "cause" (error_message error)}) nil)
+  ;; Set the guard before restoring provisional memory. A restoration error
+  ;; cannot reopen access to state whose persistence outcome is uncertain.
+  true)
+
 (define afj-tcp-commit-revision (atom 0))
 (define afj-tcp-table-revisions (atom {}))
 (define afj-tcp-schema-revisions (atom {}))
@@ -355,6 +369,8 @@
                ["LOCK_TIMEOUT" "LOCK_TIMEOUT"]
                ["DEADLOCK_DETECTED" "DEADLOCK_DETECTED"]
                ["PERMISSION_DENIED" "PERMISSION_DENIED"]
+               ["COMMIT_OUTCOME_UNKNOWN" "COMMIT_OUTCOME_UNKNOWN"]
+               ["STORAGE_RECOVERY_REQUIRED" "STORAGE_RECOVERY_REQUIRED"]
                ["WAL_RECORD_TOO_LARGE" "WAL_RECORD_TOO_LARGE"]
                ["WAL_CORRUPT" "WAL_CORRUPT"]
                ["COLLATION_NOT_SUPPORTED" "COLLATION_NOT_SUPPORTED"]
@@ -384,23 +400,30 @@
         {"present" false "text" ""}
         (throw error)))))
 
-(defn afj-tcp-wal-append-sync [event sync?]
+(defn afj-tcp-encode-wal-record [event]
   (let [encoded (json_str event)]
     (if (> (count encoded) afj-tcp-wal-record-limit)
-      (throw "WAL_RECORD_TOO_LARGE")
-      nil)
-    (let [fd (if (file_exists afj-tcp-wal)
-               (fd_open_with_parent afj-tcp-wal "a")
-               (fd_create afj-tcp-wal))]
-      (try
-        (do
-          (fd_write fd (str encoded "\n"))
-          (if sync? (do (fd_fsync fd) (fd_sync_parent fd)) nil)
-          (fd_close fd))
-        (catch [error]
-          (try (fd_close fd) (catch [close-error] nil))
-          (throw error))))
-    event))
+      (throw "WAL_RECORD_TOO_LARGE") encoded)))
+
+(defn afj-tcp-append-encoded-wal [encoded sync?]
+  (afj-tcp-require-storage)
+  (let [fd (if (file_exists afj-tcp-wal)
+             (fd_open_with_parent afj-tcp-wal "a")
+             (fd_create afj-tcp-wal))]
+    (try
+      (do
+        (fd_write fd (str encoded "\n"))
+        (if sync? (do (fd_fsync fd) (fd_sync_parent fd)) nil)
+        (fd_close fd))
+      (catch [error]
+        (try (fd_close fd) (catch [close-error] nil))
+        (throw error))))
+  true)
+
+(defn afj-tcp-wal-append-sync [event sync?]
+  (afj-tcp-require-storage)
+  (afj-tcp-append-encoded-wal (afj-tcp-encode-wal-record event) sync?)
+  event)
 
 (defn afj-tcp-wal-append [event]
   (afj-tcp-wal-append-sync event true))
@@ -610,6 +633,7 @@
     (deref indexes)))
 
 (defn afj-tcp-write-catalog-pages []
+  (afj-tcp-require-storage)
   (if (nil? afj-tcp-catalog-page-path)
     true
     (do
@@ -761,6 +785,7 @@
   true)
 
 (defn afj-tcp-recover-core []
+  (afj-tcp-require-storage)
   (do
     (reset! engine-catalog {})
     (reset! engine-indexes {})
@@ -856,6 +881,7 @@
   true)
 
 (defn afj-tcp-recover []
+  (afj-tcp-require-storage)
   (let [before (afj-tcp-recovery-state)]
     (try
       (afj-tcp-recover-core)
@@ -863,27 +889,37 @@
         (afj-tcp-restore-recovery-state before)
         (throw error)))))
 
-(defn afj-tcp-record-asts [asts]
+(defn afj-tcp-wal-record-plan [asts]
   (let [tx (uuid_short)
         body {"version" 1 "asts" asts}
         length (count (json_str body))
-        checksum (sha256 (json_str body))]
-    ;; The prepare record is never published by recovery without a matching
-    ;; commit marker. Flush it before closing, then fsync once on the commit
-    ;; marker; the latter durably flushes the complete append sequence while
-    ;; removing one syscall-heavy fsync from every autocommit write.
-    (afj-tcp-wal-append-sync {"type" "prepare" "tx" tx
-                               "version" 1 "length" length
-                               "body" body "checksum" checksum} false)
-    (afj-tcp-wal-append-sync {"type" "commit" "tx" tx
-                               "version" 1 "length" length
-                               "checksum" checksum} true)
-    true))
+        checksum (sha256 (json_str body))
+        prepare-event {"type" "prepare" "tx" tx "version" 1 "length" length
+                 "body" body "checksum" checksum}
+        commit-event {"type" "commit" "tx" tx "version" 1 "length" length
+                "checksum" checksum}]
+    ;; Validate both encoded sizes before starting any append. A rejected
+    ;; request is distinct from an IO operation whose outcome is uncertain.
+    [(afj-tcp-encode-wal-record prepare-event)
+     (afj-tcp-encode-wal-record commit-event)]))
+
+(defn afj-tcp-persist-wal-plan [plan]
+  (afj-tcp-require-storage)
+  ;; Preserve the existing unsynced prepare + synced commit record protocol.
+  (afj-tcp-append-encoded-wal (get plan 0) false)
+  (afj-tcp-append-encoded-wal (get plan 1) true)
+  true)
+
+(defn afj-tcp-record-asts [asts]
+  (afj-tcp-persist-wal-plan (afj-tcp-wal-record-plan asts)))
 
 (defn afj-tcp-commit-asts [asts]
   ;; Rejected SQL must never acquire a committed WAL record. Validate against
   ;; a disposable catalog snapshot before publishing the unchanged WAL format.
-  (let [result (atom nil)
+  (afj-tcp-require-storage)
+  (let [before (afj-tcp-recovery-state)
+        metrics-before (deref afj-tcp-metrics)
+        result (atom nil)
         first-ast (first asts)
         table-name (get first-ast "table")
         fast-insert? (and (= (count asts) 1)
@@ -928,21 +964,34 @@
                 (reset! engine-indexes indexes)
                 (reset! engine-databases databases))))
           (throw error))))
-    ;; The successful validation execution already published the AST into the
-    ;; live in-memory state. Replaying it after restoring the snapshots doubles
-    ;; catalog/index work for every autocommit write and makes long concurrent
-    ;; soak latency grow unnecessarily. Keep the validated result and persist
-    ;; that state once; the catch path above still restores all snapshots.
-    (afj-tcp-record-asts asts)
-    (swap! afj-tcp-metrics update "commits" (fn [value] (+ value 1)))
-    (swap! afj-tcp-commit-revision (fn [revision] (+ revision 1)))
-    (afj-tcp-mark-table-revisions asts (deref afj-tcp-commit-revision))
-    (do
-      (afj-tcp-record-row-versions-for-asts
-        (deref engine-catalog) asts (deref afj-tcp-commit-revision))
-      true)
-    (afj-tcp-write-catalog-pages)
-    (deref result)))
+    ;; The validated live state is still provisional until persistence and
+    ;; metadata publication complete. Raw persistent snapshots retain the fast
+    ;; insert path without adding another whole-catalog JSON copy.
+    (let [plan (try
+                 (afj-tcp-wal-record-plan asts)
+                 (catch [error]
+                   (afj-tcp-restore-recovery-state before)
+                   (throw error)))
+          phase (atom "wal")]
+      (try
+        (do
+          (afj-tcp-persist-wal-plan plan)
+          (reset! phase "state-publication")
+          (swap! afj-tcp-metrics update "commits" (fn [value] (+ value 1)))
+          (swap! afj-tcp-commit-revision (fn [revision] (+ revision 1)))
+          (afj-tcp-mark-table-revisions asts (deref afj-tcp-commit-revision))
+          (afj-tcp-record-row-versions-for-asts
+            (deref engine-catalog) asts (deref afj-tcp-commit-revision))
+          (reset! phase "checkpoint")
+          (afj-tcp-write-catalog-pages)
+          (deref result))
+        (catch [error]
+          (afj-tcp-quarantine-storage (deref phase) error)
+          (try
+            (do (afj-tcp-restore-recovery-state before)
+                (reset! afj-tcp-metrics metrics-before))
+            (catch [restore-error] nil))
+          (throw "COMMIT_OUTCOME_UNKNOWN"))))))
 
 (defn afj-tcp-commit-ast [ast]
   (afj-tcp-commit-asts [ast]))
@@ -1461,7 +1510,8 @@
 (defn afj-tcp-expire-token [token]
   (let [tx-state (get (deref afj-tcp-transactions) token)]
     (if (and (not (nil? tx-state))
-             (= (get tx-state "status") "active"))
+             (= (get tx-state "status") "active")
+             (afj-tcp-storage-healthy?))
       (afj-tcp-rollback token)
       nil)
     (swap! afj-tcp-sessions dissoc token)
@@ -1580,6 +1630,7 @@
       (throw "ISOLATION_LEVEL_UNSUPPORTED"))))
 
 (defn afj-tcp-begin-level [token requested]
+  (afj-tcp-require-storage)
   (let [current (get (deref afj-tcp-transactions) token)
         level (afj-tcp-normalize-isolation requested)]
     (if (and (not (nil? current))
@@ -1610,6 +1661,7 @@
   (afj-tcp-begin-level token nil))
 
 (defn afj-tcp-savepoint [token name]
+  (afj-tcp-require-storage)
   (let [current (get (deref afj-tcp-transactions) token)]
     (if (or (nil? current) (not (= (get current "status") "active")))
       {"ok" false "error" "TX_NOT_ACTIVE"}
@@ -1625,6 +1677,7 @@
         {"ok" true "status" "savepoint" "name" name}))))
 
 (defn afj-tcp-rollback-to-savepoint [token name]
+  (afj-tcp-require-storage)
   (let [current (get (deref afj-tcp-transactions) token)
         savepoint (if (nil? current) nil
                     (get (get current "savepoints") name))]
@@ -1644,6 +1697,7 @@
            "name" name})))))
 
 (defn afj-tcp-release-savepoint [token name]
+  (afj-tcp-require-storage)
   (let [current (get (deref afj-tcp-transactions) token)]
     (if (or (nil? current) (not (= (get current "status") "active")))
       {"ok" false "error" "TX_NOT_ACTIVE"}
@@ -1656,6 +1710,7 @@
           {"ok" true "status" "savepoint-released" "name" name})))))
 
 (defn afj-tcp-rollback [token]
+  (afj-tcp-require-storage)
   (let [current (get (deref afj-tcp-transactions) token)]
     (if (or (nil? current) (not (= (get current "status") "active")))
       {"ok" false "error" "TX_NOT_ACTIVE"}
@@ -1666,6 +1721,7 @@
         {"ok" true "status" "rolled-back"}))))
 
 (defn afj-tcp-commit [token]
+  (afj-tcp-require-storage)
   (let [current (get (deref afj-tcp-transactions) token)]
     (if (or (nil? current) (not (= (get current "status") "active")))
       {"ok" false "error" "TX_NOT_ACTIVE"}
@@ -1687,41 +1743,57 @@
           {"ok" false "error" "TX_CONFLICT" "victim" token
            "status" "rolled-back"})
         (let [asts (get current "asts")
+              before (afj-tcp-recovery-state)
+              metrics-before (deref afj-tcp-metrics)
+              plan (if (> (count asts) 0) (afj-tcp-wal-record-plan asts) nil)
+              phase (atom "wal")
               merge-state (if revision-stale
                            (afj-tcp-merge-working-catalog current)
                            {"catalog" (get current "working-catalog")
                             "tables" []})]
-          (if (> (count asts) 0)
+          (try
             (do
-              (afj-tcp-record-asts asts)
-              (swap! afj-tcp-metrics update "commits" (fn [value] (+ value 1))))
-            nil)
-          (reset! engine-catalog
-                  (afj-tcp-copy (get merge-state "catalog")))
-          (reset! engine-indexes
-                  (if revision-stale
-                    (afj-tcp-copy (deref engine-indexes))
-                    (afj-tcp-copy (get current "working-indexes"))))
-          (if revision-stale
-            (doseq [table (get merge-state "tables")]
-              (engine-rebuild-table-indexes table (get (deref engine-catalog) table)))
-            nil)
-          (if (> (count asts) 0)
-            (do
-              (swap! afj-tcp-commit-revision (fn [revision] (+ revision 1)))
-              (afj-tcp-mark-table-revisions asts (deref afj-tcp-commit-revision))
-              (afj-tcp-record-row-versions-for-asts
-                (deref engine-catalog) asts (deref afj-tcp-commit-revision)))
-            nil)
-          (afj-tcp-write-catalog-pages)
-          (swap! afj-tcp-transactions dissoc token)
-          (afj-tcp-release-token token)
-          {"ok" true "status" "committed"
-           "statements" (count asts)}))))))
+              (if (> (count asts) 0)
+                (do
+                  (afj-tcp-persist-wal-plan plan)
+                  (swap! afj-tcp-metrics update "commits" (fn [value] (+ value 1))))
+                nil)
+              (reset! phase "state-publication")
+              (reset! engine-catalog
+                      (afj-tcp-copy (get merge-state "catalog")))
+              (reset! engine-indexes
+                      (if revision-stale
+                        (afj-tcp-copy (deref engine-indexes))
+                        (afj-tcp-copy (get current "working-indexes"))))
+              (if revision-stale
+                (doseq [table (get merge-state "tables")]
+                  (engine-rebuild-table-indexes table (get (deref engine-catalog) table)))
+                nil)
+              (if (> (count asts) 0)
+                (do
+                  (swap! afj-tcp-commit-revision (fn [revision] (+ revision 1)))
+                  (afj-tcp-mark-table-revisions asts (deref afj-tcp-commit-revision))
+                  (afj-tcp-record-row-versions-for-asts
+                    (deref engine-catalog) asts (deref afj-tcp-commit-revision)))
+                nil)
+              (reset! phase "checkpoint")
+              (afj-tcp-write-catalog-pages)
+              (swap! afj-tcp-transactions dissoc token)
+              (afj-tcp-release-token token)
+              {"ok" true "status" "committed"
+               "statements" (count asts)})
+            (catch [error]
+              (afj-tcp-quarantine-storage (deref phase) error)
+              (try
+                (do (afj-tcp-restore-recovery-state before)
+                    (reset! afj-tcp-metrics metrics-before))
+                (catch [restore-error] nil))
+              (throw "COMMIT_OUTCOME_UNKNOWN")))))))))
 
 (defn afj-tcp-tx-request [request]
   (let [token (get request "token")
         op (get request "op")]
+    (if (afj-tcp-session-active? token) (afj-tcp-require-storage) nil)
     (if (not (afj-tcp-session-active? token))
       {"ok" false "error" "AUTH_REQUIRED"}
       (if (= op "BEGIN")
@@ -1736,16 +1808,19 @@
   (tcp-write conn (str (json_str body) "\n")))
 
 (defn afj-tcp-health []
-  {"ok" true
-   "service" "afj-db95"
-   "status" "running"
-   "wal" (file_exists afj-tcp-wal)})
+  (let [normal {"ok" true "service" "afj-db95" "status" "running"
+                "wal" (file_exists afj-tcp-wal)}]
+    (if (afj-tcp-storage-healthy?) normal
+      (assoc normal "ok" false "status" "recovery-required"
+             "error" "STORAGE_RECOVERY_REQUIRED" "commit-outcome" "unknown"
+             "retryable" false "restart-required" true
+             "phase" (get (deref afj-tcp-storage-failure) "phase")))))
 
 (defn afj-tcp-metrics-alerts [values]
-  (let [errors (get values "errors" 0)]
-    (if (>= errors 5)
-      ["ERROR_RATE_HIGH"]
-      [])))
+  (let [errors (get values "errors" 0)
+        alerts (if (>= errors 5) ["ERROR_RATE_HIGH"] [])]
+    (if (afj-tcp-storage-healthy?) alerts
+      (conj alerts "STORAGE_RECOVERY_REQUIRED"))))
 
 (defn afj-tcp-metrics-response []
   (let [values (deref afj-tcp-metrics)]
@@ -1847,6 +1922,7 @@
       snapshot-state)))
 
 (defn afj-tcp-execute-active [token tx-state ast]
+  (afj-tcp-require-storage)
   (let [table (get ast "table")
         _load (if (nil? table) true (afj-tcp-ensure-table-loaded table))
         refreshed-state (afj-tcp-refresh-read-view token tx-state)
@@ -1882,6 +1958,7 @@
           (throw error))))))
 
 (defn afj-tcp-execute-query [request ast]
+  (afj-tcp-require-storage)
   (let [token (get request "token")
         statement (get request "statement")
         user (get (deref afj-tcp-sessions) token)
@@ -1937,6 +2014,7 @@
   (let [token (get request "token")
         user (get (deref afj-tcp-sessions) token)
         statement (get request "statement")]
+    (if (afj-tcp-session-active? token) (afj-tcp-require-storage) nil)
     (if (not (afj-tcp-session-active? token))
       {"ok" false "error" "AUTH_REQUIRED"}
       (if (not (nil? (afj-tcp-sql-size-error statement)))
@@ -2025,6 +2103,7 @@
 (defn afj-tcp-prepare [request]
   (let [token (get request "token")
         statement (get request "statement")]
+    (if (afj-tcp-session-active? token) (afj-tcp-require-storage) nil)
     (if (not (afj-tcp-session-active? token))
       {"ok" false "error" "AUTH_REQUIRED"}
       (if (not (nil? (afj-tcp-sql-size-error statement)))
@@ -2037,6 +2116,7 @@
   (let [token (get request "token")
         statement-id (get request "statement-id")
         prepared (get (get (deref server-state) "prepared") statement-id)]
+    (if (afj-tcp-session-active? token) (afj-tcp-require-storage) nil)
     (if (not (afj-tcp-session-active? token))
       {"ok" false "error" "AUTH_REQUIRED"}
       (if (or (nil? prepared)
@@ -2119,7 +2199,11 @@
               (afj-tcp-send conn {"ok" false
                                    "error" (afj-tcp-error-code error)})))
         (if (= (get request "type") "tx")
-          (afj-tcp-send conn (afj-tcp-tx-request request))
+          (try
+            (afj-tcp-send conn (afj-tcp-tx-request request))
+            (catch [error]
+              (afj-tcp-send conn {"ok" false
+                                   "error" (afj-tcp-error-code error)})))
           (if (= (get request "type") "query")
           (try
             (afj-tcp-send conn (afj-tcp-query request))
