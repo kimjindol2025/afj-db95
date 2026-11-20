@@ -1,0 +1,139 @@
+{
+  "schema": "db95-native-mariadb-fixed-host/1",
+  "date": "2026-11-20",
+  "status": "SCOPED_PASS",
+  "commercialReadiness": "HOLD",
+  "production": "NOT_RUN",
+  "hostPathsAndOwners": "<가림>",
+  "scope": "Runnable FreeLang protocol/readiness/NUL argv/result policy plus fixed Bash process/file host; unchanged original daemon and standard-client SQL/output checks. Original JSCase68 remainsFAIL separately.",
+  "source": {
+    "qualifiedBaseHead": "fefddfa60a73b135f4989817e60d1bb56bc705d6",
+    "applicationHeadBeforeCommit": "a695487b06725f7914b831c20fa31c51e317131f",
+    "fxHead": "d8dc4c63adcfe2ac3f7d7edf69f890407c2dd4da",
+    "productFilesSha256": {
+      "run-case.sh": "52207e39e987473752bd863ade98a3847cf9dfc763a4f20706cc0bfc21269259",
+      "control.fls": "45c1aaf00a5f7fe8834ffd72d29dd9f2143bd8be9dca5c056cd6883eb32a4e3e"
+    },
+    "protectedOriginalDaemonSha256": "4aeb91c050734087a9b0e27bffd677cfe48f6bfb5068f39cbbce2efb4c01868d",
+    "protectedOriginalReferenceSha256": "3b62e3dc4bc2d087a8306271b82a650e09741017c4fe89afad9c7a04ed64bbf1",
+    "original129TestsChanged": false,
+    "qualifiedFrozenFiles": 385,
+    "frozenSourceUnchanged": true,
+    "runtimeInputsMatchQualifiedCopy": true,
+    "prepublicationDocumentationOnlyDifference": [
+      "README.md"
+    ]
+  },
+  "sdkSha256": {
+    "manifest": "e1f22e75e3a25b662411dc42d23e47049c31c0f5b80a75e4d3b4d75ee8708181",
+    "compiler": "42fc8355bf76b8e3087d05bc1b9a63c0c3f0e102ed5331bea11bb86aae0b08aa",
+    "runtimeArchive": "053971a3403cfdf0b1c15a0efa8e76a9eb5e5325df0fb4955279abe1bb6c6be4"
+  },
+  "limits": {
+    "freshStrictParseGenerateLinkRuntimeSeconds": 120,
+    "startupMarkerMillisecondsFromBeforeAot": 60000,
+    "portAttemptsMax": 31,
+    "portRetryMilliseconds": 100,
+    "portHardCapMilliseconds": 3100,
+    "clientConnectSeconds": 5,
+    "addressSpaceBytes": 2147483648,
+    "timeoutCleanupAllowanceSeconds": 3,
+    "timerExcludesHeavyLockQueue": true
+  },
+  "result": {
+    "ok": true,
+    "client": "mariadb",
+    "requests": 3,
+    "exact_select": true,
+    "connect_seconds": 5,
+    "startup_seconds": 60,
+    "port_attempts_max": 31,
+    "port_retry_ms": 100,
+    "client_defaults": false
+  },
+  "requests": [
+    {
+      "step": "create",
+      "statement": "CREATE TABLE native_wire_users (id INT PRIMARY KEY, name TEXT)",
+      "exit": 0
+    },
+    {
+      "step": "insert",
+      "statement": "INSERT INTO native_wire_users (id,name) VALUES (1,'Kim')",
+      "exit": 0
+    },
+    {
+      "step": "select",
+      "statement": "SELECT * FROM native_wire_users",
+      "exit": 0
+    }
+  ],
+  "exactSelect": {
+    "utf8": "1\tKim\n",
+    "hex": "31094b696d0a"
+  },
+  "literalPaths": "SDK/source/output spaces,apostrophe,Korean,percent,dollar,LF; source and output roots end LF, physical NUL records and literal argv",
+  "ownership": "Host owns heavy flock and an isolated PID/network namespace; original host filesystem read-only except new output; no production changes",
+  "execution": {
+    "traceSha256": "b1d85997808aeb096a62e6f1625ae4f7d2bb25dcee85e5b86d8083f99a680bac",
+    "decodedExecs": 63,
+    "resumedExecsJoined": 0,
+    "allTerminalExecStatusesParsed": true,
+    "successfulNodeFamilyExecs": 0,
+    "failedNodeFamilyAttempts": 0,
+    "successfulPythonExecs": 0,
+    "allowedPrivateControllerPythonExecs": 0,
+    "successfulBasenameCounts": {
+      "as": 2,
+      "bash": 5,
+      "bwrap": 1,
+      "cat": 1,
+      "cc1": 2,
+      "collect2": 2,
+      "control-bin": 6,
+      "daemon-bin": 1,
+      "date": 1,
+      "flc": 4,
+      "flock": 1,
+      "gcc": 2,
+      "grep": 2,
+      "ld": 2,
+      "ln": 12,
+      "mariadb": 3,
+      "mkdir": 2,
+      "readlink": 2,
+      "run-case.sh": 1,
+      "sha256sum": 2,
+      "timeout": 7,
+      "verify.sh": 2
+    }
+  },
+  "qualifiedArtifactSha256": {
+    "status.txt": "dd4c6eae179c9ebdaccb133fce2c26b5a66f3824d922d02ffa27a3b0f87df8d8",
+    "result.stdout": "7f7c5d458c773cff907fa9e2b28266f257e00913155908c251b527042c10cb36",
+    "select.stdout": "c409191807665eca304c31fe3e4f970de69fee0f421bbd5462bacb1e9f694f9e",
+    "create.status": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "insert.status": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "select.status": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "privateQualifier": "Python diagnostic orchestration outside product trace; actual host trace includes zero Python executions",
+  "queueInclusiveObservationSeconds": 507.03095508900014,
+  "queueInclusiveObservationIsRuntime": false,
+  "retainedFirstPublicCohort": {
+    "status": "FAIL",
+    "phase": "strict source parse",
+    "diagnostic": "FL5002 PATH_OUTSIDE_BASE/EACCES",
+    "reason": "prototype selected output file base before compiling source outside output",
+    "correction": "compiler retains its selected source base; output base is selected only after AOT for runtime artifact reads; C10 validation unchanged",
+    "artifactsRetained": true
+  },
+  "notQualified": [
+    "original71whole-gate",
+    "TCP WAL/cold recovery",
+    "TLS/mTLS",
+    "auth rejection/prepared-statement clients",
+    "full standard-client or wire compatibility",
+    "writer ownership/storage identity/backup operations",
+    "commercial release"
+  ]
+}

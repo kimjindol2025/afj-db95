@@ -3,6 +3,49 @@
 SCOPED=PASS; WHOLE_GATE=52 PASS / 19 FAIL; COMMERCIAL_READINESS=HOLD;
 DEPLOYMENT=NO. Host paths and owners: <가림>.
 
+## Runnable Native case
+
+The qualified `tests/native-mariadb` host executes zero Node-family or Python
+processes. Requests, readiness, NUL argv construction and exact output/status
+checks are FreeLang; Bash handles fixed argv, files and owned process lifetimes.
+The unchanged daemon serves the same original three SQL requests through the
+installed standard MariaDB client. Use an already installed matching SDK, GCC,
+bubblewrap, GNU tools and `mariadb`:
+
+```bash
+source "/path/to/sdk/env.sh"
+tests/native-mariadb/run-case.sh "/private/new-output-directory"
+```
+
+The output must be new and absolute, with an existing parent. The host owns
+`/tmp/fl-heavy.lock`; do not wrap it in another flock. Internal worker flags are
+reserved for the host. `AFJ_DB95_REPO_ROOT` can select an explicit source copy.
+The fresh strict parse, C generation, linking, requests and normal cleanup fit
+one 120-second envelope under 2 GiB. Startup's 60-second deadline begins before
+AOT preparation. Port readiness allows at most 31 attempts at 100 ms intervals,
+with a 3.1-second cap; the standard client keeps its five-second connect limit.
+A timeout has a separate three-second cleanup allowance. Owned PID/network
+namespaces isolate the plaintext loopback fixture and its child processes.
+
+Qualification used source, SDK and output roots with spaces, apostrophes,
+Korean, percent/dollar signs and LF; source/output roots ended in LF. Physical
+paths and argv use NUL records. All 385 frozen inputs and the SDK remained
+unchanged. The 63 fully decoded execve records have terminal statuses and zero
+Node/Python executions. The three captured argv records match the original SQL
+and client options plus `--no-defaults`; SELECT is exactly `1\tKim\n`.
+See [the fixed-host evidence](evidence/native-mariadb-service-20261120.json).
+The private Python qualifier is outside the product trace. Queue-inclusive
+observation time is recorded separately and is not runtime acceptance timing.
+
+The first public-host prototype failed strict parsing with `PATH_OUTSIDE_BASE`
+because it selected the output file base before compiling the source. That
+failure is retained. The qualified version keeps the compiler's selected source
+base and selects the output base only for runtime artifact reads. C10 path
+validation is unchanged. Original JS Case 68 and the 71-case gate stay intact;
+this new runnable case does not rewrite their recorded failures.
+
+## Earlier private diagnostic
+
 An unchanged FreeLang MariaDB daemon, freshly AOT-compiled with the accepted
 Native SDK, completed the original standard-client case's three SQL requests:
 CREATE TABLE, INSERT `(1,'Kim')`, then SELECT. Three installed `mariadb` client
@@ -25,9 +68,10 @@ account. `--skip-ssl` remained in place; this is a plaintext wire diagnostic.
 
 All sixteen execve records were decoded with terminal statuses. There were
 zero Node-family executions, three standard-client executions and one explicitly
-counted private Python diagnostic controller. This receipt does not qualify a
-public Python-free test host. The first private cohort also returned the exact
-SQL result, but its compiler-error scanner was absent from its restricted PATH.
+counted private Python diagnostic controller. This earlier private receipt alone
+did not qualify the public host; the independent fixed-host cohort above supplies
+that evidence. The first private cohort also returned the exact SQL result, but
+its compiler-error scanner was absent from its restricted PATH.
 That incomplete guard and its artifacts are retained. The accepted fresh second
 cohort used installed grep and required the exact no-match exit status; scanner
 errors fail. It retained the same daemon, controller, SQL, assertions and bounds.

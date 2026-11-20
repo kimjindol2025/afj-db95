@@ -1,0 +1,76 @@
+;; Protocol requests, readiness and exact output policy stay in FreeLang.
+(defn wire-case-assert [ok message]
+  (if (= ok true) true (throw message)))
+
+(defn wire-case-port []
+  (let [port (str-to-num (env-get "AFJ_NATIVE_MARIADB_PORT"))]
+    (wire-case-assert (and (number? port) (> port 0) (< port 65536))
+                      "NATIVE_MARIADB_PORT_INVALID")
+    port))
+
+(defn wire-case-ready []
+  (let [log (env-get "AFJ_NATIVE_MARIADB_LOG")
+        started (str-to-num (str_trim (file_read
+                    (env-get "AFJ_NATIVE_MARIADB_START_FILE"))))
+        deadline (+ started 60000)]
+    (while (and (< (now-ms) deadline)
+                (not (str-includes (file_read log)
+                                   "afj-db95 native MariaDB STARTED")))
+      (sleep_ms 25))
+    (wire-case-assert
+      (and (<= (now-ms) deadline)
+           (str-includes (file_read log) "afj-db95 native MariaDB STARTED"))
+      "NATIVE_MARIADB_START_TIMEOUT")
+    (let [ready (atom false) attempts (atom 0)
+          port-deadline (+ (now-ms) 3100) port (wire-case-port)]
+      (while (and (< (deref attempts) 31) (< (now-ms) port-deadline)
+                  (not (deref ready)))
+        (let [fd (tcp-client-open "127.0.0.1" port 100)]
+          (if (nil? fd)
+            (do (swap! attempts + 1)
+                (if (< (deref attempts) 31) (sleep_ms 100) nil))
+            (do (tcp-client-close fd) (reset! ready true)))))
+      (wire-case-assert (and (deref ready) (<= (now-ms) port-deadline))
+                        "NATIVE_MARIADB_PORT_TIMEOUT")
+      (println "NATIVE_MARIADB_READY"))))
+
+(defn wire-case-argv []
+  (let [step (env-get "AFJ_NATIVE_MARIADB_STEP")
+        statement
+          (if (= step "create")
+            "CREATE TABLE native_wire_users (id INT PRIMARY KEY, name TEXT)"
+            (if (= step "insert")
+              "INSERT INTO native_wire_users (id,name) VALUES (1,'Kim')"
+              (if (= step "select") "SELECT * FROM native_wire_users"
+                (throw "NATIVE_MARIADB_STEP_INVALID"))))
+        arguments
+          ["mariadb" "--no-defaults" "--protocol=tcp" "--host=127.0.0.1"
+           (str "--port=" (wire-case-port)) "--connect-timeout=5" "--skip-ssl"
+           "--user=root" "--password=development-only" "--batch"
+           "--skip-column-names" "--raw" "--execute" statement]]
+    (print "DB95_MARIADB_ARGV/1\x00")
+    (doseq [argument arguments] (print (str argument "\x00")))
+    (print "DB95_MARIADB_END/1\x00")))
+
+(defn wire-case-result []
+  (let [output (env-get "AFJ_NATIVE_MARIADB_OUTPUT")]
+    (doseq [step ["create" "insert" "select"]]
+      (wire-case-assert (= (file_read (str output "/" step ".status")) "0\n")
+                        "NATIVE_MARIADB_CLIENT_EXIT"))
+    (wire-case-assert (= (file_read (str output "/select.stdout")) "1\tKim\n")
+                      "NATIVE_MARIADB_EXACT_SELECT")
+    (println (str "NATIVE_MARIADB_CASE_RESULT "
+      (json_str {"ok" true "client" "mariadb" "requests" 3
+                 "exact_select" true "connect_seconds" 5
+                 "startup_seconds" 60 "port_attempts_max" 31
+                 "port_retry_ms" 100 "client_defaults" false})))))
+
+(define wire-case-action (env-get "AFJ_NATIVE_MARIADB_ACTION"))
+(if (= wire-case-action "port")
+  (let [port (tcp-client-free-port)]
+    (wire-case-assert (number? port) "NATIVE_MARIADB_PORT_UNAVAILABLE")
+    (println port))
+  (if (= wire-case-action "ready") (wire-case-ready)
+    (if (= wire-case-action "argv") (wire-case-argv)
+      (if (= wire-case-action "result") (wire-case-result)
+        (throw "NATIVE_MARIADB_ACTION_INVALID")))))

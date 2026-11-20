@@ -38,6 +38,11 @@
 [Native commit health](NATIVE-COMMIT-HEALTH.md)에 별도로 기록했다.
 추가 [Native 서비스 부하와 대량 복구](NATIVE-SERVICE-LOAD.md)는 원본 게이트와
 별도 cohort로 기록하며, 부하 통과로 복구 실패를 대체하지 않는다.
+[Native MariaDB 표준 클라이언트 시험](NATIVE-MARIADB-CLIENT.md)은 원본의
+세 SQL 요청·정확한 출력을 FreeLang/고정 Bash 경로에서 통과했다. 전체 63개
+execve 기록의 Node/Python 실행은 0회다. 이는 plaintext 표준 클라이언트의
+별도 scoped 증거이며, 원본 JS Case 68 실패나 TLS·인증 거부·prepared 및
+대량 WAL 복구 관문을 통과로 바꾸지 않는다.
 
 ## 판정 규칙
 

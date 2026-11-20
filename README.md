@@ -23,9 +23,10 @@ TCP SQL 커밋 결과가 불확실하면 `COMMIT_OUTCOME_UNKNOWN`을 반환하�
 별도 [Native 서비스 시험](docs/NATIVE-SERVICE-LOAD.md)은 8개 연결·5분 부하를
 통과했지만, 그 실제 14,664행 WAL의 새 프로세스 복구는 메모리 할당 오류로
 실패했습니다. 이 대량 복구 결함은 현재 배포 차단 사유입니다.
-별도 [Native MariaDB 표준 클라이언트 진단](docs/NATIVE-MARIADB-CLIENT.md)은
-원본의 CREATE·INSERT·SELECT와 정확한 출력 검사를 통과했습니다. 비공개 진단
-제어기와 원본 JS 게이트의 실패를 별도로 기록하며, 전체 상용 통과를 뜻하지 않습니다.
+새 [Native MariaDB 표준 클라이언트 시험](docs/NATIVE-MARIADB-CLIENT.md)은
+FreeLang 판정과 고정 Bash 호스트로 원본 CREATE·INSERT·SELECT 및 정확한 출력
+검사를 통과했습니다. 이 실행 경로의 Node/Python은 0회이며, 원본 JS 게이트의
+실패와 전체 상용 판정은 별도로 유지합니다.
 
 - 테이블 생성
 - 행 삽입
