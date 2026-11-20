@@ -1,0 +1,161 @@
+{
+  "schema": "db95-native-startup-readiness/1",
+  "date_local": "2026-11-21 Asia/Seoul",
+  "status": "SCOPED_PASS",
+  "base_db_commit": "08064b3ec09c50f18bdbe33c72c135ac7fb25778",
+  "product_core_changed": false,
+  "qualification_files_sha256": {
+    "tests/native-service/log-readiness.fls": "e19e3b13ed9b4bcba6808a08671bf1f7deea8bceedc675f79f50e8c163022df1",
+    "tests/native-service/control.fls": "90c832fb4af2c613413ca93e3556695c8a58ba0833d76cbca6328e38250c1a75",
+    "tests/native-service/run-case.sh": "fe331b9fe126b0dab1532ef84184a96cbd87cd89bfc2a60e998c6136455efde1",
+    "tests/native-service/log-readiness-policy.fls": "f584dd285d56fa05c1c7f37e5f5af69abdeeef9de622001dfd15f98b7b440639"
+  },
+  "policy_matrix": [
+    {
+      "profile": "baseline",
+      "passed": 9,
+      "expected": 9,
+      "sdk_manifest_sha256": "e1f22e75e3a25b662411dc42d23e47049c31c0f5b80a75e4d3b4d75ee8708181",
+      "compiler_elf_sha256": "42fc8355bf76b8e3087d05bc1b9a63c0c3f0e102ed5331bea11bb86aae0b08aa",
+      "runtime_archive_sha256": "053971a3403cfdf0b1c15a0efa8e76a9eb5e5325df0fb4955279abe1bb6c6be4",
+      "strict_parse": "ok",
+      "runtime_stdout_sha256": "8176af6f050ea7613a5c5bfafa0d7cc7d8445e97cb79838249e7dd4a657c35d7",
+      "runtime_trace": {
+        "traceSha256": "1a0038d3c43417cb5e5fac1be271040109d275733199ed308e75b91f98431889",
+        "decodedExecs": 3,
+        "resumedExecsJoined": 0,
+        "allTerminalExecStatusesParsed": true,
+        "successfulNodeFamilyExecs": 0,
+        "failedNodeFamilyAttempts": 0,
+        "successfulPythonExecs": 0,
+        "allowedPrivateControllerPythonExecs": 0,
+        "successfulBasenameCounts": {
+          "bwrap": 1,
+          "policy-bin": 1,
+          "timeout": 1
+        }
+      },
+      "sdk_verified_before_after": true
+    },
+    {
+      "profile": "current",
+      "passed": 9,
+      "expected": 9,
+      "sdk_manifest_sha256": "76c06a511428bcba09df17ad372f9b704e70fa78a3838e9e586e80ee28db4941",
+      "compiler_elf_sha256": "462cf9ac7fdbc9b443aa8904b80cdffeb3fcb798107a2f4a0f6ae54b8e22d235",
+      "runtime_archive_sha256": "1cf12615cdc4f8fa49cea18e79cdbc82b13a644c8626b2988a83a50b401633f8",
+      "strict_parse": "ok",
+      "runtime_stdout_sha256": "8176af6f050ea7613a5c5bfafa0d7cc7d8445e97cb79838249e7dd4a657c35d7",
+      "runtime_trace": {
+        "traceSha256": "61df0ae39bd9f668296dfb319679c13ea98903d0622b4cd4241d3f6341ecf21c",
+        "decodedExecs": 3,
+        "resumedExecsJoined": 0,
+        "allTerminalExecStatusesParsed": true,
+        "successfulNodeFamilyExecs": 0,
+        "failedNodeFamilyAttempts": 0,
+        "successfulPythonExecs": 0,
+        "allowedPrivateControllerPythonExecs": 0,
+        "successfulBasenameCounts": {
+          "bwrap": 1,
+          "policy-bin": 1,
+          "timeout": 1
+        }
+      },
+      "sdk_verified_before_after": true
+    }
+  ],
+  "policy_and_real_file_io": {
+    "passed": 12,
+    "expected": 12,
+    "actual_checks": [
+      "stable file",
+      "missing file fails OPEN_FAILED",
+      "outside file base fails PATH_OUTSIDE_BASE"
+    ],
+    "runtime_stdout_sha256": "ab85bc03f0be92da148c8e042d433d56a4e6cab0711a796f23f020e96a812b3a",
+    "runtime_trace": {
+      "traceSha256": "bc7348f2c1c54a849acd0408e5012841975e51f5df6aae572f88107995f3ba70",
+      "decodedExecs": 3,
+      "resumedExecsJoined": 0,
+      "allTerminalExecStatusesParsed": true,
+      "successfulNodeFamilyExecs": 0,
+      "failedNodeFamilyAttempts": 0,
+      "successfulPythonExecs": 0,
+      "allowedPrivateControllerPythonExecs": 0,
+      "successfulBasenameCounts": {
+        "bwrap": 1,
+        "policy-bin": 1,
+        "timeout": 1
+      }
+    }
+  },
+  "accepted_core_service": {
+    "case": "concurrency",
+    "result": {
+      "ok": true,
+      "clients": 8,
+      "rows": 8,
+      "all_insert_responses_ok": true
+    },
+    "runtime_trace": {
+      "traceSha256": "1cc50a3ec2a7a716c2c329300b59b9c944cb5cb779c153d6dd7788d1bf75316c",
+      "decodedExecs": 69,
+      "resumedExecsJoined": 0,
+      "allTerminalExecStatusesParsed": true,
+      "successfulNodeFamilyExecs": 0,
+      "failedNodeFamilyAttempts": 0,
+      "successfulPythonExecs": 0,
+      "allowedPrivateControllerPythonExecs": 0,
+      "successfulBasenameCounts": {
+        "as": 3,
+        "bash": 6,
+        "bwrap": 1,
+        "cat": 2,
+        "cc1": 3,
+        "client-bin": 1,
+        "collect2": 3,
+        "control-bin": 3,
+        "daemon-bin": 1,
+        "flc": 6,
+        "flock": 1,
+        "gcc": 3,
+        "grep": 3,
+        "ld": 3,
+        "ln": 10,
+        "mkdir": 3,
+        "readlink": 2,
+        "run-case.sh": 1,
+        "sha256sum": 2,
+        "timeout": 10,
+        "verify.sh": 2
+      }
+    },
+    "limits": {
+      "fresh_parse_seconds": 120,
+      "fresh_generate_seconds": 120,
+      "link_seconds": 180,
+      "runtime_seconds": 120,
+      "startup_marker_seconds": 30,
+      "port_seconds": 30,
+      "address_space_bytes": 2147483648
+    },
+    "source_and_sdk_unchanged": true,
+    "baseline_receipt_sha256": "cd9922386669082c5b14885f3d52d60e7c430b24bdd28db5db2a124b1881bfa1"
+  },
+  "read_policy": {
+    "changed_snapshot": "discard FILE_CHANGED data, retry only before original deadline",
+    "other_read_errors": "fail",
+    "file_base": "required nonempty explicit output root",
+    "marker": "latch first successful complete snapshot, check original deadline"
+  },
+  "first_failure": {
+    "phase": "before load, startup log read",
+    "reported_error": "file_read IO_ERROR on concurrently growing owned startup stdout",
+    "retained": true
+  },
+  "original_files_core_assertions_bounds_preserved": true,
+  "private_python_controllers": "outside product traces only",
+  "recovery_candidate": "NOT_INCLUDED; newest16224row cold process failed139; candidate core and runtime changes stay private",
+  "commercial": "HOLD",
+  "deployment": "NO"
+}

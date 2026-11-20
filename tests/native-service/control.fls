@@ -1,3 +1,4 @@
+(load "log-readiness.fls")
 ;; Native policy for private service-case readiness and typed result checking.
 ;; The Bash host owns only fixed argv, files and owned process lifetimes.
 (define service-action (env-get "AFJ_NATIVE_SERVICE_ACTION"))
@@ -15,11 +16,12 @@
         marker (if (= service-case "soak") "TCP soak server STARTED"
                                                    "TCP server STARTED")
         marker-ms (if (= service-case "soak") 60000 30000)
-        marker-end (+ (now-ms) marker-ms)]
-    (while (and (< (now-ms) marker-end)
-                (not (str-includes (file_read log-path) marker)))
-      (sleep_ms 50))
-    (service-assert (str-includes (file_read log-path) marker)
+        marker-end (+ (now-ms) marker-ms) marker-seen (atom false)]
+    (while (and (< (now-ms) marker-end) (not (deref marker-seen)))
+      (if (str-includes (native-ready-log-text log-path) marker)
+        (reset! marker-seen true)
+        (sleep_ms 50)))
+    (service-assert (and (deref marker-seen) (<= (now-ms) marker-end))
                     "NATIVE_SERVICE_START_MARKER_TIMEOUT")
     (let [port-end (+ (now-ms) 30000) ready (atom false)]
       (while (and (< (now-ms) port-end) (not (deref ready)))

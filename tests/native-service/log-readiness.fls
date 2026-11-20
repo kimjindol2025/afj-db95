@@ -1,0 +1,15 @@
+;; Read only an owned startup log under the caller's explicit file base.
+;; A growing log can yield FILE_CHANGED; discard that snapshot and retry
+;; within the original caller deadline. Every other I/O error stays fatal.
+(defn native-ready-log-data [result]
+  (if (= (get result "ok") true)
+    (if (string? (get result "data")) (get result "data")
+      (throw "NATIVE_READY_LOG_READ_FAILED: INVALID_DATA"))
+    (if (= (get result "error") "FILE_CHANGED") ""
+      (throw (str "NATIVE_READY_LOG_READ_FAILED: " (get result "error"))))))
+
+(defn native-ready-log-text [path]
+  (let [base (env-get "FL_FILE_BASE")]
+    (if (or (nil? base) (= base ""))
+      (throw "NATIVE_READY_LOG_BASE_REQUIRED")
+      (native-ready-log-data (file-read-result path)))))

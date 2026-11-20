@@ -39,7 +39,7 @@ if [[ "$mode" == --runtime ]]; then
   trap 'exit 143' TERM
   trap 'exit 130' INT
   "$output/daemon-bin" >"$output/daemon.stdout" 2>"$output/daemon.stderr" & daemon_pid=$!
-  AFJ_NATIVE_SERVICE_ACTION=ready "$output/control-bin" >"$output/ready.stdout" 2>"$output/ready.stderr" & active_pid=$!
+  FL_FILE_BASE="$output" AFJ_NATIVE_SERVICE_ACTION=ready "$output/control-bin" >"$output/ready.stdout" 2>"$output/ready.stderr" & active_pid=$!
   set +e
   wait -n -p finished_pid "$daemon_pid" "$active_pid"; result=$?
   set -e

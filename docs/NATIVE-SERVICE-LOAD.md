@@ -19,6 +19,12 @@ execute no Python or Node. Existing protected fixtures, runners, assertions,
 weights and bounds remain unchanged; the original 71-case result is still
 52 PASS / 19 FAIL. These additions are separate qualification cases.
 
+The Native TCP readiness policy now retries only an explicitly changed log
+snapshot within the original deadline. Its paired SDK policy checks and fresh
+eight-client check on the unchanged accepted core are recorded separately in
+[Native startup-log readiness](NATIVE-STARTUP-READINESS.md). That correction does
+not close the large-store recovery blocker described here.
+
 Use an already installed matching Native SDK on Linux with existing GCC,
 bubblewrap and GNU command-line tools. Activate its `env.sh`, then provide a
 new absolute output directory whose parent exists:

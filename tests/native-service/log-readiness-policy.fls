@@ -1,0 +1,14 @@
+(load "log-readiness.fls")
+(define passed (atom 0))
+(defn check-log [label ok]
+ (if (= ok true) (swap! passed + 1) (throw (str "LOG_POLICY_" label))))
+(check-log "stable" (= (native-ready-log-data {"ok" true "data" "TCP server STARTED"}) "TCP server STARTED"))
+(check-log "empty" (= (native-ready-log-data {"ok" true "data" ""}) ""))
+(check-log "changed-discards-marker" (= (native-ready-log-data {"ok" false "error" "FILE_CHANGED" "data" "TCP server STARTED"}) ""))
+(doseq [code ["READ_FAILED" "OPEN_FAILED" "PATH_OUTSIDE_BASE" "ALLOCATION_FAILED"]]
+ (let [message (try (do (native-ready-log-data {"ok" false "error" code "data" "TCP server STARTED"}) "NO_ERROR") (catch [error] (error_message error)))]
+  (check-log code (str-includes message (str "NATIVE_READY_LOG_READ_FAILED: " code)))))
+(check-log "bad-data" (str-includes (try (do (native-ready-log-data {"ok" true "data" nil}) "NO_ERROR") (catch [error] (error_message error))) "INVALID_DATA"))
+(check-log "bad-ok-type" (str-includes (try (do (native-ready-log-data {"ok" "true" "error" "READ_FAILED" "data" "TCP server STARTED"}) "NO_ERROR") (catch [error] (error_message error))) "READ_FAILED"))
+(if (not (= (deref passed) 9)) (throw "LOG_POLICY_CASE_COUNT") nil)
+(println (str "NATIVE_READY_LOG_POLICY_RESULT " (json_str {"ok" true "passed" (deref passed) "expected" 9})))
