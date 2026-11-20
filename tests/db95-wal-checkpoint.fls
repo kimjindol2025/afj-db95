@@ -1,0 +1,4 @@
+(load "../src/tcp-server.fls")
+(afj-tcp-recover)
+(afj-tcp-write-catalog-pages)
+(println "CHECKPOINT_WRITTEN")

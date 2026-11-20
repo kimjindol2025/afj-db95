@@ -7,8 +7,14 @@
       (println "afj-db95 TCP server STARTED")
       ;; Raw TCP callbacks are dispatched by fl-yield. Keep the daemon
       ;; foreground loop explicit so external JSON-line clients are served.
+      (define max-ticks
+        (if (env-get "AFJ_DB95_MAX_TICKS")
+          (str-to-num (env-get "AFJ_DB95_MAX_TICKS"))
+          60000))
+      (define stop-file (env-get "AFJ_DB95_STOP_FILE"))
       (loop [tick 0]
-        (if (< tick 60000)
+        (if (and (< tick max-ticks)
+                 (not (and stop-file (file_exists stop-file))))
           (do (fl-yield 10) (recur (+ tick 1)))
           (do
             (stop-afj-tcp)

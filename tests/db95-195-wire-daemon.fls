@@ -1,5 +1,17 @@
+;; DB95-195 wire daemon recovery test — isolated worktree copy.
+;; Loads every symbol it calls, uses one port variable, and has a bounded loop.
+(load "../src/tcp-server.fls")
 (load "../src/mariadb-wire.fls")
+
+;; The 195 branch called these without defining/loading them anywhere.
+(defn afj-v2-check [condition label]
+  (if condition
+    (println (str label ":PASS"))
+    (throw (str label ":FAIL"))))
+(defn afj-v2-close [] true)
+
 (afj-tcp-recover)
+
 (if (= (env-get "DB95_195_MODE") "read")
   (do
     (let [rows (get (get (deref engine-catalog) "wire_durable") "rows")]
@@ -9,15 +21,22 @@
     (println "DB95_195_MARIADB_FRESH_RECOVERY_PASS"))
   (do
     (define wire-port
-      (if (env-get "DB95_195_PORT")
-        (str-to-num (env-get "DB95_195_PORT"))
+      (if (env-get "AFJ_DB_PORT")
+        (str-to-num (env-get "AFJ_DB_PORT"))
         43995))
+    (define wire-stop (env-get "AFJ_DB95_STOP_FILE"))
+    (define wire-max-ticks
+      (if (env-get "AFJ_DB95_MAX_TICKS")
+        (str-to-num (env-get "AFJ_DB95_MAX_TICKS"))
+        6000))
     (afj-v2-check (= (tcp-server-raw wire-port "mariadb-wire-handler" "127.0.0.1") "ok") "WIRE_LISTEN")
     (println "DB95_195_MARIADB_READY")
     (println (str "DB95_195_PORT=" wire-port))
     (loop [tick 0]
-      (if (and (< tick 10000) (not (file_exists (env-get "DB95_195_STOP"))))
-        (do (fl-yield 10) (recur (+ tick 1))) true))
-    (tcp-server-stop wire-port)
+      (if (and (< tick wire-max-ticks)
+               (not (and wire-stop (file_exists wire-stop))))
+        (do (fl-yield 10) (recur (+ tick 1)))
+        true))
+    (stop-afj-tcp)
     (afj-v2-close)
     (println "DB95_195_MARIADB_STOPPED")))

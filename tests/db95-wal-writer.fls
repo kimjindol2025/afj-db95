@@ -1,0 +1,7 @@
+;; Concurrent writer: append one insert to an existing WAL, no reset.
+(load "../src/tcp-server.fls")
+(afj-tcp-recover)
+(afj-tcp-commit-ast
+  {"type" "insert" "table" "wire_durable"
+   "row" {"id" (env-get "WRITER_ID") "value" (env-get "WRITER_ID")}})
+(println (str "WRITER_DONE " (env-get "WRITER_ID")))

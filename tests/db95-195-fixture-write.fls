@@ -1,0 +1,34 @@
+;; DB95-195 fixture driver — create rows=2 at revision=3 in an isolated WAL.
+;; Run in its own process before the read-mode wire test.
+(load "../src/tcp-server.fls")
+
+(if (file_exists afj-tcp-wal) (file_delete afj-tcp-wal) nil)
+(if (file_exists afj-tcp-catalog-page-path)
+  (file_delete afj-tcp-catalog-page-path)
+  nil)
+(reset! engine-catalog {})
+(reset! engine-indexes {})
+(reset! engine-databases {})
+(reset! afj-tcp-commit-revision 0)
+(reset! afj-tcp-table-revisions {})
+(reset! afj-tcp-schema-revisions {})
+(reset! afj-tcp-row-versions {})
+
+(afj-tcp-commit-ast
+  {"type" "create-table" "table" "wire_durable"
+   "schema" {"columns" [{"name" "id" "type" "INTEGER"
+                            "nullable" false "primary" true}
+                           {"name" "value" "type" "TEXT"
+                            "nullable" false}]
+              "primary-key" "id" "unique-columns" []}})
+(afj-tcp-commit-ast
+  {"type" "insert" "table" "wire_durable"
+   "row" {"id" "1" "value" "alpha"}})
+(afj-tcp-commit-ast
+  {"type" "insert" "table" "wire_durable"
+   "row" {"id" "2" "value" "beta"}})
+
+(let [rows (get (get (deref engine-catalog) "wire_durable") "rows")]
+  (if (and (= (count rows) 2) (= (deref afj-tcp-commit-revision) 3))
+    (println "DB95_195_FIXTURE_WRITE_PASS")
+    (throw "DB95_195_FIXTURE_WRITE_FAIL")))

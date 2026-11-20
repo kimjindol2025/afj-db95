@@ -1,0 +1,9 @@
+;; WAL experiment probe — load WAL from AFJ_DB_WAL and report restored state.
+(load "../src/tcp-server.fls")
+(afj-tcp-recover)
+(let [tbl (get (deref engine-catalog) "wire_durable")
+      rows (if (nil? tbl) [] (get tbl "rows"))]
+  (println (str "RESULT rows=" (count rows)
+                " revision=" (deref afj-tcp-commit-revision)))
+  (doseq [row rows]
+    (println (str "ROW id=" (get row "id") " value=" (get row "value")))))
