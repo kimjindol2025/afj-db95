@@ -1,0 +1,570 @@
+{
+  "schema": "db95-compatibility-scorecard/1",
+  "scope": "Update two feature status literals after fresh original Native feature-contract passes, then run original case28. Internal weighted matrix only; no full gate or external MariaDB compatibility claim.",
+  "baseCommit": "adbe97e07cd2502ff64f3ada37915f40ad548f95",
+  "productCoreCommit": "1e55d063fe11b3905d79b2ca203f5eb384a7e317",
+  "authorization": "msg_12c169a13ca7: two flags allowed only after current-source8/8PASS",
+  "before": {
+    "case": 28,
+    "status": "FAIL_REPRODUCED",
+    "passed": 0,
+    "failed": 1,
+    "exit": 1,
+    "seconds": 18.75485260399728,
+    "actualPercent": 88,
+    "requiredPercent": 95,
+    "ordinaryCaseSeconds": 120,
+    "addressSpaceBytes": 2147483648,
+    "inputSha256": "dd3fef7b37ac23ff843753fa0b7677350af1de346286111179763a9663caf078",
+    "originalInputExpectedValuesWeightsThresholdAndRunnerUnchanged": true,
+    "allTrackedDbAndRuntimeCUnchanged": true,
+    "privatePythonControllerOutsideTrace": 1,
+    "traceAudit": {
+      "traceSha256": "ad1bb3481dd49687a8f246b47ce0fb312c22c5c16cde9d62982b58013f07374e",
+      "decodedExecs": 57,
+      "resumedExecsJoined": 0,
+      "allTerminalExecStatusesParsed": true,
+      "successfulNodeFamilyExecs": 0,
+      "failedNodeFamilyAttempts": 0,
+      "successfulPythonExecs": 0,
+      "allowedPrivateControllerPythonExecs": 0,
+      "successfulBasenameCounts": {
+        "as": 21,
+        "bash": 1,
+        "bwrap": 1,
+        "case-bin": 1,
+        "cc1": 22,
+        "collect2": 1,
+        "dirname": 1,
+        "flc": 1,
+        "gcc": 2,
+        "ld": 1,
+        "mkdir": 3,
+        "rg": 1,
+        "timeout": 1
+      }
+    },
+    "logSha256": "ceb215b7f5507dde9540ab6ed745e4e9bc1989ea19e42caf22ada865644a39a5",
+    "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "newImplementation": false
+  },
+  "featureQualification": {
+    "status": "PASS",
+    "passed": 8,
+    "failed": 0,
+    "total": 8,
+    "cases": [
+      {
+        "number": 13,
+        "label": "persistent recursive B+Tree",
+        "source": "tests/persistent-btree.fls",
+        "inputSha256": "d782c1fb82fa766fc0f5f3e1b564407337065d1f3a63ff9142424042d0135acb",
+        "envText": "",
+        "status": "PASS",
+        "exit": 0,
+        "seconds": 24.295632738998393,
+        "firstError": null,
+        "traceAudit": {
+          "traceSha256": "771557a0cc76a9be44720b2c3869f83d79899fce669c1ae938fe128b3521434b",
+          "decodedExecs": 57,
+          "resumedExecsJoined": 0,
+          "allTerminalExecStatusesParsed": true,
+          "successfulNodeFamilyExecs": 0,
+          "failedNodeFamilyAttempts": 0,
+          "successfulPythonExecs": 0,
+          "allowedPrivateControllerPythonExecs": 0,
+          "successfulBasenameCounts": {
+            "as": 21,
+            "bash": 1,
+            "bwrap": 1,
+            "case-bin": 1,
+            "cc1": 22,
+            "collect2": 1,
+            "dirname": 1,
+            "flc": 1,
+            "gcc": 2,
+            "ld": 1,
+            "mkdir": 3,
+            "rg": 1,
+            "timeout": 1
+          }
+        },
+        "logSha256": "6b04cf690663c79839ba4b2a44a2ce5f4d8d440d6d123c13f11c8e425e004717",
+        "allOriginalInputsBoundsAndSourcesUnchanged": true,
+        "feature": "B+Tree",
+        "lastPassLine": "afj-db95 persistent recursive B+Tree PASS"
+      },
+      {
+        "number": 14,
+        "label": "bounded B+Tree range",
+        "source": "tests/btree-range.fls",
+        "inputSha256": "d47230a7b80966e3ccca7d6e93b25e94feca756c8547fe6439c39b41ab76d425",
+        "envText": "",
+        "status": "PASS",
+        "exit": 0,
+        "seconds": 43.77727865199995,
+        "firstError": null,
+        "traceAudit": {
+          "traceSha256": "93c74998bdf4aecf7969cdd79d9bd532eb7a6db613fba0021109503aa3d3023f",
+          "decodedExecs": 57,
+          "resumedExecsJoined": 0,
+          "allTerminalExecStatusesParsed": true,
+          "successfulNodeFamilyExecs": 0,
+          "failedNodeFamilyAttempts": 0,
+          "successfulPythonExecs": 0,
+          "allowedPrivateControllerPythonExecs": 0,
+          "successfulBasenameCounts": {
+            "as": 21,
+            "bash": 1,
+            "bwrap": 1,
+            "case-bin": 1,
+            "cc1": 22,
+            "collect2": 1,
+            "dirname": 1,
+            "flc": 1,
+            "gcc": 2,
+            "ld": 1,
+            "mkdir": 3,
+            "rg": 1,
+            "timeout": 1
+          }
+        },
+        "logSha256": "5d7582bb079b776f5a3b0a080e2e2319d3aceb4effa0114333228234d6124e8b",
+        "allOriginalInputsBoundsAndSourcesUnchanged": true,
+        "feature": "B+Tree",
+        "lastPassLine": "afj-db95 bounded B+Tree range PASS"
+      },
+      {
+        "number": 17,
+        "label": "schema MVCC merge",
+        "source": "tests/tcp-schema-mvcc.fls",
+        "inputSha256": "788300f57b92bf821a8a357cc20e488ee1cdae082cf667fa293972b446a4a061",
+        "envText": "",
+        "status": "PASS",
+        "exit": 0,
+        "seconds": 80.9519834620005,
+        "firstError": null,
+        "traceAudit": {
+          "traceSha256": "51b6e6f34adabad1e8ffc952c8559987dbd807d77fe2067e90e041b0eb7977fe",
+          "decodedExecs": 57,
+          "resumedExecsJoined": 0,
+          "allTerminalExecStatusesParsed": true,
+          "successfulNodeFamilyExecs": 0,
+          "failedNodeFamilyAttempts": 0,
+          "successfulPythonExecs": 0,
+          "allowedPrivateControllerPythonExecs": 0,
+          "successfulBasenameCounts": {
+            "as": 21,
+            "bash": 1,
+            "bwrap": 1,
+            "case-bin": 1,
+            "cc1": 22,
+            "collect2": 1,
+            "dirname": 1,
+            "flc": 1,
+            "gcc": 2,
+            "ld": 1,
+            "mkdir": 3,
+            "rg": 1,
+            "timeout": 1
+          }
+        },
+        "logSha256": "ccbd8a527692af61d0c0de4e05235f4d5a71863e9bb464c09a77190ba632a387",
+        "allOriginalInputsBoundsAndSourcesUnchanged": true,
+        "feature": "MVCC",
+        "lastPassLine": "afj-db95 schema MVCC PASS"
+      },
+      {
+        "number": 38,
+        "label": "MVCC conflicts",
+        "source": "tests/tcp-mvcc-conflicts.fls",
+        "inputSha256": "695a0d218f2968349e075fe4b885ab209b8ea7dea844f87656267b6597d2c459",
+        "envText": "",
+        "status": "PASS",
+        "exit": 0,
+        "seconds": 92.36482964800234,
+        "firstError": null,
+        "traceAudit": {
+          "traceSha256": "1533049e112a82aa0ceabaee9865cc59f533a7d8af352d0898810bc07a8894f1",
+          "decodedExecs": 57,
+          "resumedExecsJoined": 0,
+          "allTerminalExecStatusesParsed": true,
+          "successfulNodeFamilyExecs": 0,
+          "failedNodeFamilyAttempts": 0,
+          "successfulPythonExecs": 0,
+          "allowedPrivateControllerPythonExecs": 0,
+          "successfulBasenameCounts": {
+            "as": 21,
+            "bash": 1,
+            "bwrap": 1,
+            "case-bin": 1,
+            "cc1": 22,
+            "collect2": 1,
+            "dirname": 1,
+            "flc": 1,
+            "gcc": 2,
+            "ld": 1,
+            "mkdir": 3,
+            "rg": 1,
+            "timeout": 1
+          }
+        },
+        "logSha256": "46c4cf6eaffa9e13d448f1cedfeee318bc0019f7b143101b74efec0982c6e439",
+        "allOriginalInputsBoundsAndSourcesUnchanged": true,
+        "feature": "MVCC",
+        "lastPassLine": "afj-db95 MVCC same-schema generation write conflict PASS"
+      },
+      {
+        "number": 39,
+        "label": "range predicate conflict",
+        "source": "tests/tcp-range-predicate.fls",
+        "inputSha256": "e33e0d78d7b915d3cf2faf90e09b9adab0ee8028d7280a58789f2d87c75ba48b",
+        "envText": "",
+        "status": "PASS",
+        "exit": 0,
+        "seconds": 87.04133249499864,
+        "firstError": null,
+        "traceAudit": {
+          "traceSha256": "63fb6389b166c41c3bdef4a558fdd4dd7e4e2e92e9fca121a2694fccd657817d",
+          "decodedExecs": 57,
+          "resumedExecsJoined": 0,
+          "allTerminalExecStatusesParsed": true,
+          "successfulNodeFamilyExecs": 0,
+          "failedNodeFamilyAttempts": 0,
+          "successfulPythonExecs": 0,
+          "allowedPrivateControllerPythonExecs": 0,
+          "successfulBasenameCounts": {
+            "as": 21,
+            "bash": 1,
+            "bwrap": 1,
+            "case-bin": 1,
+            "cc1": 22,
+            "collect2": 1,
+            "dirname": 1,
+            "flc": 1,
+            "gcc": 2,
+            "ld": 1,
+            "mkdir": 3,
+            "rg": 1,
+            "timeout": 1
+          }
+        },
+        "logSha256": "469cfd5a6df046b31ba77d064f906b259e3d8e237f94368c78edd59cf899bb40",
+        "allOriginalInputsBoundsAndSourcesUnchanged": true,
+        "feature": "MVCC",
+        "lastPassLine": "afj-db95 TCP granular range update/delete PASS"
+      },
+      {
+        "number": 40,
+        "label": "row-version MVCC core",
+        "source": "tests/mvcc-row-version.fls",
+        "inputSha256": "8a9f002d43743808db2dd6e8a50743c1f457db2f9732b5997504f20454928075",
+        "envText": "",
+        "status": "PASS",
+        "exit": 0,
+        "seconds": 19.060490224001114,
+        "firstError": null,
+        "traceAudit": {
+          "traceSha256": "0e455a764fdc3e7bfbae5c7f48dc3e9ea0c09c1ee4d8739ea71683cdd99e58c3",
+          "decodedExecs": 57,
+          "resumedExecsJoined": 0,
+          "allTerminalExecStatusesParsed": true,
+          "successfulNodeFamilyExecs": 0,
+          "failedNodeFamilyAttempts": 0,
+          "successfulPythonExecs": 0,
+          "allowedPrivateControllerPythonExecs": 0,
+          "successfulBasenameCounts": {
+            "as": 21,
+            "bash": 1,
+            "bwrap": 1,
+            "case-bin": 1,
+            "cc1": 22,
+            "collect2": 1,
+            "dirname": 1,
+            "flc": 1,
+            "gcc": 2,
+            "ld": 1,
+            "mkdir": 3,
+            "rg": 1,
+            "timeout": 1
+          }
+        },
+        "logSha256": "a6139cd5a8eb3dd1b041bcdd24e747bf0e9f7a902721a7df04f87524d9ec4bb0",
+        "allOriginalInputsBoundsAndSourcesUnchanged": true,
+        "feature": "MVCC",
+        "lastPassLine": "afj-db95 row-version rollback PASS"
+      },
+      {
+        "number": 41,
+        "label": "row-version WAL recovery",
+        "source": "tests/tcp-row-version-recovery.fls",
+        "inputSha256": "b1a4ec3bf95d07a4059bf9a8c994846e48f23a46285ed9e226ff59e10ca6277e",
+        "envText": "AFJ_DB_WAL=/tmp/afj-db95-row-version-recovery.wal",
+        "status": "PASS",
+        "exit": 0,
+        "seconds": 84.83385665300011,
+        "firstError": null,
+        "traceAudit": {
+          "traceSha256": "fd5ecea3f1da9f52a03c212dd906dbc235d4d067351a2c22a705ca3a5f32707e",
+          "decodedExecs": 57,
+          "resumedExecsJoined": 0,
+          "allTerminalExecStatusesParsed": true,
+          "successfulNodeFamilyExecs": 0,
+          "failedNodeFamilyAttempts": 0,
+          "successfulPythonExecs": 0,
+          "allowedPrivateControllerPythonExecs": 0,
+          "successfulBasenameCounts": {
+            "as": 21,
+            "bash": 1,
+            "bwrap": 1,
+            "case-bin": 1,
+            "cc1": 22,
+            "collect2": 1,
+            "dirname": 1,
+            "flc": 1,
+            "gcc": 2,
+            "ld": 1,
+            "mkdir": 3,
+            "rg": 1,
+            "timeout": 1
+          }
+        },
+        "logSha256": "3c318ddfb2ef0a3eb2c7de8095926175e0f0655c30db8c826fba7e1957e5a505",
+        "allOriginalInputsBoundsAndSourcesUnchanged": true,
+        "feature": "MVCC",
+        "lastPassLine": "afj-db95 TCP row-version WAL recovery PASS"
+      },
+      {
+        "number": 42,
+        "label": "row-version catalog checkpoint",
+        "source": "tests/tcp-row-version-checkpoint.fls",
+        "inputSha256": "3fa4a88514697ff925ff652e31c80073c35f45d2168df035b4573d6b446dc526",
+        "envText": "AFJ_DB_WAL=/tmp/afj-db95-row-version-checkpoint.wal AFJ_DB_CATALOG_PAGES=/tmp/afj-db95-row-version-checkpoint.pages",
+        "status": "PASS",
+        "exit": 0,
+        "seconds": 82.71769258800487,
+        "firstError": null,
+        "traceAudit": {
+          "traceSha256": "b4fd9298cfb31e6fe320ef61a48e1e3ceca792d31e9e6b417141eb4c937e3156",
+          "decodedExecs": 57,
+          "resumedExecsJoined": 0,
+          "allTerminalExecStatusesParsed": true,
+          "successfulNodeFamilyExecs": 0,
+          "failedNodeFamilyAttempts": 0,
+          "successfulPythonExecs": 0,
+          "allowedPrivateControllerPythonExecs": 0,
+          "successfulBasenameCounts": {
+            "as": 21,
+            "bash": 1,
+            "bwrap": 1,
+            "case-bin": 1,
+            "cc1": 22,
+            "collect2": 1,
+            "dirname": 1,
+            "flc": 1,
+            "gcc": 2,
+            "ld": 1,
+            "mkdir": 3,
+            "rg": 1,
+            "timeout": 1
+          }
+        },
+        "logSha256": "181f2bf004568fbcc2bf5b79792b1aae7f4eac6ec154dc6dbbb22bfd322c81b8",
+        "allOriginalInputsBoundsAndSourcesUnchanged": true,
+        "feature": "MVCC",
+        "lastPassLine": "afj-db95 durable row-version checkpoint recovery PASS"
+      }
+    ],
+    "allOriginalInputsExpectedValuesAndBoundsUnchanged": true,
+    "productCoreSha256": {
+      "src/engine.fls": "691b86022ee95fe21736bab6f7025235d62b403d83c954d4f316c6451ad1fc19",
+      "src/tcp-server.fls": "b5f3988a48e8d1b38b9af60bc632d21498a326cdeb8294d2d6d9a5a3482a0982"
+    },
+    "sdkManifestSha256": "c5c90ed5234dc8d5d321fe63950c6c20f87f9f12ac9e51bc4c2edc4ef0101233",
+    "runtimeCSources": "Original native-release-gate worker compiles its unchanged20runtimeC sources; not an SDK runtime archive-link claim.",
+    "runtimeSourceManifestSha256": "cd5d2fd8ce9fbee14cec1ae8d7da00c30ca8a3dcc738f16c1196ad011445207b",
+    "secondsPerCase": 120,
+    "addressSpaceBytes": 2147483648,
+    "privateTestControllerOutsideTrace": 1
+  },
+  "sourceEdit": {
+    "oldSha256": "dd3fef7b37ac23ff843753fa0b7677350af1de346286111179763a9663caf078",
+    "newSha256": "19b87d622e3252ba723db20c31ed4b42a675ea403e1988652b91b91836b79b42",
+    "onlyAllowedTwoFlagsChanged": true,
+    "featuresPassed": 8,
+    "weightsAnd95TargetUnchanged": true
+  },
+  "features": [
+    {
+      "name": "CRUD",
+      "weight": 12,
+      "passed": true
+    },
+    {
+      "name": "WHERE",
+      "weight": 5,
+      "passed": true
+    },
+    {
+      "name": "JOIN",
+      "weight": 5,
+      "passed": true
+    },
+    {
+      "name": "GROUP/ORDER",
+      "weight": 4,
+      "passed": true
+    },
+    {
+      "name": "WAL/recovery",
+      "weight": 12,
+      "passed": true
+    },
+    {
+      "name": "page checksum",
+      "weight": 4,
+      "passed": true
+    },
+    {
+      "name": "COMMIT/ROLLBACK",
+      "weight": 8,
+      "passed": true
+    },
+    {
+      "name": "MVCC",
+      "weight": 6,
+      "passed": true
+    },
+    {
+      "name": "locks/isolation",
+      "weight": 6,
+      "passed": true
+    },
+    {
+      "name": "B+Tree",
+      "weight": 6,
+      "passed": true
+    },
+    {
+      "name": "TCP/auth",
+      "weight": 8,
+      "passed": true
+    },
+    {
+      "name": "permissions",
+      "weight": 4,
+      "passed": true
+    },
+    {
+      "name": "backup/restore",
+      "weight": 5,
+      "passed": true
+    },
+    {
+      "name": "health/metrics",
+      "weight": 3,
+      "passed": true
+    },
+    {
+      "name": "fsync/atomicity",
+      "weight": 5,
+      "passed": true
+    },
+    {
+      "name": "deadlock detection",
+      "weight": 3,
+      "passed": true
+    },
+    {
+      "name": "MariaDB regression suite",
+      "weight": 4,
+      "passed": true
+    }
+  ],
+  "scoreCalculation": {
+    "previousPassedWeight": 88,
+    "MVCCAddedWeight": 6,
+    "BPlusTreeAddedWeight": 6,
+    "passedWeight": 100,
+    "totalWeight": 100,
+    "percent": 100,
+    "unchangedTarget": 95
+  },
+  "case28After": {
+    "case": 28,
+    "status": "PASS",
+    "passed": 1,
+    "failed": 0,
+    "exit": 0,
+    "seconds": 19.058277641997847,
+    "actualPercent": 100,
+    "requiredPercent": 95,
+    "ordinaryCaseSeconds": 120,
+    "addressSpaceBytes": 2147483648,
+    "inputSha256": "19b87d622e3252ba723db20c31ed4b42a675ea403e1988652b91b91836b79b42",
+    "onlyTwoFeatureFlagsChangedAfter8FreshPasses": true,
+    "weightsThresholdExpectedValuesAndRunnerUnchanged": true,
+    "allTrackedDbAndRuntimeCUnchanged": true,
+    "privatePythonControllerOutsideTrace": 1,
+    "traceAudit": {
+      "traceSha256": "69c0e4ba300dd6aa44a55e5871de02efc04057e6c8bef6857bb85ae7bd32a08e",
+      "decodedExecs": 57,
+      "resumedExecsJoined": 0,
+      "allTerminalExecStatusesParsed": true,
+      "successfulNodeFamilyExecs": 0,
+      "failedNodeFamilyAttempts": 0,
+      "successfulPythonExecs": 0,
+      "allowedPrivateControllerPythonExecs": 0,
+      "successfulBasenameCounts": {
+        "as": 21,
+        "bash": 1,
+        "bwrap": 1,
+        "case-bin": 1,
+        "cc1": 22,
+        "collect2": 1,
+        "dirname": 1,
+        "flc": 1,
+        "gcc": 2,
+        "ld": 1,
+        "mkdir": 3,
+        "rg": 1,
+        "timeout": 1
+      }
+    },
+    "logSha256": "f996433b5a9532e20197005d9747a4f4adad391fd60bb2ecce151b0101fa3143",
+    "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "newImplementation": false
+  },
+  "preserved": {
+    "originalRunnersSha256": {
+      "tests/native-release-gate.sh": "662e50036dbc8ec5abd7fafe6e3179f1a91427dc32fe3d1cfe4b36190888c250",
+      "tests/release-gate.sh": "e464a355883b76a7780707f5acb2a19f187a21961f6eaa2653abe828aa583f99"
+    },
+    "allPreviouslyTrackedFilesExceptTwoCompatibilityLiteralsUnchanged": true,
+    "walRecoveryCommit": "1e55d063fe11b3905d79b2ca203f5eb384a7e317",
+    "walColdPasses": 2,
+    "walColdTotal": 2,
+    "previousOriginalRegressions": {
+      "passed": 349,
+      "total": 349,
+      "rerunForThisMetadataChange": false,
+      "sourceHashesUnchanged": true
+    },
+    "case24DiagnosisCommit": "adbe97e07cd2502ff64f3ada37915f40ad548f95",
+    "original71HistoricalSummary": {
+      "pass": 52,
+      "fail": 19,
+      "timeout": 0,
+      "skip": 0,
+      "rerunNow": false
+    },
+    "commercial": "HOLD",
+    "production": "NO"
+  },
+  "privateTestControllersOutsideTraces": {
+    "baselineCase28": 1,
+    "featureEightCases": 1,
+    "case28AfterFlags": 1
+  },
+  "nextHeavyWorkQueued": false
+}
