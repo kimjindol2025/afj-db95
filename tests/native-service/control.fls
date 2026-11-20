@@ -1,0 +1,67 @@
+;; Native policy for private service-case readiness and typed result checking.
+;; The Bash host owns only fixed argv, files and owned process lifetimes.
+(define service-action (env-get "AFJ_NATIVE_SERVICE_ACTION"))
+(define service-case (env-get "AFJ_NATIVE_SERVICE_CASE"))
+(defn service-assert [condition message]
+  (if (= condition true) true (throw message)))
+(defn service-case-valid []
+  (service-assert (or (= service-case "concurrency") (= service-case "soak"))
+                  "NATIVE_SERVICE_CASE_INVALID"))
+
+(defn service-ready []
+  (service-case-valid)
+  (let [log-path (env-get "AFJ_NATIVE_SERVICE_LOG")
+        port (str-to-num (env-get "AFJ_DB_PORT"))
+        marker (if (= service-case "soak") "TCP soak server STARTED"
+                                                   "TCP server STARTED")
+        marker-ms (if (= service-case "soak") 60000 30000)
+        marker-end (+ (now-ms) marker-ms)]
+    (while (and (< (now-ms) marker-end)
+                (not (str-includes (file_read log-path) marker)))
+      (sleep_ms 50))
+    (service-assert (str-includes (file_read log-path) marker)
+                    "NATIVE_SERVICE_START_MARKER_TIMEOUT")
+    (let [port-end (+ (now-ms) 30000) ready (atom false)]
+      (while (and (< (now-ms) port-end) (not (deref ready)))
+        (let [fd (tcp-client-open "127.0.0.1" port 200)]
+          (if (nil? fd) (sleep_ms 50)
+            (do (tcp-client-close fd) (reset! ready true)))))
+      (service-assert (deref ready) "NATIVE_SERVICE_PORT_TIMEOUT")
+      (println "NATIVE_SERVICE_READY"))))
+
+(defn service-result []
+  (service-case-valid)
+  (let [text (file_read (env-get "AFJ_NATIVE_SERVICE_CLIENT_LOG"))
+        prefix (if (= service-case "soak") "NATIVE_SOAK_RESULT "
+                                                  "NATIVE_CONCURRENCY_RESULT ")
+        lines (filter (fn [line] (str_starts_with line prefix)) (str_lines text))]
+    (service-assert (= (count lines) 1) "NATIVE_SERVICE_RESULT_COUNT")
+    (let [result (json-parse (str-slice (first lines) (count prefix)
+                                      (count (first lines))))]
+      (service-assert (= (get result "ok") true) "NATIVE_SERVICE_RESULT_NOT_OK")
+      (service-assert (= (get result "clients") 8) "NATIVE_SERVICE_CLIENT_COUNT")
+      (if (= service-case "concurrency")
+        (do
+          (service-assert (= (get result "rows") 8) "NATIVE_SERVICE_ROW_COUNT")
+          (service-assert (= (get result "all_insert_responses_ok") true)
+                           "NATIVE_SERVICE_INSERT_RESPONSES"))
+        (do
+          (doseq [key ["duration_ms" "elapsed_ms" "writes" "batches" "p95_ms" "max_ms"]]
+            (service-assert (number? (get result key)) "NATIVE_SERVICE_NUMBER_REQUIRED"))
+          (service-assert (= (get result "duration_ms") 300000) "NATIVE_SERVICE_DURATION")
+          (service-assert (>= (get result "elapsed_ms") 300000) "NATIVE_SERVICE_ELAPSED")
+          (service-assert (>= (get result "writes") 8) "NATIVE_SERVICE_MIN_WRITES")
+          (service-assert (= (get result "writes") (* (get result "batches") 8))
+                           "NATIVE_SERVICE_BATCH_COUNT")
+          (service-assert (<= (get result "p95_ms") 15000) "NATIVE_SERVICE_P95")
+          (service-assert (<= (get result "max_ms") 20000) "NATIVE_SERVICE_MAX")))
+      (println (str "NATIVE_SERVICE_CASE_RESULT "
+                    (json_str {"case" service-case "result" result}))))))
+
+(if (= service-action "port")
+  (let [port (tcp-client-free-port)]
+    (service-assert (number? port) "NATIVE_SERVICE_PORT_UNAVAILABLE")
+    (println port))
+  (if (= service-action "ready") (service-ready)
+    (if (= service-action "result") (service-result)
+      (throw "NATIVE_SERVICE_ACTION_INVALID"))))

@@ -1,0 +1,65 @@
+;; Private separate Native equivalent of tcp-concurrency-smoke.js.
+;; Original JS fixture/runner remain unchanged and their FAIL is preserved.
+(define concurrency-port (str-to-num (env-get "AFJ_DB_PORT")))
+(define concurrency-clients (atom []))
+(define concurrency-fds (atom []))
+
+(defn concurrency-assert [condition message]
+  (if (= condition true) true (throw message)))
+
+(defn concurrency-request [client body]
+  (let [fd (get client "fd")
+        sent (tcp-client-write fd (str (json_str body) "\n"))]
+    (concurrency-assert (= sent "ok") "concurrency socket write")
+    ;; The original JS has no per-request timer. The private reference cohort
+    ;; passed fresh-build+runtime120s; this host records AOT preparation
+    ;; separately and retains a120s runtime-only observation.
+    (let [line (tcp-client-read-line fd 120000)]
+      (if (nil? line) (throw "concurrency socket response missing") nil)
+      (json-parse line))))
+
+(try
+  (do
+    (doseq [index (range 0 8)]
+      (let [fd (tcp-client-open "127.0.0.1" concurrency-port 3000)]
+        (if (nil? fd) (throw "concurrency connection failed") nil)
+        (swap! concurrency-fds conj fd)
+        (let [login (concurrency-request {"fd" fd}
+                      {"type" "login" "user" "root"
+                       "password" "development-only"})]
+          (concurrency-assert (= (get login "ok") true) "concurrency login.ok")
+          (swap! concurrency-clients conj
+                 {"fd" fd "token" (get login "token")}))))
+    (let [client (get (deref concurrency-clients) 0)
+          created (concurrency-request client
+                    {"type" "query" "token" (get client "token")
+                     "statement" "CREATE TABLE concurrent_users (id INT PRIMARY KEY, name TEXT)"})]
+      (concurrency-assert (= (get created "ok") true) "concurrency create.ok"))
+    (let [jobs (map (fn [index]
+                      {"index" index "client" (get (deref concurrency-clients) index)})
+                    (range 0 8))
+          tasks (map (fn [job]
+                       (fn []
+                         (let [client (get job "client") index (get job "index")]
+                           (concurrency-request client
+                             {"type" "query" "token" (get client "token")
+                              "statement" (str "INSERT INTO concurrent_users (id,name) VALUES ("
+                                               index ",'client-" index "')")})))) jobs)
+          responses (run-parallel tasks)]
+      (concurrency-assert (= (count responses) 8) "concurrency eight completions")
+      ;; Original acceptance also requires all eight rows below. Explicitly
+      ;; asserting every response is an additional negative-error check.
+      (doseq [response responses]
+        (concurrency-assert (= (get response "ok") true) "concurrency insert.ok")))
+    (let [client (get (deref concurrency-clients) 0)
+          selected (concurrency-request client
+                     {"type" "query" "token" (get client "token")
+                      "statement" "SELECT * FROM concurrent_users"})]
+      (concurrency-assert (= (get selected "ok") true) "concurrency select.ok")
+      (concurrency-assert (= (count (get (get selected "result") "rows")) 8)
+                          "concurrency selected row count8")
+      (println (str "NATIVE_CONCURRENCY_RESULT "
+                    (json_str {"ok" true "clients" 8 "rows" 8
+                               "all_insert_responses_ok" true})))))
+  (finally
+    (doseq [fd (deref concurrency-fds)] (tcp-client-close fd))))

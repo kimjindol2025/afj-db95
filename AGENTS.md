@@ -16,4 +16,7 @@
 `docs/NATIVE-RELEASE-20261120.md` 및 `docs/commercial-readiness-matrix.md`에 있습니다.
 TCP SQL 커밋 불확실성 후 접근 차단은 `docs/NATIVE-COMMIT-HEALTH.md`의 별도
 scoped 근거를 따릅니다. 이 통과를 전체 서비스·운영 관문 통과로 합치지 않습니다.
+별도 Native 5분 부하와 실제 14,664행 WAL의 대량 복구 실패는
+`docs/NATIVE-SERVICE-LOAD.md`에 기록합니다. 기존 원본 시험 129개 파일과
+71개 게이트를 보존하며, 새 Native 서비스 시험은 별도 사례로 취급합니다.
 상용 준비는 HOLD이고 운영 배포는 별도 승인 전까지 하지 않습니다.

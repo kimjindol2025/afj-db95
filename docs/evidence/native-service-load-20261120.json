@@ -1,0 +1,441 @@
+{
+  "schema": "db95-native-service-load/1",
+  "overall": "LARGE_COLD_RECOVERY_FAIL",
+  "runtimeCases": "SCOPED_PASS",
+  "commercial": "HOLD",
+  "production": "NO",
+  "pathsOwners": "<가림>",
+  "dbCoreHead": "c6bd1f5e4a06cd0aec7ca24cc86a78ac66e5f411",
+  "dbCoreModuleSha256": "e153fb7f21830a69975bb177929cd28ea30f2b0cb5e0c99dd6fab3bb937a742c",
+  "fxHead": "d8dc4c63adcfe2ac3f7d7edf69f890407c2dd4da",
+  "sdkManifestSha256": "e1f22e75e3a25b662411dc42d23e47049c31c0f5b80a75e4d3b4d75ee8708181",
+  "compilerSha256": "42fc8355bf76b8e3087d05bc1b9a63c0c3f0e102ed5331bea11bb86aae0b08aa",
+  "runtimeArchiveSha256": "053971a3403cfdf0b1c15a0efa8e76a9eb5e5325df0fb4955279abe1bb6c6be4",
+  "runtimeArchiveLinked": true,
+  "fixedHost": {
+    "concurrency": {
+      "qualification": {
+        "schema": "db95-native-fixed-host-qualification/1",
+        "case": "concurrency",
+        "status": "PASS",
+        "goal": "ACTIVE",
+        "commercial": "HOLD",
+        "production": "NO",
+        "runtimeSeconds": 120,
+        "buildSeparateFromRuntime": true,
+        "firstFreshBuildPlusLoad360Gate": "TIMEOUT124 retained",
+        "literalRoots": "SDK/source/artifact root spaces,apostrophe,Korean,percent,dollar,LF; source/output roots endLF; explicitargv/NUL records",
+        "sourceModuleSha256": "e153fb7f21830a69975bb177929cd28ea30f2b0cb5e0c99dd6fab3bb937a742c",
+        "candidateSha256": {
+          "run-case.sh": "0b9d6d801bde521823a1543fb2647da68ca33777d042c1c24f7786baacf3a776",
+          "control.fls": "f96643b781f5c952b9be7ca85fd52d6e47acdfbd579e3ce66879563982d30e8c",
+          "tcp-concurrency-client.fls": "6658184f42d0e3a8d3a22b0011231c8194e57d88d7e831bbef78fe3dc2cd825e",
+          "tcp-long-soak-client.fls": "cba5717076df2101f72e4033bcf03c7cf1b709aa541f80e89c86c99509e016ce"
+        },
+        "hostExit": 0,
+        "result": {
+          "ok": true,
+          "clients": 8,
+          "rows": 8,
+          "all_insert_responses_ok": true
+        },
+        "wholeObservedSecondsIncludesQueueAndBuildAndRuntime": 177.67251169400697,
+        "candidateSourcesUnchanged": true,
+        "artifactsSha256": {
+          "status.txt": "d465ffca342ccf4ab305ad7dfc0047366a84c3b69789ac9f577356856d90c87c",
+          "build-status.txt": "4b3fd147567dfb1435c17be76a2663fb671f069c5712d36bdcb34c742dd31073",
+          "runtime-status.txt": "7db3036f77faefad1827f349f85dc178781f36b4a88b9433f9ca39ec637915f8",
+          "result.stdout": "0d07a35c11ca4eaed7c0ed5ee66e742de6a901d40edffbdec7a1af05036a4444",
+          "client.stdout": "6388b8ad8e0654da46cc15e135908b760ecc40d969fc16ed3c8d03ce10ad434c",
+          "client.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "ready.stdout": "905ad62efc8e7649eec5e41282d7ad349c1fb338daee86862e7c86560bd69691",
+          "ready.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "daemon.stdout": "bb6b38d6a8326c02afbd412b0d8fdfa7ac28339f83d94fcdff6d77bd89c769bd",
+          "daemon.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      },
+      "traceAudit": {
+        "traceSha256": "9d558f00e60bde29a6053d5daa79495d4f71cfae6bff83da6f05a2e403bd39db",
+        "decodedExecs": 183,
+        "resumedExecsJoined": 0,
+        "allTerminalExecStatusesParsed": true,
+        "successfulNodeFamilyExecs": 0,
+        "failedNodeFamilyAttempts": 0,
+        "successfulPythonExecs": 0,
+        "allowedPrivateControllerPythonExecs": 0,
+        "successfulBasenameCounts": {
+          "as": 3,
+          "bash": 6,
+          "bwrap": 1,
+          "cat": 2,
+          "cc1": 3,
+          "client-bin": 1,
+          "collect2": 3,
+          "control-bin": 3,
+          "daemon-bin": 1,
+          "flc": 6,
+          "flock": 1,
+          "gcc": 3,
+          "grep": 3,
+          "ld": 3,
+          "ln": 10,
+          "mkdir": 3,
+          "readlink": 2,
+          "run-case.sh": 1,
+          "sha256sum": 2,
+          "timeout": 10,
+          "verify.sh": 2
+        }
+      }
+    },
+    "soak": {
+      "qualification": {
+        "schema": "db95-native-fixed-host-qualification/1",
+        "case": "soak",
+        "status": "PASS",
+        "goal": "ACTIVE",
+        "commercial": "HOLD",
+        "production": "NO",
+        "runtimeSeconds": 360,
+        "buildSeparateFromRuntime": true,
+        "firstFreshBuildPlusLoad360Gate": "TIMEOUT124 retained",
+        "literalRoots": "SDK/source/artifact root spaces,apostrophe,Korean,percent,dollar,LF; source/output roots endLF; explicitargv/NUL records",
+        "sourceModuleSha256": "e153fb7f21830a69975bb177929cd28ea30f2b0cb5e0c99dd6fab3bb937a742c",
+        "candidateSha256": {
+          "run-case.sh": "0b9d6d801bde521823a1543fb2647da68ca33777d042c1c24f7786baacf3a776",
+          "control.fls": "f96643b781f5c952b9be7ca85fd52d6e47acdfbd579e3ce66879563982d30e8c",
+          "tcp-concurrency-client.fls": "6658184f42d0e3a8d3a22b0011231c8194e57d88d7e831bbef78fe3dc2cd825e",
+          "tcp-long-soak-client.fls": "cba5717076df2101f72e4033bcf03c7cf1b709aa541f80e89c86c99509e016ce"
+        },
+        "hostExit": 0,
+        "result": {
+          "ok": true,
+          "clients": 8,
+          "duration_ms": 300000,
+          "elapsed_ms": 300124,
+          "writes": 13424,
+          "batches": 1678,
+          "p95_ms": 202,
+          "max_ms": 441,
+          "throughput_per_second": 44.74666666666667
+        },
+        "wholeObservedSecondsIncludesQueueAndBuildAndRuntime": 443.14274572099384,
+        "candidateSourcesUnchanged": true,
+        "artifactsSha256": {
+          "status.txt": "d465ffca342ccf4ab305ad7dfc0047366a84c3b69789ac9f577356856d90c87c",
+          "build-status.txt": "4b3fd147567dfb1435c17be76a2663fb671f069c5712d36bdcb34c742dd31073",
+          "runtime-status.txt": "7db3036f77faefad1827f349f85dc178781f36b4a88b9433f9ca39ec637915f8",
+          "result.stdout": "4adae759dd02d927834b124f61b57f38c0364135a644329355d01d111ab17df5",
+          "client.stdout": "3ce6f629abc78e4d5743942511afd218c03bde89a5300ee18d11a0f6bb1dc678",
+          "client.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "ready.stdout": "905ad62efc8e7649eec5e41282d7ad349c1fb338daee86862e7c86560bd69691",
+          "ready.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "daemon.stdout": "427de2d102d612ce0a5574373de125bc9314b6d837cde363a478a81042cd401b",
+          "daemon.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      },
+      "traceAudit": {
+        "traceSha256": "fac2b341ccba9c24da690670ca1c1a50470c77ede983a2b0f0f85b5338f4c369",
+        "decodedExecs": 183,
+        "resumedExecsJoined": 0,
+        "allTerminalExecStatusesParsed": true,
+        "successfulNodeFamilyExecs": 0,
+        "failedNodeFamilyAttempts": 0,
+        "successfulPythonExecs": 0,
+        "allowedPrivateControllerPythonExecs": 0,
+        "successfulBasenameCounts": {
+          "as": 3,
+          "bash": 6,
+          "bwrap": 1,
+          "cat": 2,
+          "cc1": 3,
+          "client-bin": 1,
+          "collect2": 3,
+          "control-bin": 3,
+          "daemon-bin": 1,
+          "flc": 6,
+          "flock": 1,
+          "gcc": 3,
+          "grep": 3,
+          "ld": 3,
+          "ln": 10,
+          "mkdir": 3,
+          "readlink": 2,
+          "run-case.sh": 1,
+          "sha256sum": 2,
+          "timeout": 10,
+          "verify.sh": 2
+        }
+      }
+    }
+  },
+  "firstFreshBuildAndLoad360": {
+    "schema": "db95-native-service-soak/1",
+    "status": "FAIL",
+    "goal": "ACTIVE",
+    "commercial": "HOLD",
+    "production": "NO",
+    "limits": {
+      "wholeSeconds": 360,
+      "loadMilliseconds": 300000,
+      "p95Milliseconds": 15000,
+      "maxMilliseconds": 20000,
+      "requestMilliseconds": 20000,
+      "markerSeconds": 60,
+      "portSeconds": 30,
+      "clients": 8,
+      "minimumWrites": 8,
+      "checkpointEveryBatches": 10,
+      "addressSpaceBytes": 2147483648
+    },
+    "sourceSha256": {
+      "tests/tcp-long-soak.js": "9263d274c4e25fffdd43093f9bede78cc6aee96c83615ddb2d547afcdef5e915",
+      "tests/tcp-long-soak.fls": "5990030fce1a718bc37828f0a5f625e45cba4b86e2d3ba66a4acbf4b199d079a",
+      "tests/tcp-soak-daemon.fls": "2349c55077b292cb8b263eb7dbd4bb82d3e54ad07bc98c2e9e95aba6925cbdbb",
+      "tests/native-release-gate.sh": "662e50036dbc8ec5abd7fafe6e3179f1a91427dc32fe3d1cfe4b36190888c250",
+      "tests/release-gate.sh": "e464a355883b76a7780707f5acb2a19f187a21961f6eaa2653abe828aa583f99",
+      "src/tcp-server.fls": "e153fb7f21830a69975bb177929cd28ea30f2b0cb5e0c99dd6fab3bb937a742c"
+    },
+    "sdkManifestSha256": "e1f22e75e3a25b662411dc42d23e47049c31c0f5b80a75e4d3b4d75ee8708181",
+    "compilerSha256": "42fc8355bf76b8e3087d05bc1b9a63c0c3f0e102ed5331bea11bb86aae0b08aa",
+    "runtimeArchiveSha256": "053971a3403cfdf0b1c15a0efa8e76a9eb5e5325df0fb4955279abe1bb6c6be4",
+    "scope": "New private Native client from unchanged original JS spec; protected malformedFL/71gate remain unchanged and separate. SDK runtime archive linked. Private Python process orchestration only. SameOS synthetic development storage, not powerloss or production acceptance.",
+    "buildSeconds": 61.59917449799832,
+    "daemonStarted": true,
+    "failure": "<가림>",
+    "daemonExitAfterOwnCleanup": -15,
+    "wholeObservedSeconds": 360.0403893430048,
+    "sourceUnchanged": true,
+    "privateDiagnosticSha256": {
+      "client.fl": "cba5717076df2101f72e4033bcf03c7cf1b709aa541f80e89c86c99509e016ce",
+      "controller.py": "daf48cad36ecfcc4828e9a94b9741d4cd9058a5a524b661c11e51d7e8633d276"
+    },
+    "artifacts": {
+      "daemon-bin": "442ab3d7bf5b1663c03095f3c630e5610ae0f7e3d70641270f071f3378c6eeae",
+      "client-bin": "613de8d968ac045155ac4123ea95bbd499a3682d58ae773a14dac7c8ea489575",
+      "daemon.stdout": "427de2d102d612ce0a5574373de125bc9314b6d837cde363a478a81042cd401b",
+      "daemon.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "client.stdout": "b371e3741c0f498debc937ecce960a3975f8450e8d1763797f0dc2464e3daa7f",
+      "client.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "separatePrebuiltRuntime": {
+    "schema": "db95-native-service-soak/1",
+    "status": "PASS",
+    "goal": "ACTIVE",
+    "commercial": "HOLD",
+    "production": "NO",
+    "limits": {
+      "wholeSeconds": 360,
+      "loadMilliseconds": 300000,
+      "p95Milliseconds": 15000,
+      "maxMilliseconds": 20000,
+      "requestMilliseconds": 20000,
+      "markerSeconds": 60,
+      "portSeconds": 30,
+      "clients": 8,
+      "minimumWrites": 8,
+      "checkpointEveryBatches": 10,
+      "addressSpaceBytes": 2147483648
+    },
+    "sourceSha256": {
+      "tests/tcp-long-soak.js": "9263d274c4e25fffdd43093f9bede78cc6aee96c83615ddb2d547afcdef5e915",
+      "tests/tcp-long-soak.fls": "5990030fce1a718bc37828f0a5f625e45cba4b86e2d3ba66a4acbf4b199d079a",
+      "tests/tcp-soak-daemon.fls": "2349c55077b292cb8b263eb7dbd4bb82d3e54ad07bc98c2e9e95aba6925cbdbb",
+      "tests/native-release-gate.sh": "662e50036dbc8ec5abd7fafe6e3179f1a91427dc32fe3d1cfe4b36190888c250",
+      "tests/release-gate.sh": "e464a355883b76a7780707f5acb2a19f187a21961f6eaa2653abe828aa583f99",
+      "src/tcp-server.fls": "e153fb7f21830a69975bb177929cd28ea30f2b0cb5e0c99dd6fab3bb937a742c"
+    },
+    "sdkManifestSha256": "e1f22e75e3a25b662411dc42d23e47049c31c0f5b80a75e4d3b4d75ee8708181",
+    "compilerSha256": "42fc8355bf76b8e3087d05bc1b9a63c0c3f0e102ed5331bea11bb86aae0b08aa",
+    "runtimeArchiveSha256": "053971a3403cfdf0b1c15a0efa8e76a9eb5e5325df0fb4955279abe1bb6c6be4",
+    "scope": "SEPARATE runtime-only360s using byte-identical already-built Native ELF;300000ms/8clients/p9515000/max20000/request20000/start60/port30 unchanged. Firstfreshbuild+load360s TIMEOUT retained; NOT equivalence acceptance of protected25 or fresh-build360 gate.",
+    "runtimeOnly": true,
+    "freshBuildInThisGate": false,
+    "separateOriginalFreshBuildSeconds": 61.59917449799832,
+    "originalFreshBuildPlusLoadGate": "TIMEOUT124 retained; not accepted",
+    "reusedElfSha256": {
+      "daemon-bin": "442ab3d7bf5b1663c03095f3c630e5610ae0f7e3d70641270f071f3378c6eeae",
+      "client-bin": "613de8d968ac045155ac4123ea95bbd499a3682d58ae773a14dac7c8ea489575"
+    },
+    "daemonStarted": true,
+    "clientExit": 0,
+    "result": {
+      "ok": true,
+      "clients": 8,
+      "duration_ms": 300000,
+      "elapsed_ms": 300214,
+      "writes": 14664,
+      "batches": 1833,
+      "p95_ms": 191,
+      "max_ms": 340,
+      "throughput_per_second": 48.88
+    },
+    "daemonExitAfterOwnCleanup": -15,
+    "wholeObservedSeconds": 300.5434989579953,
+    "sourceUnchanged": true,
+    "privateDiagnosticSha256": {
+      "client.fl": "cba5717076df2101f72e4033bcf03c7cf1b709aa541f80e89c86c99509e016ce",
+      "controller.py": "a208c86f3c7762a93627371ad6eff1b178c7c30a52528015d914e95285cc045b"
+    },
+    "artifacts": {
+      "daemon-bin": "442ab3d7bf5b1663c03095f3c630e5610ae0f7e3d70641270f071f3378c6eeae",
+      "client-bin": "613de8d968ac045155ac4123ea95bbd499a3682d58ae773a14dac7c8ea489575",
+      "daemon.stdout": "427de2d102d612ce0a5574373de125bc9314b6d837cde363a478a81042cd401b",
+      "daemon.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "client.stdout": "5e82598e1ce9eb82f5fb1353aa9f2a36039d7cab7beff5bbd226b95751c12434",
+      "client.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "separatePrivateFreshConcurrency": {
+    "schema": "db95-native-concurrency-client/1",
+    "status": "PASS",
+    "goal": "ACTIVE",
+    "commercial": "HOLD",
+    "production": "NO",
+    "sourceSha256": {
+      "tests/tcp-concurrency-smoke.js": "02bf99199924891f3b669d84f1d6668a05fc158b0a6d9dae11e1b896dffae74a",
+      "tests/tcp-daemon.fls": "fc59394bd9c01a1690e0005139abe40a6a9e5f88ed47ab99a9212b65245cd978",
+      "src/tcp-server.fls": "e153fb7f21830a69975bb177929cd28ea30f2b0cb5e0c99dd6fab3bb937a742c"
+    },
+    "wholeSeconds": 120,
+    "markerSeconds": 30,
+    "portSeconds": 30,
+    "compilerSha256": "42fc8355bf76b8e3087d05bc1b9a63c0c3f0e102ed5331bea11bb86aae0b08aa",
+    "runtimeArchiveSha256": "053971a3403cfdf0b1c15a0efa8e76a9eb5e5325df0fb4955279abe1bb6c6be4",
+    "scope": "New separate Native semantic equivalent from original JS:8logins/create/8simultaneousinserts/SELECTok+8rows. No original test or runner modified.",
+    "originalCase24StillFail": true,
+    "buildSeconds": 58.90538624099281,
+    "clientExit": 0,
+    "result": {
+      "ok": true,
+      "clients": 8,
+      "rows": 8,
+      "all_insert_responses_ok": true
+    },
+    "daemonExitAfterOwnCleanup": -15,
+    "wholeObservedSeconds": 59.28997698699823,
+    "sourceUnchanged": true,
+    "privateDiagnosticSha256": {
+      "client.fl": "35aeaba65cf30929b50d9f45fe93b8ae443723081da146f246ed795d48a5d038",
+      "controller.py": "0da254526ea25401734d7ef1955fa61d0de0802b111c5b37ee0281efd3dbc662"
+    },
+    "artifacts": {
+      "daemon-bin": "51a34d3e21707b7e83a6e7af6fdf2f22a2309145e1b94f3417bb1aa6f3cd4a8a",
+      "client-bin": "ae614eb265b385ed3d95f4ceca05339d45e471c6131b53c8771bf545eec2ed05",
+      "daemon.stdout": "bb6b38d6a8326c02afbd412b0d8fdfa7ac28339f83d94fcdff6d77bd89c769bd",
+      "daemon.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "client.stdout": "6388b8ad8e0654da46cc15e135908b760ecc40d969fc16ed3c8d03ce10ad434c",
+      "client.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "largeColdRecovery": {
+    "status": "FAIL",
+    "rows": [
+      {
+        "turn": 1,
+        "exit": 1,
+        "result": null
+      },
+      {
+        "turn": 2,
+        "exit": 1,
+        "result": null
+      }
+    ],
+    "walUnchanged": true,
+    "sourceModuleSha256": "e153fb7f21830a69975bb177929cd28ea30f2b0cb5e0c99dd6fab3bb937a742c",
+    "expectedCount": 14664,
+    "expectedRevision": 14665,
+    "expectedDigest": "006ad83f82dab3e913175dd61eb1b30550a39cf1bb92ccc3c31a67af91b2cf8e",
+    "perProcessSeconds": 120,
+    "addressSpaceBytes": 2147483648,
+    "commercial": "HOLD",
+    "scope": "Read-only recovery of actual14664acknowledged5minuteNativeinserts, everyrowandrevisionandindependentordereddatahash, twofreshprocesses. Original3200paddingfixture only2ASTs not thisload. No datasettruncate/reseed/expectedvalue/limit changes. AOTbuild separate from120s per recovery."
+  },
+  "independentWalOracle": {
+    "status": "PASS",
+    "scope": "Independent disk-WAL structural/checksum/allcommittedAST-rowset oracle only; does NOT pass failedNativecoldrecovery",
+    "walSha256": "35595da610c494059df5fc85487f1c8b28d4951bbb486a13e73ac68768a11ae2",
+    "walBytes": 5667767,
+    "completeCommitRecords": 14665,
+    "createTableAsts": 1,
+    "committedInsertRows": 14664,
+    "everyIdAndNameExact": true,
+    "orderedPairsDigest": "006ad83f82dab3e913175dd61eb1b30550a39cf1bb92ccc3c31a67af91b2cf8e",
+    "expectedSameAsNativeReader": true,
+    "walUnchanged": true,
+    "nativeRecoveryStatus": "FAIL twice at2GiB",
+    "commercial": "HOLD"
+  },
+  "coldLastInstrumentedProgress": {
+    "splitLines": 29331,
+    "recordCursor": 14000,
+    "commitRevision": 7000,
+    "subsequentError": "regex allocation failed",
+    "instrumentationNotAcceptance": true
+  },
+  "originalGateRemains": {
+    "pass": 52,
+    "fail": 19,
+    "timeout": 0,
+    "skip": 0,
+    "cases": 71,
+    "originalCase24And25": "FAIL retained"
+  },
+  "protectedOriginalFilesChanged": false,
+  "newProductPythonJsTs": false,
+  "buildNotIncludedInRuntimeOnlyAcceptance": true,
+  "retainedPrivateSetupFailures": [
+    "R27collector expected33externalfiles, actual32+builtinpwd; record-only recovery; no originalcase rerun",
+    "EarlierR28/R29prerequisite guard stopped before any build/workload",
+    "FirstR29private parse missing close; ownedwaitinglauncher canceled before child; correctedprivateparse",
+    "Firstfreshbuild+load360 TIMEOUT124 remainsfailure"
+  ],
+  "newFilesSha256": {
+    "tests/native-service/run-case.sh": "0b9d6d801bde521823a1543fb2647da68ca33777d042c1c24f7786baacf3a776",
+    "tests/native-service/control.fls": "f96643b781f5c952b9be7ca85fd52d6e47acdfbd579e3ce66879563982d30e8c",
+    "tests/native-service/tcp-concurrency-client.fls": "6658184f42d0e3a8d3a22b0011231c8194e57d88d7e831bbef78fe3dc2cd825e",
+    "tests/native-service/tcp-long-soak-client.fls": "cba5717076df2101f72e4033bcf03c7cf1b709aa541f80e89c86c99509e016ce"
+  },
+  "privateControllerTraceAudits": {
+    "prebuiltRuntime": {
+      "traceSha256": "1dfaa0fbb80855df0415bd6135c9a9147e027c0b50c8caed607b672b7d5c1e80",
+      "decodedExecs": 4,
+      "resumedExecsJoined": 0,
+      "allTerminalExecStatusesParsed": true,
+      "successfulNodeFamilyExecs": 0,
+      "failedNodeFamilyAttempts": 0,
+      "successfulPythonExecs": 1,
+      "allowedPrivateControllerPythonExecs": 1,
+      "successfulBasenameCounts": {
+        "bwrap": 1,
+        "client-bin": 1,
+        "daemon-bin": 1,
+        "python3": 1
+      }
+    },
+    "freshConcurrency": {
+      "traceSha256": "3ad974ec623cc443bef31132cd7dc0b41b9629967c725482846ae2c8a71db825",
+      "decodedExecs": 16,
+      "resumedExecsJoined": 0,
+      "allTerminalExecStatusesParsed": true,
+      "successfulNodeFamilyExecs": 0,
+      "failedNodeFamilyAttempts": 0,
+      "successfulPythonExecs": 1,
+      "allowedPrivateControllerPythonExecs": 1,
+      "successfulBasenameCounts": {
+        "as": 2,
+        "bwrap": 1,
+        "cc1": 2,
+        "client-bin": 1,
+        "collect2": 2,
+        "daemon-bin": 1,
+        "flc": 2,
+        "gcc": 2,
+        "ld": 2,
+        "python3": 1
+      }
+    }
+  }
+}

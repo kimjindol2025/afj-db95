@@ -20,6 +20,9 @@ TCP SQL 커밋 결과가 불확실하면 `COMMIT_OUTCOME_UNKNOWN`을 반환하�
 접근을 차단하며, 새 프로세스 복구와 결과 확인이 필요합니다.
 [`커밋 안전성 근거`](docs/NATIVE-COMMIT-HEALTH.md)의 scoped 통과를 실제
 프로토콜·TLS·장기 부하·운영 검증 완료로 합치지 않습니다.
+별도 [Native 서비스 시험](docs/NATIVE-SERVICE-LOAD.md)은 8개 연결·5분 부하를
+통과했지만, 그 실제 14,664행 WAL의 새 프로세스 복구는 메모리 할당 오류로
+실패했습니다. 이 대량 복구 결함은 현재 배포 차단 사유입니다.
 
 - 테이블 생성
 - 행 삽입

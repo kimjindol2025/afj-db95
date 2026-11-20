@@ -138,8 +138,16 @@ before any build/workload began; their first setup failures are separate.
 
 ## Remaining commercial gates
 
+Subsequent [separate Native service cases](NATIVE-SERVICE-LOAD.md) establish
+eight-client plaintext concurrency and a prebuilt five-minute runtime cohort.
+The first fresh-build-plus-load360 attempt timed out. Two fresh Native
+recoveries of the actual 14,664-row WAL fail allocation at the unchanged2GiB
+cap while an independent disk oracle validates all committed rows/checksums.
+This is an additional release blocker, not a changed row or pass in the
+original71 diagnostic above.
+
 Native equivalents of every original real protocol/TLS/auth/client scenario,
-actual five-minute service load, writer ownership, production storage-root
+complete service-load/recovery qualification, writer ownership, production storage-root
 identity, safe generation reclamation, bounded disk usage and WAL rotation,
 consistent backup/restore and deployment rehearsals, observability and
 independent review remain required. Other standalone storage engines/modules

@@ -26,16 +26,18 @@
 | 영역 | 현재 Native 증거 | 현재 상태 |
 |---|---|---|
 | 전체 회귀 | 원본 71개 사례 모두 시도; 52 PASS / 19 FAIL | FAIL |
-| 저장·복구 | commit-I/O 결과 불명 후 접근 차단 292항목 및 기존 WAL/Unicode/checkpoint 57항목 scoped 통과; writer 소유권·root 식별·세대 회수·디스크 한도 미완료 | BLOCKED |
+| 저장·복구 | commit-I/O 292항목 및 기존 회귀 57항목 scoped 통과; 실제 14,664행 WAL의 새 프로세스 복구 2회 모두 2GiB 안에서 할당 실패; 소유권·root·회수·디스크 한도 미완료 | FAIL |
 | SQL·격리·인덱스 | 성공한 원본 Native 사례 목록 보존; 호환성 baseline 88%, 경로 계약 차이 미해결 | UNRESOLVED |
-| 실제 프로토콜·TLS·동시 접속 | JS client/셸 시나리오 미이식; 전체 실제 서비스 검증 근거 부족 | BLOCKED |
-| 장기 부하 | 원본 5분 fixture의 닫히지 않은 괄호를 현재 strict compiler가 부하 본문 전에 거부; Native 실제 5분 부하 완료 근거 필요 | BLOCKED |
+| 실제 프로토콜·TLS·동시 접속 | 별도 Native 8연결·8행 및 plaintext 5분 시험 통과; 원본 JS/TLS/client 시나리오의 전체 이식·검증 미완료 | BLOCKED |
+| 장기 부하 | 별도 사전 빌드 Native 5분 runtime 통과; 빌드 포함 360초 시도는 TIMEOUT 보존; 원본 malformed Case 25는 FAIL 유지 | FAIL |
 | 운영·배포·관측·독립 리뷰 | 기존 AFJ/Node 이력으로 Native 종료 조건을 대체하지 않음 | BLOCKED |
 
 이하 표는 기존 AFJ/Node 경로의 검증 이력과 상용 요구사항을 보존한 것이다.
 해당 PASS를 최신 Native PASS로 읽으면 안 된다.
 새 저장소 안전성 변경의 전후 대조·실제 TCP 오류 응답·범위 제한은
 [Native commit health](NATIVE-COMMIT-HEALTH.md)에 별도로 기록했다.
+추가 [Native 서비스 부하와 대량 복구](NATIVE-SERVICE-LOAD.md)는 원본 게이트와
+별도 cohort로 기록하며, 부하 통과로 복구 실패를 대체하지 않는다.
 
 ## 판정 규칙
 

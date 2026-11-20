@@ -1,0 +1,150 @@
+;; Private Native client for the unchanged tcp-long-soak.js scenario.
+;; The controller builds and starts the unchanged tcp-soak-daemon.fls.
+;; Eight independent socket requests run concurrently in each batch.
+(define soak-port (str-to-num (env-get "AFJ_DB_PORT")))
+(define soak-ms (str-to-num (env-get "AFJ_SOAK_MS")))
+(define soak-p95-limit (str-to-num (env-get "AFJ_SOAK_P95_LATENCY_MS")))
+(define soak-max-limit (str-to-num (env-get "AFJ_SOAK_MAX_LATENCY_MS")))
+(define soak-clients (atom []))
+(define soak-fds (atom []))
+(define soak-writes (atom 0))
+(define soak-batches (atom 0))
+(define soak-next-id (atom 0))
+;; An exact millisecond histogram retains every observation's multiplicity.
+;; It computes the same floor((N-1)*0.95) order statistic without growing
+;; immutable-vector copies during a long run. No sample is discarded.
+(define soak-latencies (atom {}))
+(define soak-max-observed (atom 0))
+
+(defn soak-assert [condition message]
+  (if (= condition true) true (throw message)))
+
+(defn soak-request [client body]
+  (let [started (now-ms)
+        fd (get client "fd")
+        sent (tcp-client-write fd (str (json_str body) "\n"))]
+    (soak-assert (= sent "ok") "soak socket write failed")
+    (let [line (tcp-client-read-line fd 20000)]
+      (if (nil? line) (throw "soak request timeout") nil)
+      (let [response (json-parse line)]
+        (assoc response "_latency" (- (now-ms) started))))))
+
+(defn soak-last-row [message]
+  (let [client (get (deref soak-clients) 0)
+        selected (soak-request client
+          {"type" "query" "token" (get client "token")
+           "statement" (str "SELECT * FROM soak_users WHERE id="
+                            (- (deref soak-next-id) 1))})]
+    (soak-assert (= (get selected "ok") true) (str message " ok"))
+    (soak-assert (= (count (get (get selected "result") "rows")) 1)
+                 (str message " row count"))))
+
+(defn soak-record-latency [latency]
+  (let [key (str latency)]
+    (swap! soak-latencies assoc key
+           (+ (get (deref soak-latencies) key 0) 1))
+    (if (> latency (deref soak-max-observed))
+      (reset! soak-max-observed latency) nil)))
+
+(defn soak-percentile []
+  (let [ordered (sort (map (fn [key] (str-to-num key))
+                          (keys (deref soak-latencies))))
+        wanted (floor (* (- (deref soak-writes) 1) 0.95))
+        seen (atom 0)
+        value (atom nil)]
+    (doseq [latency ordered]
+      (swap! seen + (get (deref soak-latencies) (str latency)))
+      (if (and (nil? (deref value)) (> (deref seen) wanted))
+        (reset! value latency) nil))
+    (soak-assert (= (deref seen) (deref soak-writes))
+                 "soak latency sample count")
+    (deref value)))
+
+(defn soak-percentile-controls []
+  (let [samples [[0] [1 2] [4 4 4 4] [100 2 99 0 100 1]
+                 [20 0 19 1 18 2 17 3 16 4 15 5 14 6 13 7 12 8 11 9 10]
+                 (range 0 100) (range 0 101) [20000 15000 15000 1 0]]]
+    (doseq [values samples]
+      (reset! soak-latencies {})
+      (reset! soak-writes 0)
+      (reset! soak-max-observed 0)
+      (doseq [latency values]
+        (soak-record-latency latency)
+        (swap! soak-writes + 1))
+      (let [reference (sort values)
+            index (floor (* (- (count reference) 1) 0.95))]
+        (soak-assert (= (soak-percentile) (get reference index))
+                     "soak percentile differs from original sorted reference")
+        (soak-assert (= (deref soak-max-observed) (last reference))
+                     "soak maximum differs from original sorted reference")))
+    (reset! soak-latencies {})
+    (reset! soak-writes 0)
+    (reset! soak-max-observed 0)
+    (println "NATIVE_SOAK_PERCENTILE_CONTROLS=8")))
+
+(try
+  (do
+    (soak-assert (= soak-ms 300000) "soak duration must remain300000ms")
+    (soak-assert (= soak-p95-limit 15000) "soak p95 limit must remain15000ms")
+    (soak-assert (= soak-max-limit 20000) "soak maximum must remain20000ms")
+    (soak-percentile-controls)
+    (doseq [index (range 0 8)]
+      (let [fd (tcp-client-open "127.0.0.1" soak-port 3000)]
+        (if (nil? fd) (throw "soak client connect failed") nil)
+        ;; Retain the descriptor for finally even when login fails.
+        (swap! soak-fds conj fd)
+        (let [login (soak-request {"fd" fd}
+                      {"type" "login" "user" "root"
+                       "password" "development-only"})]
+          (soak-assert (= (get login "ok") true) "soak login assertion")
+          (swap! soak-clients conj
+                 {"fd" fd "token" (get login "token")}))))
+    (let [client (get (deref soak-clients) 0)
+          created (soak-request client
+                    {"type" "query" "token" (get client "token")
+                     "statement" "CREATE TABLE soak_users (id INT PRIMARY KEY, name TEXT)"})]
+      (soak-assert (= (get created "ok") true) "soak table assertion"))
+    (let [started (now-ms)
+          deadline (+ started soak-ms)]
+      (println "NATIVE_SOAK_WORKLOAD_STARTED clients=8 duration_ms=300000")
+      (while (< (now-ms) deadline)
+        (let [jobs
+              (map (fn [client]
+                     (let [id (deref soak-next-id)]
+                       (swap! soak-next-id + 1)
+                       {"client" client "id" id}))
+                   (deref soak-clients))
+              tasks
+              (map (fn [job]
+                     (fn []
+                       (let [client (get job "client") id (get job "id")]
+                         (soak-request client
+                           {"type" "query" "token" (get client "token")
+                            "statement" (str "INSERT INTO soak_users (id,name) VALUES ("
+                                             id ",'soak-" id "')")})))) jobs)
+              responses (run-parallel tasks)]
+          (soak-assert (= (count responses) 8) "soak concurrent response count")
+          (doseq [response responses]
+            (soak-assert (= (get response "ok") true) "soak insert assertion")
+            (soak-record-latency (get response "_latency"))
+            (swap! soak-writes + 1))
+          (swap! soak-batches + 1)
+          (if (= (rem (deref soak-batches) 10) 0)
+            (soak-last-row "soak checkpoint") nil)))
+      (soak-last-row "soak final select")
+      (soak-assert (>= (deref soak-writes) 8) "soak minimum writes")
+      (let [p95 (soak-percentile)
+            elapsed (- (now-ms) started)]
+        (soak-assert (<= (deref soak-max-observed) soak-max-limit)
+                     "soak maximum latency assertion")
+        (soak-assert (<= p95 soak-p95-limit) "soak p95 latency assertion")
+        (println
+          (str "NATIVE_SOAK_RESULT "
+            (json_str {"ok" true "clients" 8 "duration_ms" soak-ms
+                       "elapsed_ms" elapsed "writes" (deref soak-writes)
+                       "batches" (deref soak-batches) "p95_ms" p95
+                       "max_ms" (deref soak-max-observed)
+                       "throughput_per_second" (/ (deref soak-writes) (/ soak-ms 1000))}))))))
+  (finally
+    (doseq [fd (deref soak-fds)]
+      (tcp-client-close fd))))

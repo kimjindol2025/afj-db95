@@ -84,7 +84,7 @@ Scoped results and a separately identified latest whole diagnostic:
 | Node executions / outbound connect calls in collected traces | 0 / 0 |
 | Existing tests/protected gate/seed / authored JS | Unchanged / 0 new JS |
 | Latest full Native 71-case diagnostic (separate SDK/profile) | 52 PASS / 19 FAIL; [source/profile and all failures](NATIVE-RELEASE-20261120.md) |
-| Real service sustained-load acceptance | Not established; protected Case 25 has an unclosed delimiter and current strict compiler rejects it before workload |
+| Real service sustained-load acceptance | Separate prebuilt Native 8-client five-minute runtime passes; actual14,664-row cold recovery FAIL; originalCase25 unchangedFAIL; [scope](NATIVE-SERVICE-LOAD.md) |
 
 The 3,200-record fixture initially failed on the existing Native runtime's
 missing str_join_lines function. That language operation is now implemented
