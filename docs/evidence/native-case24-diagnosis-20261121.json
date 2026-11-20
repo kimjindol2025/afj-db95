@@ -1,0 +1,197 @@
+{
+  "schema": "db95-case24-diagnosis/1",
+  "scope": "Read existing immutable inputs, gate log/exec trace, and already executed Native service cohorts only. No implementation, port, gate remapping, original-case rerun or new test run.",
+  "dbCommitAtDiagnosis": "1e55d063fe11b3905d79b2ca203f5eb384a7e317",
+  "originalCase24": {
+    "label": "TCP concurrency",
+    "input": "tests/tcp-concurrency-smoke.js",
+    "language": "JavaScript (Node.js require/spawn/net and async functions)",
+    "inputSha256": "02bf99199924891f3b669d84f1d6668a05fc158b0a6d9dae11e1b896dffae74a",
+    "retainedGatePass": 0,
+    "retainedGateFail": 1,
+    "exit": 1,
+    "basis": "Last completed original71 diagnostic before WAL fix: 52 PASS /19 FAIL /0 TIMEOUT /0 SKIP. Not rerun here.",
+    "actualPath": "native-release-gate.sh --worker 24 -> *.js -> SDK/bin/flc original.js case.c -> parser error -> later NATIVE_JS_SOURCE_NOT_PORTED -> exit1",
+    "nativeGateSha256": "662e50036dbc8ec5abd7fafe6e3179f1a91427dc32fe3d1cfe4b36190888c250",
+    "releaseGateSha256": "e464a355883b76a7780707f5acb2a19f187a21961f6eaa2653abe828aa583f99",
+    "firstError": "Uncaught error (line 717): [cgc-run] [cgc-run-positional] [parse] [parse-all] [parse-expr] [parse-expr-base] [parse-map] [parse-args] [parse-expr] [parse-expr-base] [parse-sexpr] [parse-args] [parse-expr] [parse-expr-base] [parse-map] [parse-args] [parse-expr] [parse-expr-base] [parse-map] [parse-args] [parse-expr] [parse-expr-base] [parse-sexpr] [parse-consume-rparen] [E_PARSE_UNEXPECTED_TOKEN] expected ) before RBrace at line 92, col 3 (at line 711, col 0)",
+    "laterMarker": "NATIVE_JS_SOURCE_NOT_PORTED",
+    "logSha256": "d1014d4d4e3fd212c583e0b7f6090584645665b6e920bd13739d6c49578b0f42",
+    "gateTraceSha256": "fdca343770e2397108f0b1f9f82fd7ba023664886211bfe11aac743e4ae5b1da",
+    "workerAndCompilerExecMatches": 3,
+    "executableTestDaemonLaunchedInCase24": false,
+    "causeCount": 1,
+    "cause": "JavaScript original submitted to FreeLang Native parser in an explicitly unported gate branch; failure precedes any daemon startup/client workload."
+  },
+  "existingCoverage": [
+    {
+      "requirement": "Choose unused loopback port",
+      "original": "tests/tcp-concurrency-smoke.js:11 freePort",
+      "existing": "tests/native-service/control.fls:63 port action; run-case.sh:16 AFJ_DB_PORT"
+    },
+    {
+      "requirement": "Start the unchanged tcp-daemon.fls",
+      "original": "tests/tcp-concurrency-smoke.js: daemon spawn of tests/tcp-daemon.fls",
+      "existing": "tests/native-service/run-case.sh:63 source selection and :41 daemon-bin launch"
+    },
+    {
+      "requirement": "Startup marker within 30s and TCP readiness within 30s",
+      "original": "waitForOutput and waitForPort",
+      "existing": "tests/native-service/control.fls:12 service-ready"
+    },
+    {
+      "requirement": "Eight independent TCP connections and successful logins",
+      "original": "eight-client loop",
+      "existing": "tests/native-service/tcp-concurrency-client.fls:23 connection/login loop"
+    },
+    {
+      "requirement": "Same table/schema then eight simultaneous INSERT requests",
+      "original": "CREATE concurrent_users; Promise.all",
+      "existing": "tests/native-service/tcp-concurrency-client.fls:33 CREATE and :38 run-parallel jobs"
+    },
+    {
+      "requirement": "SELECT ok and exactly eight rows",
+      "original": "selected.ok / selected.result.rows.length === 8",
+      "existing": "tests/native-service/tcp-concurrency-client.fls:54 SELECT and row-count assertion"
+    },
+    {
+      "requirement": "Close owned sockets/processes and synthetic storage",
+      "original": "finally socket.destroy / daemon SIGTERM / fs.rmSync",
+      "existing": "client finally closes fds; run-case.sh owned PID/network namespace and cleanup; artifacts retained instead of deleted"
+    }
+  ],
+  "existingNativeCohorts": {
+    "concurrency": {
+      "status": "PASS",
+      "passed": 1,
+      "total": 1,
+      "previouslyExecuted": true,
+      "freshRunDuringThisDiagnosis": false,
+      "runtimeSecondsLimit": 120,
+      "result": {
+        "ok": true,
+        "clients": 8,
+        "rows": 8,
+        "all_insert_responses_ok": true
+      },
+      "artifactsSha256": {
+        "status.txt": "d465ffca342ccf4ab305ad7dfc0047366a84c3b69789ac9f577356856d90c87c",
+        "ready.stdout": "905ad62efc8e7649eec5e41282d7ad349c1fb338daee86862e7c86560bd69691",
+        "result.stdout": "0d07a35c11ca4eaed7c0ed5ee66e742de6a901d40edffbdec7a1af05036a4444",
+        "client.stdout": "6388b8ad8e0654da46cc15e135908b760ecc40d969fc16ed3c8d03ce10ad434c",
+        "daemon.stdout": "bb6b38d6a8326c02afbd412b0d8fdfa7ac28339f83d94fcdff6d77bd89c769bd"
+      },
+      "traceAudit": {
+        "traceSha256": "8d1faea3238f6c0d6793320d626564eaddbe8c6c46eb09cb335f2adafee68df7",
+        "decodedExecs": 69,
+        "resumedExecsJoined": 0,
+        "allTerminalExecStatusesParsed": true,
+        "successfulNodeFamilyExecs": 0,
+        "failedNodeFamilyAttempts": 0,
+        "successfulPythonExecs": 0,
+        "allowedPrivateControllerPythonExecs": 0,
+        "successfulBasenameCounts": {
+          "as": 3,
+          "bash": 6,
+          "bwrap": 1,
+          "cat": 2,
+          "cc1": 3,
+          "client-bin": 1,
+          "collect2": 3,
+          "control-bin": 3,
+          "daemon-bin": 1,
+          "flc": 6,
+          "flock": 1,
+          "gcc": 3,
+          "grep": 3,
+          "ld": 3,
+          "ln": 10,
+          "mkdir": 3,
+          "readlink": 2,
+          "run-case.sh": 1,
+          "sha256sum": 2,
+          "timeout": 10,
+          "verify.sh": 2
+        }
+      }
+    },
+    "soak": {
+      "status": "PASS",
+      "passed": 1,
+      "total": 1,
+      "previouslyExecuted": true,
+      "freshRunDuringThisDiagnosis": false,
+      "runtimeSecondsLimit": 360,
+      "result": {
+        "ok": true,
+        "clients": 8,
+        "duration_ms": 300000,
+        "elapsed_ms": 300190,
+        "writes": 18088,
+        "batches": 2261,
+        "p95_ms": 143,
+        "max_ms": 236,
+        "throughput_per_second": 60.29333333333334
+      },
+      "artifactsSha256": {
+        "status.txt": "d465ffca342ccf4ab305ad7dfc0047366a84c3b69789ac9f577356856d90c87c",
+        "ready.stdout": "905ad62efc8e7649eec5e41282d7ad349c1fb338daee86862e7c86560bd69691",
+        "result.stdout": "88621e95ea2ead89897e8a720bcac141c293e6b1bd19ea2bc88331d6e0592da6",
+        "client.stdout": "d589108ce38cb4fbc40d4d1b28e8cfa8b0ff7331ca67b1d81ea5063d1eb20219",
+        "daemon.stdout": "427de2d102d612ce0a5574373de125bc9314b6d837cde363a478a81042cd401b"
+      },
+      "traceAudit": {
+        "traceSha256": "145a2b7b3e3390aa5b0e9dc496b6423073fed33644092562488c34ab81f7d002",
+        "decodedExecs": 69,
+        "resumedExecsJoined": 0,
+        "allTerminalExecStatusesParsed": true,
+        "successfulNodeFamilyExecs": 0,
+        "failedNodeFamilyAttempts": 0,
+        "successfulPythonExecs": 0,
+        "allowedPrivateControllerPythonExecs": 0,
+        "successfulBasenameCounts": {
+          "as": 3,
+          "bash": 6,
+          "bwrap": 1,
+          "cat": 2,
+          "cc1": 3,
+          "client-bin": 1,
+          "collect2": 3,
+          "control-bin": 3,
+          "daemon-bin": 1,
+          "flc": 6,
+          "flock": 1,
+          "gcc": 3,
+          "grep": 3,
+          "ld": 3,
+          "ln": 10,
+          "mkdir": 3,
+          "readlink": 2,
+          "run-case.sh": 1,
+          "sha256sum": 2,
+          "timeout": 10,
+          "verify.sh": 2
+        }
+      }
+    }
+  },
+  "priorCohortProvenance": {
+    "profile": "native-db-wire-utf8-20261121/current-service-v1",
+    "moduleSha256": "1ee0c94b8476aacdec27b447ada43509348c1481678e29bb719ee94e972cf8b4",
+    "sdkManifestSha256": "c5c90ed5234dc8d5d321fe63950c6c20f87f9f12ac9e51bc4c2edc4ef0101233",
+    "note": "These previously executed cohorts used a separate private UTF-8 wire candidate. Its module is not the newly committed WAL fix. Earlier accepted public concurrency evidence is also retained in docs/evidence/native-service-load-20261120.json. No fresh concurrency/soak PASS is claimed for 1e55d06 by this read-only diagnosis."
+  },
+  "unchangedFilesSha256": {
+    "tests/tcp-concurrency-smoke.js": "02bf99199924891f3b669d84f1d6668a05fc158b0a6d9dae11e1b896dffae74a",
+    "tests/native-release-gate.sh": "662e50036dbc8ec5abd7fafe6e3179f1a91427dc32fe3d1cfe4b36190888c250",
+    "tests/release-gate.sh": "e464a355883b76a7780707f5acb2a19f187a21961f6eaa2653abe828aa583f99",
+    "tests/tcp-daemon.fls": "fc59394bd9c01a1690e0005139abe40a6a9e5f88ed47ab99a9212b65245cd978",
+    "tests/native-service/run-case.sh": "fe331b9fe126b0dab1532ef84184a96cbd87cd89bfc2a60e998c6136455efde1",
+    "tests/native-service/control.fls": "90c832fb4af2c613413ca93e3556695c8a58ba0833d76cbca6328e38250c1a75",
+    "tests/native-service/tcp-concurrency-client.fls": "6658184f42d0e3a8d3a22b0011231c8194e57d88d7e831bbef78fe3dc2cd825e",
+    "tests/native-service/tcp-long-soak-client.fls": "cba5717076df2101f72e4033bcf03c7cf1b709aa541f80e89c86c99509e016ce"
+  },
+  "assessment": "Observed case24 is a Native gate input/runner failure, not evidence of a missing live-store concurrency path. Existing separate FL tests cover startup, port readiness, eight clients and parallel inserts/SELECT. This does not promote original case24 or establish full shopping-mall readiness.",
+  "sourceTestsRunnersAssertionsMappingsChanged": false,
+  "nextImplementationStarted": false
+}
