@@ -1,0 +1,206 @@
+{
+  "schema": "db95-native-default-check/1",
+  "date_local": "2026-11-21 Asia/Seoul",
+  "status": "SCOPED_PASS",
+  "qualified_base_db_commit": "1d196863116dbf5873947f9a53134423819a22c5",
+  "applied_after_db_commit": "f09ff94f54030cace119309503dd715db9177fe2",
+  "check_sha256": "7cda33ea7b106cbf68ff45eab658447030c646551c52c79817e3d2a6bc911e57",
+  "sdk_manifest_sha256": "e1f22e75e3a25b662411dc42d23e47049c31c0f5b80a75e4d3b4d75ee8708181",
+  "targets": [
+    "src/tcp-server.fls",
+    "src/afj-db95.fls"
+  ],
+  "final_marker": "afj-db95 project check PASS",
+  "policy": "Existing Native --check text command, both original targets and final marker",
+  "cases": [
+    {
+      "case": "missing-sdk",
+      "exit": 2,
+      "expectedExit": 2,
+      "passed": true,
+      "trace": {
+        "traceSha256": "028efe040c1754320ee28fc339d424725d09b278dbd8eac736bee7a2c10e283c",
+        "decodedExecs": 2,
+        "resumedExecsJoined": 0,
+        "allTerminalExecStatusesParsed": true,
+        "successfulNodeFamilyExecs": 0,
+        "failedNodeFamilyAttempts": 0,
+        "successfulPythonExecs": 0,
+        "allowedPrivateControllerPythonExecs": 0,
+        "successfulBasenameCounts": {
+          "bash": 1,
+          "bwrap": 1
+        }
+      },
+      "allInputBytesUnchanged": true
+    },
+    {
+      "case": "actual",
+      "exit": 0,
+      "expectedExit": 0,
+      "passed": true,
+      "trace": {
+        "traceSha256": "d333b8cc3129d8f2af85ba3e2c561492b8d0240cd98ceef62252a5f0ec56eb8d",
+        "decodedExecs": 15,
+        "resumedExecsJoined": 0,
+        "allTerminalExecStatusesParsed": true,
+        "successfulNodeFamilyExecs": 0,
+        "failedNodeFamilyAttempts": 0,
+        "successfulPythonExecs": 0,
+        "allowedPrivateControllerPythonExecs": 0,
+        "successfulBasenameCounts": {
+          "bash": 4,
+          "bwrap": 1,
+          "flc": 2,
+          "flock": 1,
+          "readlink": 3,
+          "sha256sum": 2,
+          "verify.sh": 2
+        }
+      },
+      "allInputBytesUnchanged": true
+    },
+    {
+      "case": "symlink-actual",
+      "exit": 0,
+      "expectedExit": 0,
+      "passed": true,
+      "trace": {
+        "traceSha256": "a280f694d6c092081e0af2126e6841bd06b49bf6ae23e8252ffcec8de1474d64",
+        "decodedExecs": 15,
+        "resumedExecsJoined": 0,
+        "allTerminalExecStatusesParsed": true,
+        "successfulNodeFamilyExecs": 0,
+        "failedNodeFamilyAttempts": 0,
+        "successfulPythonExecs": 0,
+        "allowedPrivateControllerPythonExecs": 0,
+        "successfulBasenameCounts": {
+          "bash": 4,
+          "bwrap": 1,
+          "flc": 2,
+          "flock": 1,
+          "readlink": 3,
+          "sha256sum": 2,
+          "verify.sh": 2
+        }
+      },
+      "allInputBytesUnchanged": true
+    },
+    {
+      "case": "malformed",
+      "exit": 1,
+      "expectedExit": 1,
+      "passed": true,
+      "trace": {
+        "traceSha256": "5b703caef60ab689da945ee2c2b4ed251815ecda00167d404f788ca6c178c75f",
+        "decodedExecs": 10,
+        "resumedExecsJoined": 0,
+        "allTerminalExecStatusesParsed": true,
+        "successfulNodeFamilyExecs": 0,
+        "failedNodeFamilyAttempts": 0,
+        "successfulPythonExecs": 0,
+        "allowedPrivateControllerPythonExecs": 0,
+        "successfulBasenameCounts": {
+          "bash": 3,
+          "bwrap": 1,
+          "flc": 1,
+          "flock": 1,
+          "readlink": 2,
+          "sha256sum": 1,
+          "verify.sh": 1
+        }
+      },
+      "allInputBytesUnchanged": true
+    },
+    {
+      "case": "arity",
+      "exit": 1,
+      "expectedExit": 1,
+      "passed": true,
+      "trace": {
+        "traceSha256": "64cd6491937549cd39d75525f396815b7eaae384e29152eeeec1a9da6d6b59fb",
+        "decodedExecs": 10,
+        "resumedExecsJoined": 0,
+        "allTerminalExecStatusesParsed": true,
+        "successfulNodeFamilyExecs": 0,
+        "failedNodeFamilyAttempts": 0,
+        "successfulPythonExecs": 0,
+        "allowedPrivateControllerPythonExecs": 0,
+        "successfulBasenameCounts": {
+          "bash": 3,
+          "bwrap": 1,
+          "flc": 1,
+          "flock": 1,
+          "readlink": 2,
+          "sha256sum": 1,
+          "verify.sh": 1
+        }
+      },
+      "allInputBytesUnchanged": true
+    },
+    {
+      "case": "static-only",
+      "exit": 0,
+      "expectedExit": 0,
+      "passed": true,
+      "trace": {
+        "traceSha256": "717de2bd9cc659e22f80f057b8f0acbe724ee4cb1653682a7735803587dc52c6",
+        "decodedExecs": 15,
+        "resumedExecsJoined": 0,
+        "allTerminalExecStatusesParsed": true,
+        "successfulNodeFamilyExecs": 0,
+        "failedNodeFamilyAttempts": 0,
+        "successfulPythonExecs": 0,
+        "allowedPrivateControllerPythonExecs": 0,
+        "successfulBasenameCounts": {
+          "bash": 4,
+          "bwrap": 1,
+          "flc": 2,
+          "flock": 1,
+          "readlink": 3,
+          "sha256sum": 2,
+          "verify.sh": 2
+        }
+      },
+      "allInputBytesUnchanged": true
+    },
+    {
+      "case": "pure-warning",
+      "exit": 0,
+      "expectedExit": 0,
+      "passed": true,
+      "trace": {
+        "traceSha256": "223cda3f35a1d3df5f66b74bbc8d86b0d73130456ffe165ccb5eea1f62f2074b",
+        "decodedExecs": 15,
+        "resumedExecsJoined": 0,
+        "allTerminalExecStatusesParsed": true,
+        "successfulNodeFamilyExecs": 0,
+        "failedNodeFamilyAttempts": 0,
+        "successfulPythonExecs": 0,
+        "allowedPrivateControllerPythonExecs": 0,
+        "successfulBasenameCounts": {
+          "bash": 4,
+          "bwrap": 1,
+          "flc": 2,
+          "flock": 1,
+          "readlink": 3,
+          "sha256sum": 2,
+          "verify.sh": 2
+        }
+      },
+      "allInputBytesUnchanged": true
+    }
+  ],
+  "checks_are_static": true,
+  "source_files_frozen": 392,
+  "source_and_sdk_unchanged": true,
+  "address_space_bytes": 2147483648,
+  "literal_source_sdk_and_symlink_paths": "spaces, apostrophes, Korean, percent, dollar, internal and terminal LF",
+  "receipt_sha256": "223cb71cb2604e38a065f08c1ca626022222a7bfd17a07bd8ca38a172a6b0e71",
+  "private_python_controller_outside_product_traces": 1,
+  "original_129_tests_runners_assertions_bounds_preserved": true,
+  "original_case9": "UNCHANGED_FAIL",
+  "other_default_smoke_and_deployment_paths_qualified": false,
+  "commercial": "HOLD",
+  "deployment": "NO"
+}
