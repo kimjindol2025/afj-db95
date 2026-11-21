@@ -1,0 +1,265 @@
+;; Native per-user order listing fixture agreed in msg_d1c5df7de07f.
+;; Two users are seeded; prepared user_id=10 must return exactly that user order.
+(load "../src/sha1.fls")
+(define userorders-control (env-get "AFJ_NATIVE_SHOP_ORDERS_USER_CONTROL"))
+(define userorders-connection (atom nil))
+(define userorders-buffer (atom ""))
+(define userorders-stage (atom "handshake"))
+(define userorders-sequence (atom 0))
+(define userorders-columns (atom []))
+(define userorders-rows (atom []))
+(define userorders-error (atom nil))
+(define userorders-done (atom false))
+(define userorders-statement (atom nil))
+
+(defn userorders-check [condition message]
+  (if (= condition true) true (throw message)))
+
+(defn userorders-u32 [value]
+  (buf-concat [(buf-u8 (rem value 256))
+               (buf-u8 (rem (floor (/ value 256)) 256))
+               (buf-u8 (rem (floor (/ value 65536)) 256))
+               (buf-u8 (rem (floor (/ value 16777216)) 256))]))
+
+(defn userorders-read-u32 [bytes offset]
+  (+ (buf-read-u8 bytes offset)
+     (* 256 (buf-read-u8 bytes (+ offset 1)))
+     (* 65536 (buf-read-u8 bytes (+ offset 2)))
+     (* 16777216 (buf-read-u8 bytes (+ offset 3)))))
+
+(defn userorders-send [payload sequence next-stage response-sequence]
+  (let [length (buf-len payload)
+        frame (buf-concat [(buf-slice (userorders-u32 length) 0 3)
+                           (buf-u8 sequence) payload])]
+    (reset! userorders-stage next-stage)
+    (reset! userorders-sequence response-sequence)
+    (userorders-check (= (tcp-write (deref userorders-connection) (buf-to-binary frame)) "ok")
+                 "NATIVE_SHOP_ORDERS_USER_PACKET_WRITE")))
+
+(defn userorders-command [code text next-stage]
+  (userorders-send (buf-concat [(buf-u8 code) (buf-str text)])
+              0 next-stage 1))
+
+(defn userorders-text [bytes offset]
+  (userorders-check (< offset (buf-len bytes)) "NATIVE_SHOP_ORDERS_USER_TEXT_PREFIX")
+  (let [length (buf-read-u8 bytes offset) next (+ offset 1 length)]
+    (userorders-check (and (< length 251) (<= next (buf-len bytes)))
+                 "NATIVE_SHOP_ORDERS_USER_TEXT_LENGTH")
+    {"value" (buf-read-str bytes (+ offset 1) length)
+     "next" next}))
+
+(defn userorders-column-name [bytes]
+  (loop [index 0 offset 0]
+    (let [field (userorders-text bytes offset)]
+      (if (= index 4) (get field "value")
+        (recur (+ index 1) (get field "next"))))))
+
+(defn userorders-login [bytes]
+  (userorders-check (= (buf-read-u8 bytes 0) 10) "NATIVE_SHOP_ORDERS_USER_HANDSHAKE_VERSION")
+  (let [version-end
+          (loop [offset 1]
+            (do
+              (userorders-check (< offset (buf-len bytes)) "NATIVE_SHOP_ORDERS_USER_HANDSHAKE_LENGTH")
+              (if (= (buf-read-u8 bytes offset) 0) offset (recur (+ offset 1)))))
+        first-offset (+ version-end 5)
+        second-offset (+ first-offset 27)]
+    (userorders-check (<= (+ second-offset 12) (buf-len bytes))
+                 "NATIVE_SHOP_ORDERS_USER_SCRAMBLE_LENGTH")
+    (let [scramble (buf-concat [(buf-slice bytes first-offset 8)
+                                (buf-slice bytes second-offset 12)])
+          token (sha1-mysql-native-token "development-only" scramble)
+          login (buf-concat [(userorders-u32 172545) (userorders-u32 1048576)
+                             (buf-u8 33) (sha1-zero-bytes 23)
+                             (buf-str "root") (buf-u8 0)
+                             (buf-u8 20) token])]
+      (userorders-check (= (buf-len token) 20) "NATIVE_SHOP_ORDERS_USER_TOKEN_LENGTH")
+      (userorders-send login 1 "login" 2))))
+
+
+(define userorders-setup
+  ["CREATE TABLE shop_orders (id INT PRIMARY KEY, user_id INT, product_id INT, qty INT, total INT)"
+   "INSERT INTO shop_orders (id, user_id, product_id, qty, total) VALUES (1, 10, 1, 2, 3000)"
+   "INSERT INTO shop_orders (id, user_id, product_id, qty, total) VALUES (2, 20, 2, 1, 2200)"])
+(define userorders-queries
+  [{"sql" "SELECT id, user_id, product_id, qty, total FROM shop_orders WHERE user_id=?"
+    "bind" [10] "response" "resultset" "columns" ["id" "user_id" "product_id" "qty" "total"]
+    "row-count" 1 "expected-row" {"id" "1" "user_id" "10" "product_id" "1" "qty" "2" "total" "3000"}}])
+(define userorders-setup-index (atom 0))
+(define userorders-query-index (atom 0))
+(define userorders-results (atom []))
+(define userorders-column-count (atom 0))
+
+(defn userorders-row-map [bytes]
+  (loop [index 0 offset 0 result {}]
+    (if (= index (deref userorders-column-count))
+      (do
+        (userorders-check (= offset (buf-len bytes)) "NATIVE_SHOP_ORDERS_USER_ROW_TRAILING_BYTES")
+        result)
+      (let [field (userorders-text bytes offset)]
+        (recur (+ index 1) (get field "next")
+               (assoc result (get (deref userorders-columns) index) (get field "value")))))))
+
+(defn userorders-prepare-current []
+  (reset! userorders-columns [])
+  (reset! userorders-rows [])
+  (userorders-command 22 (get (get userorders-queries (deref userorders-query-index)) "sql") "prepare"))
+
+(defn userorders-finish-result []
+  (let [index (deref userorders-query-index)
+        query (get userorders-queries index)
+        rows (deref userorders-rows)]
+    (userorders-check (= (count rows) (get query "row-count"))
+                    "NATIVE_SHOP_ORDERS_USER_EXACT_ROW_COUNT")
+    (if (= (get query "row-count") 1)
+      (doseq [column (get query "columns")]
+        (userorders-check (= (get (get rows 0) column)
+                           (get (get query "expected-row") column))
+                        "NATIVE_SHOP_ORDERS_USER_EXACT_ROW_VALUE"))
+      nil)
+    (swap! userorders-results conj
+           {"query" (get query "sql") "bind" (get query "bind")
+            "response" (get query "response") "rows" (count rows) "columns" (deref userorders-columns) "data" rows})
+    (if (< (+ index 1) (count userorders-queries))
+      (do (swap! userorders-query-index + 1) (userorders-prepare-current))
+      (do (reset! userorders-stage "done") (reset! userorders-done true)))))
+
+(defn userorders-frame [bytes sequence]
+  (userorders-check (> (buf-len bytes) 0) "NATIVE_SHOP_ORDERS_USER_EMPTY_PACKET")
+  (userorders-check (= sequence (deref userorders-sequence)) "NATIVE_SHOP_ORDERS_USER_PACKET_SEQUENCE")
+  (swap! userorders-sequence + 1)
+  (let [stage (deref userorders-stage) first-byte (buf-read-u8 bytes 0)]
+    (if (= first-byte 255)
+      (if (>= (buf-len bytes) 9)
+        (throw (str "NATIVE_SHOP_ORDERS_USER_SERVER_ERROR_" stage " code="
+                    (+ (buf-read-u8 bytes 1) (* 256 (buf-read-u8 bytes 2)))
+                    " message=" (buf-read-str bytes 9 (- (buf-len bytes) 9))))
+        (throw "NATIVE_SHOP_ORDERS_USER_SHORT_SERVER_ERROR"))
+      nil)
+    (cond
+      (= stage "handshake") (userorders-login bytes)
+      (= stage "login")
+        (do (userorders-check (= first-byte 0) "NATIVE_SHOP_ORDERS_USER_LOGIN_ACK")
+            (userorders-command 3 (get userorders-setup 0) "setup"))
+      (= stage "setup")
+        (do
+          (userorders-check (= first-byte 0) "NATIVE_SHOP_ORDERS_USER_SETUP_ACK")
+          (swap! userorders-setup-index + 1)
+          (if (< (deref userorders-setup-index) (count userorders-setup))
+            (userorders-command 3 (get userorders-setup (deref userorders-setup-index)) "setup")
+            (userorders-prepare-current)))
+      (= stage "prepare")
+        (let [parameters (count (get (get userorders-queries (deref userorders-query-index)) "bind"))]
+          (userorders-check (and (= first-byte 0) (>= (buf-len bytes) 12))
+                          "NATIVE_SHOP_ORDERS_USER_PREPARE_ACK")
+          (userorders-check (and (= (buf-read-u8 bytes 7) parameters)
+                               (= (buf-read-u8 bytes 8) 0))
+                          "NATIVE_SHOP_ORDERS_USER_PARAMETER_COUNT")
+          (reset! userorders-statement (userorders-read-u32 bytes 1))
+          (let [bind (get (get userorders-queries (deref userorders-query-index)) "bind")
+                execute (atom (buf-concat [(buf-u8 23) (userorders-u32 (deref userorders-statement))
+                                           (buf-u8 0) (userorders-u32 1)
+                                           (buf-u8 0) (buf-u8 1)]))]
+            ;; Existing Native INT32 and VAR_STRING parameter types.
+            (doseq [value bind]
+              (userorders-check (or (number? value) (string? value))
+                            "NATIVE_SHOP_ORDERS_USER_BIND_TYPE")
+              (reset! execute (buf-concat [(deref execute)
+                                           (buf-u8 (if (number? value) 3 253)) (buf-u8 0)])))
+            (doseq [value bind]
+              (let [encoded (if (number? value)
+                              (userorders-u32 value)
+                              (let [text (buf-str value)]
+                                (userorders-check (< (buf-len text) 251)
+                                              "NATIVE_SHOP_ORDERS_USER_SHORT_TEXT_BIND")
+                                (buf-concat [(buf-u8 (buf-len text)) text])))]
+                (reset! execute (buf-concat [(deref execute) encoded]))))
+            (userorders-send (deref execute) 0 "select" 1)))
+      (= stage "select")
+        (let [query (get userorders-queries (deref userorders-query-index))]
+          (userorders-check (and (= (buf-len bytes) 1)
+                             (= first-byte (count (get query "columns"))))
+                        "NATIVE_SHOP_ORDERS_USER_RESULT_HEADER")
+          (reset! userorders-column-count first-byte)
+          (reset! userorders-stage "columns"))
+      (= stage "columns")
+        (do
+          (swap! userorders-columns conj (userorders-column-name bytes))
+          (if (= (count (deref userorders-columns)) (deref userorders-column-count))
+            (reset! userorders-stage "columns-end") nil))
+      (= stage "columns-end")
+        (do
+          (userorders-check (and (= first-byte 254) (= (buf-len bytes) 5))
+                          "NATIVE_SHOP_ORDERS_USER_COLUMN_EOF")
+          ;; An empty result need not expose id metadata; ERR and rows remain strict.
+          (if (= (get (get userorders-queries (deref userorders-query-index)) "row-count") 0) nil
+            (userorders-check (= (deref userorders-columns)
+                               (get (get userorders-queries (deref userorders-query-index)) "columns"))
+                            "NATIVE_SHOP_ORDERS_USER_RESULT_SCHEMA"))
+          (reset! userorders-stage "rows"))
+      (= stage "rows")
+        (if (and (= first-byte 254) (= (buf-len bytes) 5))
+          (userorders-finish-result)
+          (do
+            (userorders-check (< (count (deref userorders-rows))
+                               (get (get userorders-queries (deref userorders-query-index)) "row-count"))
+                            "NATIVE_SHOP_ORDERS_USER_EXTRA_ROW")
+            (swap! userorders-rows conj (userorders-row-map bytes))))
+      :else (throw "NATIVE_SHOP_ORDERS_USER_UNEXPECTED_STAGE"))))
+(defn userorders-drain []
+  (if (>= (buf-len (deref userorders-buffer)) 4)
+    (let [bytes (deref userorders-buffer)
+          length (+ (buf-read-u8 bytes 0) (* 256 (buf-read-u8 bytes 1))
+                     (* 65536 (buf-read-u8 bytes 2)))]
+      (userorders-check (<= length 65536) "NATIVE_SHOP_ORDERS_USER_PACKET_LIMIT")
+      (if (>= (buf-len bytes) (+ 4 length))
+        (do
+          (reset! userorders-buffer (buf-slice bytes (+ 4 length)
+                                         (- (buf-len bytes) (+ 4 length))))
+          (userorders-frame (buf-slice bytes 4 length) (buf-read-u8 bytes 3))
+          (userorders-drain))
+        nil))
+    nil))
+
+(defn native-shop-orders-user-handler [event connection payload peer]
+  (try
+    (cond
+      (or (= event "connect") (= event "accept"))
+        (do (userorders-check (nil? (deref userorders-connection)) "NATIVE_SHOP_ORDERS_USER_SINGLE_CONNECTION")
+            (reset! userorders-connection connection))
+      (= event "data")
+        (do (reset! userorders-buffer
+              (buf-concat [(deref userorders-buffer) (buf-from-binary payload)]))
+            (userorders-drain))
+      (= event "close")
+        (userorders-check (deref userorders-done) "NATIVE_SHOP_ORDERS_USER_PREMATURE_CLOSE")
+      :else nil)
+    (catch [error]
+      (reset! userorders-error (error_message error))
+      (reset! userorders-done true))))
+
+(userorders-check (not (nil? userorders-control)) "NATIVE_SHOP_ORDERS_USER_HOST_ENV_REQUIRED")
+(userorders-check (not (file_exists (str userorders-control "/ports.ready")))
+             "NATIVE_SHOP_ORDERS_USER_CONTROL_NOT_FRESH")
+(let [bridge-port (tcp-client-free-port) daemon-port (tcp-client-free-port)]
+  (userorders-check (and (number? bridge-port) (number? daemon-port)
+                    (not (= bridge-port daemon-port))) "NATIVE_SHOP_ORDERS_USER_DISTINCT_PORTS")
+  (userorders-check (= (tcp-server-raw bridge-port "native-shop-orders-user-handler" "127.0.0.1") "ok")
+               "NATIVE_SHOP_ORDERS_USER_LISTENER_START")
+  (try
+    (do
+      (file_write (str userorders-control "/ports.json")
+                  (json_str {"bridge" bridge-port "daemon" daemon-port}))
+      (file_write (str userorders-control "/ports.ready") "ready")
+      (let [deadline (+ (now-ms) 30000)]
+        (while (and (< (now-ms) deadline) (not (deref userorders-done))) (fl-yield 10)))
+      (userorders-check (deref userorders-done) "NATIVE_SHOP_ORDERS_USER_CONTRACT_TIMEOUT")
+      (if (nil? (deref userorders-error)) nil (throw (deref userorders-error)))
+      (userorders-check (= (deref userorders-stage) "done") "NATIVE_SHOP_ORDERS_USER_CONTRACT_INCOMPLETE")
+      (userorders-check (= (buf-len (deref userorders-buffer)) 0) "NATIVE_SHOP_ORDERS_USER_TRAILING_PACKET_BYTES"))
+    (finally (tcp-server-stop bridge-port))))
+(userorders-check (= (count (deref userorders-results)) 1) "NATIVE_SHOP_ORDERS_USER_ONE_RESULT")
+(println (str "NATIVE_SHOP_ORDERS_USER_RESULT "
+  (json_str {"ok" true "user_id" 10 "prepared_executions" 1
+             "prepared_select_executions" 1 "rows" 1 "unrelated_user_row_absent" true
+             "err_packets" 0 "results" (deref userorders-results)})))
+(println "afj-db95 Native shop per-user orders prepared SELECT PASS")

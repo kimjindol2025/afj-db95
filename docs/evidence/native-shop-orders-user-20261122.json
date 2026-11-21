@@ -1,0 +1,235 @@
+{
+  "schema": "db95-native-shop-per-user-orders-v1",
+  "date_local": "2026-11-22 Asia/Seoul",
+  "status": "SCOPED_PASS",
+  "commercial": "HOLD",
+  "deployment": "NO",
+  "source": {
+    "baseHead": "c56bc180a2d5656aa90d73e477c603d8fdd3c022",
+    "implementationFilesChanged": [],
+    "newFixture": "tests/native-shop-orders-user.fls",
+    "fixtureSha256": "c48bbffa1597e99f4a782cdf01566121c86fc0ae591c4e45ebcbbbf1722d685f",
+    "daemonDependencySha256": {
+      "src/engine.fls": "6058a56b9ccd6d474692be1da502316991f21b5afae7e837a322a1d0133d8f0c",
+      "src/sql-core.fls": "156529064a95cb506b405a629be86cd1184718478c1051039038e357d6fc0981",
+      "src/mariadb-wire.fls": "ad22ba6ae03fa70388c6b3a0d1a930e574595b67e5cf58421ef3ea33b3c5c4ff",
+      "src/sha1.fls": "6fc4c3def2d56c4ff7eb76c7cd7917b6e268bdc070a75fe90959a49a08bf39cf",
+      "tests/native-mariadb-daemon.fls": "4aeb91c050734087a9b0e27bffd677cfe48f6bfb5068f39cbbce2efb4c01868d"
+    },
+    "allTrackedSourceNewFixtureSdkAndDaemonBytesUnchangedDuringTrial": true
+  },
+  "contract": {
+    "purpose": "Native prepared SQL per-user order filter",
+    "orderSeeds": [
+      {
+        "id": 1,
+        "user_id": 10,
+        "product_id": 1,
+        "qty": 2,
+        "total": 3000
+      },
+      {
+        "id": 2,
+        "user_id": 20,
+        "product_id": 2,
+        "qty": 1,
+        "total": 2200
+      }
+    ],
+    "prepareSql": "SELECT id, user_id, product_id, qty, total FROM shop_orders WHERE user_id=?",
+    "bind": [
+      10
+    ],
+    "expectedRows": 1,
+    "expectedRow": {
+      "id": "1",
+      "user_id": "10",
+      "product_id": "1",
+      "qty": "2",
+      "total": "3000"
+    },
+    "otherUserId2RowAbsent": true,
+    "clientFiltersRows": false
+  },
+  "observation": {
+    "passed": 1,
+    "failed": 0,
+    "total": 1,
+    "attempts": 1,
+    "freshClientAotAndRuntimeSeconds": 5.280250373005401,
+    "runtimeHostSeconds": 0.4432843969989335,
+    "hostExit": 0,
+    "typedResult": {
+      "ok": true,
+      "user_id": 10,
+      "prepared_executions": 1,
+      "prepared_select_executions": 1,
+      "rows": 1,
+      "unrelated_user_row_absent": true,
+      "err_packets": 0,
+      "results": [
+        {
+          "query": "SELECT id, user_id, product_id, qty, total FROM shop_orders WHERE user_id=?",
+          "bind": [
+            10
+          ],
+          "response": "resultset",
+          "rows": 1,
+          "columns": [
+            "id",
+            "user_id",
+            "product_id",
+            "qty",
+            "total"
+          ],
+          "data": [
+            {
+              "id": "1",
+              "user_id": "10",
+              "product_id": "1",
+              "qty": "2",
+              "total": "3000"
+            }
+          ]
+        }
+      ]
+    },
+    "nativeFixtureExecutions": 1,
+    "verifiedCurrentDaemonExecutions": 1,
+    "nativeByteRelayExecutions": 1,
+    "daemonRebuilt": false,
+    "cachedDaemonAotExcluded": true,
+    "allOwnedChildrenReaped": true,
+    "childExits": {
+      "client": 0,
+      "daemon": -15,
+      "native-byte-relay": 0
+    },
+    "storageInitiallyEmpty": true
+  },
+  "validation": {
+    "status": "VERIFIED_FROM_EXISTING_SINGLE_NATIVE_PER_USER_ORDERS_TRACE",
+    "commandBytes": [
+      3,
+      3,
+      3,
+      22,
+      23
+    ],
+    "setupSql": [
+      "CREATE TABLE shop_orders (id INT PRIMARY KEY, user_id INT, product_id INT, qty INT, total INT)",
+      "INSERT INTO shop_orders (id, user_id, product_id, qty, total) VALUES (1, 10, 1, 2, 3000)",
+      "INSERT INTO shop_orders (id, user_id, product_id, qty, total) VALUES (2, 20, 2, 1, 2200)"
+    ],
+    "allSetupAcknowledged": true,
+    "preparedQuery": "SELECT id, user_id, product_id, qty, total FROM shop_orders WHERE user_id=?",
+    "preparedParameterCount": 1,
+    "binding": [
+      10
+    ],
+    "parameterTypes": [
+      3
+    ],
+    "statementId": 1,
+    "executePayloadHex": "17010000000001000000000103000a000000",
+    "preparedSelectExecutions": 1,
+    "responseColumns": [
+      "id",
+      "user_id",
+      "product_id",
+      "qty",
+      "total"
+    ],
+    "responseRows": [
+      {
+        "id": "1",
+        "user_id": "10",
+        "product_id": "1",
+        "qty": "2",
+        "total": "3000"
+      }
+    ],
+    "exactRows": 1,
+    "otherUserOrderAbsent": true,
+    "serverFilteredResult": true,
+    "clientFiltersRows": false,
+    "errPackets": 0,
+    "clientPackets": 6,
+    "daemonPackets": 15,
+    "engineAndSqlCoreSourceUnchanged": true,
+    "newNativeRuns": 0,
+    "existingSumScopeRejectionsPassed": 6,
+    "existingOrderScopeRejectionsPassed": 4,
+    "existingGroupedCOUNTAndCOUNTStarEngineChecksPassed": true,
+    "existingSqlStartupAssertionsPassed": 36,
+    "existingQualifiedJoinScopeGuardsPassed": 4,
+    "existingMultiplyScopeGuardsPassed": 4,
+    "existingProjectionAndAggregateChecksPassed": true
+  },
+  "bounds": {
+    "addressSpaceBytesPerProcess": 2147483648,
+    "fixtureRuntimeMs": 30000,
+    "privateHostRuntimeSeconds": 90,
+    "freshClientAotAndRuntimeSeconds": 120,
+    "sharedFlock": "existing /tmp/fl-heavy.lock; one waiter, natural acquisition, no force release",
+    "automaticWholeTrialRetries": 0,
+    "nativeRelayIdleSeconds": 15,
+    "nativeRelayConnectSeconds": 3,
+    "nativeRelayConnectRetries": 30,
+    "nativeRelayConnectRetryIntervalSeconds": 0.1
+  },
+  "toolchain": {
+    "sdkManifestSha256": "c5c90ed5234dc8d5d321fe63950c6c20f87f9f12ac9e51bc4c2edc4ef0101233",
+    "compilerSha256": "f514e043d3f08115e273717462595a69ffd0522614aad5666dec576f04a46dac",
+    "runtimeArchiveSha256": "fe4308c19eba2142049100c17ac08979b5787c1698b6d5e0e9e082a1f6e691fe",
+    "verifiedDaemonElfSha256": "dda5ded9119fa5ba2c9b1eb0c18c298ae0f16471e4408b67a9bfed9944054e84",
+    "daemonProducerReceiptSha256": "44860ef3e647f6d4b6c267fb32f340a279c082aacadf373b40ff6aab9c1b74ac",
+    "freshFixtureGeneratedCSha256": "a72f02a878aeafbb77ab212eeb3e1448a0f4586e7ee12b3476e499cc39d951a0",
+    "freshFixtureElfSha256": "862e03bd6763234ae1265c2ed57640b29d396ee0376d9e0bad1327ea90e504ee",
+    "nativeByteRelaySha256": "cd8741946c6e0008ea4f87129b7cf1c1e3fa5e8159a5ec98d4a7763447b53b4b",
+    "compilerAndGccFlagsUnchanged": true
+  },
+  "audit": {
+    "traceSha256": "34e40450a77b195d628c2e8bdc394e074d064353e515b6cef719f481d3a23e80",
+    "decodedExecs": 17,
+    "resumedExecsJoined": 9,
+    "allTerminalExecStatusesParsed": true,
+    "successfulNodeFamilyExecs": 0,
+    "failedNodeFamilyAttempts": 0,
+    "successfulPythonExecs": 1,
+    "allowedPrivateControllerPythonExecs": 1,
+    "successfulBasenameCounts": {
+      "as": 1,
+      "bash": 1,
+      "bwrap": 1,
+      "cc1": 2,
+      "client-bin": 1,
+      "collect2": 1,
+      "daemon-bin": 1,
+      "flc": 2,
+      "gcc": 2,
+      "grep": 1,
+      "ld": 1,
+      "python3": 1,
+      "socat": 1,
+      "timeout": 1
+    },
+    "timedTraceSha256": "2975f00484cd62da4048b67e76fade1bca2624f9f328a21a68836813eb87f430",
+    "privateResultReceiptSha256": "64b39399f3c5d87eac95f7581db85333a44c9956334a3e09ec20c2609a73c053",
+    "privateControllerSha256": "e1b93d9364c453aca14780867be4e7e32f56611c1cf3c61a9b027b5bbdab821d",
+    "privateProcessHostSha256": "fd35e20ca640a867f84c3f1a65a705e58e4283a36465c06d57fe9c895b4b9318",
+    "wireProofSha256": "a5c82c12de4860c486a304f1e5494ab9cc31bdaa1d862c6a45587e1ac8e8d9aa",
+    "readOnlyOfflineProofSha256": "5bd88c657105275be275ae9e2397f15fd2722fccb61c1e44fb41d1427086bf07",
+    "readOnlyOfflineHelperSha256": "3e9fe45d6277f09c6643d1a0f2b49974d5bbf3dbc23a630be1b6ef3b82801c18",
+    "privatePythonControllersOutsideProduct": 2
+  },
+  "scope": {
+    "claim": "bound user_id WHERE returns exactly one matching order from two seeded users",
+    "applicationAuthenticationOrAuthorizationContractExercised": false,
+    "priorOrderCancelCommit": "c56bc180a2d5656aa90d73e477c603d8fdd3c022",
+    "priorFailuresAndHistoricalWal349EvidencePreserved": true,
+    "fullRegressionOrOriginal71GateRerun": false,
+    "gateResultsPromoted": false,
+    "sqlCoreEngineParserCompilerDaemonTlsNodeAckOriginal25Changed": false
+  }
+}
