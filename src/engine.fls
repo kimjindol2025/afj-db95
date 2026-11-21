@@ -1304,7 +1304,10 @@
                             ordered)
         limited (if (nil? (get ast "limit"))
                   direction-ordered
-                  (take (get ast "limit") direction-ordered))]
+                  (take (get ast "limit")
+                        (if (has-key? ast "offset")
+                          (drop (get ast "offset") direction-ordered)
+                          direction-ordered)))]
     (if (not (nil? (get ast "aggregate")))
       (let [aggregate-rows (engine-aggregate-count
                              joined

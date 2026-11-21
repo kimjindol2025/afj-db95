@@ -268,7 +268,10 @@
 
 (defn parse-select-ordered-limit-one [raw-tokens]
   (let [tokens (sql-select-projection-tokens raw-tokens)]
-    (if (and (= (count tokens) 11)
+    (if (and (or (= (count tokens) 11)
+                 (and (= (count tokens) 13)
+                      (keyword? (token-at tokens 11) "OFFSET")
+                      (= (token-at tokens 12) "1")))
              (regex_match (token-at tokens 1) "^[A-Za-z_][A-Za-z0-9_]*(,[A-Za-z_][A-Za-z0-9_]*)*$")
              (keyword? (token-at tokens 2) "FROM")
              (regex_match (token-at tokens 3) "^[A-Za-z_][A-Za-z0-9_]*$")
@@ -281,12 +284,13 @@
              (regex_match (token-at tokens 8) "^[A-Za-z_][A-Za-z0-9_]*$")
              (keyword? (token-at tokens 9) "LIMIT")
              (= (token-at tokens 10) "1"))
-      (let [predicate (sql-assignment (token-at tokens 5))]
-        {"type" "select" "table" (token-at tokens 3)
+      (let [predicate (sql-assignment (token-at tokens 5))
+            ast {"type" "select" "table" (token-at tokens 3)
          "columns" (regex_split (token-at tokens 1) ",")
          "where" {"column" (get predicate "column")
                    "equals" (get predicate "value")}
-         "order-by" (token-at tokens 8) "limit" 1})
+         "order-by" (token-at tokens 8) "limit" 1}]
+        (if (= (count tokens) 13) (assoc ast "offset" 1) ast))
       nil)))
 
 (defn parse-select-standard [raw-tokens]
@@ -1001,6 +1005,19 @@
     (if (= rejected true) true
       (throw "ordered LIMIT 1 scope guard failure"))))
 (println "afj-db95 ordered LIMIT 1 scope guards PASS")
+
+(doseq [query
+        ["SELECT sku, name, price FROM shop_products WHERE visible=1 ORDER BY id LIMIT 1 OFFSET 2"
+         "SELECT sku, name, price FROM shop_products WHERE visible=1 ORDER BY id LIMIT 2 OFFSET 1"
+         "SELECT sku, name, price FROM shop_products WHERE visible=1 ORDER BY id DESC LIMIT 1 OFFSET 1"
+         "SELECT sku AS item, name, price FROM shop_products WHERE visible=1 ORDER BY id LIMIT 1 OFFSET 1"]]
+  (let [rejected (try
+                   (do (parse-sql query) false)
+                   (catch [error]
+                     (str-includes (error_message error) "unsupported SELECT form")))]
+    (if (= rejected true) true
+      (throw "ordered OFFSET 1 scope guard failure"))))
+(println "afj-db95 ordered OFFSET 1 scope guards PASS")
 
 (doseq [query
         ["SELECT shop_cart.qty * shop_products.price FROM shop_cart JOIN shop_products ON shop_cart.product_id = shop_products.id ORDER BY other.id"
