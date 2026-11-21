@@ -776,6 +776,16 @@
             right-number (if (and (string? right)
                                   (regex_match right "^-?[0-9]+$"))
                            (str-to-num right) right)]
+        (if (= operator "LIKE")
+          (if (and (string? right) (> (count right) 2)
+                   (str_starts_with right "%") (str_ends_with right "%"))
+            (let [literal (str-slice right 1 (- (count right) 1))]
+              (if (and (not (str-includes literal "%"))
+                       (not (str-includes literal "_"))
+                       (not (str-includes literal "\\")))
+                (and (string? left) (str-includes left literal))
+                (throw "unsupported LIKE pattern")))
+            (throw "unsupported LIKE pattern"))
         (if (= operator "=")
           (= left right)
           (if (or (= operator "!=") (= operator "<>"))
@@ -784,7 +794,7 @@
               (if (= operator ">=") (>= left-number right-number)
                 (if (= operator "<") (< left-number right-number)
                   (if (= operator "<=") (<= left-number right-number)
-                    false))))))))))
+                    false)))))))))))
 
 (defn engine-all-predicates-match? [row predicates index]
   (if (>= index (count predicates))
