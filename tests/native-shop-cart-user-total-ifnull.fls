@@ -1,0 +1,225 @@
+;; Native nonempty per-user cart IFNULL SUM fixture agreed in msg_5dfe3e16fe1a.
+;; Same user20-only fixture; bind20 must return server2200 without client computation.
+(load "../src/sha1.fls")
+(define nonemptytotal-control (env-get "AFJ_NATIVE_SHOP_CART_USER_TOTAL_IFNULL_CONTROL"))
+(define nonemptytotal-connection (atom nil))
+(define nonemptytotal-buffer (atom ""))
+(define nonemptytotal-stage (atom "handshake"))
+(define nonemptytotal-sequence (atom 0))
+(define nonemptytotal-columns (atom []))
+(define nonemptytotal-rows (atom []))
+(define nonemptytotal-error (atom nil))
+(define nonemptytotal-done (atom false))
+(define nonemptytotal-statement (atom nil))
+
+(defn nonemptytotal-check [condition message]
+  (if (= condition true) true (throw message)))
+
+(defn nonemptytotal-u32 [value]
+  (buf-concat [(buf-u8 (rem value 256))
+               (buf-u8 (rem (floor (/ value 256)) 256))
+               (buf-u8 (rem (floor (/ value 65536)) 256))
+               (buf-u8 (rem (floor (/ value 16777216)) 256))]))
+
+(defn nonemptytotal-read-u32 [bytes offset]
+  (+ (buf-read-u8 bytes offset)
+     (* 256 (buf-read-u8 bytes (+ offset 1)))
+     (* 65536 (buf-read-u8 bytes (+ offset 2)))
+     (* 16777216 (buf-read-u8 bytes (+ offset 3)))))
+
+(defn nonemptytotal-send [payload sequence next-stage response-sequence]
+  (let [length (buf-len payload)
+        frame (buf-concat [(buf-slice (nonemptytotal-u32 length) 0 3)
+                           (buf-u8 sequence) payload])]
+    (reset! nonemptytotal-stage next-stage)
+    (reset! nonemptytotal-sequence response-sequence)
+    (nonemptytotal-check (= (tcp-write (deref nonemptytotal-connection) (buf-to-binary frame)) "ok")
+                 "NATIVE_SHOP_CART_USER_TOTAL_IFNULL_PACKET_WRITE")))
+
+(defn nonemptytotal-command [code text next-stage]
+  (nonemptytotal-send (buf-concat [(buf-u8 code) (buf-str text)])
+              0 next-stage 1))
+
+(defn nonemptytotal-text [bytes offset]
+  (nonemptytotal-check (< offset (buf-len bytes)) "NATIVE_SHOP_CART_USER_TOTAL_IFNULL_TEXT_PREFIX")
+  (let [length (buf-read-u8 bytes offset) next (+ offset 1 length)]
+    (nonemptytotal-check (and (< length 251) (<= next (buf-len bytes)))
+                 "NATIVE_SHOP_CART_USER_TOTAL_IFNULL_TEXT_LENGTH")
+    {"value" (buf-read-str bytes (+ offset 1) length)
+     "next" next}))
+
+(defn nonemptytotal-column-name [bytes]
+  (loop [index 0 offset 0]
+    (let [field (nonemptytotal-text bytes offset)]
+      (if (= index 4) (get field "value")
+        (recur (+ index 1) (get field "next"))))))
+
+(defn nonemptytotal-login [bytes]
+  (nonemptytotal-check (= (buf-read-u8 bytes 0) 10) "NATIVE_SHOP_CART_USER_TOTAL_IFNULL_HANDSHAKE_VERSION")
+  (let [version-end
+          (loop [offset 1]
+            (do
+              (nonemptytotal-check (< offset (buf-len bytes)) "NATIVE_SHOP_CART_USER_TOTAL_IFNULL_HANDSHAKE_LENGTH")
+              (if (= (buf-read-u8 bytes offset) 0) offset (recur (+ offset 1)))))
+        first-offset (+ version-end 5)
+        second-offset (+ first-offset 27)]
+    (nonemptytotal-check (<= (+ second-offset 12) (buf-len bytes))
+                 "NATIVE_SHOP_CART_USER_TOTAL_IFNULL_SCRAMBLE_LENGTH")
+    (let [scramble (buf-concat [(buf-slice bytes first-offset 8)
+                                (buf-slice bytes second-offset 12)])
+          token (sha1-mysql-native-token "development-only" scramble)
+          login (buf-concat [(nonemptytotal-u32 172545) (nonemptytotal-u32 1048576)
+                             (buf-u8 33) (sha1-zero-bytes 23)
+                             (buf-str "root") (buf-u8 0)
+                             (buf-u8 20) token])]
+      (nonemptytotal-check (= (buf-len token) 20) "NATIVE_SHOP_CART_USER_TOTAL_IFNULL_TOKEN_LENGTH")
+      (nonemptytotal-send login 1 "login" 2))))
+
+(defn nonemptytotal-frame [bytes sequence]
+  (nonemptytotal-check (> (buf-len bytes) 0) "NATIVE_SHOP_CART_USER_TOTAL_IFNULL_EMPTY_PACKET")
+  (nonemptytotal-check (= sequence (deref nonemptytotal-sequence)) "NATIVE_SHOP_CART_USER_TOTAL_IFNULL_PACKET_SEQUENCE")
+  (swap! nonemptytotal-sequence + 1)
+  (let [stage (deref nonemptytotal-stage) first-byte (buf-read-u8 bytes 0)]
+    (if (= first-byte 255)
+      (if (>= (buf-len bytes) 9)
+        (throw (str "NATIVE_SHOP_CART_USER_TOTAL_IFNULL_SERVER_ERROR_" stage " code="
+                    (+ (buf-read-u8 bytes 1) (* 256 (buf-read-u8 bytes 2)))
+                    " message=" (buf-read-str bytes 9 (- (buf-len bytes) 9))))
+        (throw (str "NATIVE_SHOP_CART_USER_TOTAL_IFNULL_SHORT_SERVER_ERROR_" stage)))
+      nil)
+    (cond
+      (= stage "handshake") (nonemptytotal-login bytes)
+      (= stage "login")
+        (do
+          (nonemptytotal-check (= first-byte 0) "NATIVE_SHOP_CART_USER_TOTAL_IFNULL_LOGIN_ACK")
+          (nonemptytotal-command 3 "CREATE TABLE shop_products (id INT PRIMARY KEY, sku TEXT, name TEXT, price INT)"
+                           "create"))
+      (= stage "create")
+        (do
+          (nonemptytotal-check (= first-byte 0) "NATIVE_SHOP_CART_USER_TOTAL_IFNULL_CREATE_ACK")
+          (nonemptytotal-command 3 "INSERT INTO shop_products (id, sku, name, price) VALUES (1, 'SKU-1', 'Demo Widget', 1500)"
+                           "seed"))
+      (= stage "seed")
+        (do
+          (nonemptytotal-check (= first-byte 0) "NATIVE_SHOP_CART_USER_TOTAL_IFNULL_FIRST_SEED_ACK")
+          (nonemptytotal-command 3 "INSERT INTO shop_products (id, sku, name, price) VALUES (2, 'SKU-2', 'Demo Gadget', 2200)"
+                            "second-seed"))
+      (= stage "second-seed")
+        (do
+          (nonemptytotal-check (= first-byte 0) "NATIVE_SHOP_CART_USER_TOTAL_IFNULL_SECOND_PRODUCT_SEED_ACK")
+          (nonemptytotal-command 3 "CREATE TABLE shop_cart (id INT PRIMARY KEY, user_id INT, product_id INT, qty INT)" "cart-create"))
+      (= stage "cart-create")
+        (do
+          (nonemptytotal-check (= first-byte 0) "NATIVE_SHOP_CART_USER_TOTAL_IFNULL_CART_CREATE_ACK")
+          (nonemptytotal-command 3 "INSERT INTO shop_cart (id, user_id, product_id, qty) VALUES (2, 20, 2, 1)" "second-cart-seed"))
+      (= stage "second-cart-seed")
+        (do
+          (nonemptytotal-check (= first-byte 0) "NATIVE_SHOP_CART_USER_TOTAL_IFNULL_SINGLE_CART_SEED_ACK")
+          (nonemptytotal-command 22 "SELECT IFNULL(SUM(shop_cart.qty * shop_products.price), 0) FROM shop_cart JOIN shop_products ON shop_cart.product_id = shop_products.id WHERE shop_cart.user_id=?" "prepare"))
+      (= stage "prepare")
+        (do
+          (nonemptytotal-check (and (= first-byte 0) (>= (buf-len bytes) 12))
+                       "NATIVE_SHOP_CART_USER_TOTAL_IFNULL_PREPARE_ACK")
+          (nonemptytotal-check (and (= (buf-read-u8 bytes 7) 1)
+                            (= (buf-read-u8 bytes 8) 0))
+                       "NATIVE_SHOP_CART_USER_TOTAL_IFNULL_PREPARE_ONE_PARAMETER")
+          (reset! nonemptytotal-statement (nonemptytotal-read-u32 bytes 1))
+          (let [execute (buf-concat [(buf-u8 23) (nonemptytotal-u32 (deref nonemptytotal-statement))
+                                     (buf-u8 0) (nonemptytotal-u32 1)
+                                     (buf-u8 0) (buf-u8 1) (buf-u8 3) (buf-u8 0)
+                                     (nonemptytotal-u32 20)])]
+            (nonemptytotal-send execute 0 "select" 1)))
+      (= stage "select")
+        (do
+          (nonemptytotal-check (and (= first-byte 1) (= (buf-len bytes) 1))
+                       "NATIVE_SHOP_CART_USER_TOTAL_IFNULL_SELECT_ONE_COLUMN")
+          (reset! nonemptytotal-stage "columns"))
+      (= stage "columns")
+        (do
+          (swap! nonemptytotal-columns conj (nonemptytotal-column-name bytes))
+          (if (= (count (deref nonemptytotal-columns)) 1)
+            (reset! nonemptytotal-stage "columns-end") nil))
+      (= stage "columns-end")
+        (do
+          (nonemptytotal-check (and (= first-byte 254) (= (buf-len bytes) 5))
+                       "NATIVE_SHOP_CART_USER_TOTAL_IFNULL_COLUMN_EOF")
+          (nonemptytotal-check (> (count (get (deref nonemptytotal-columns) 0)) 0)
+                         "NATIVE_SHOP_CART_USER_TOTAL_IFNULL_EXPRESSION_COLUMN")
+          (reset! nonemptytotal-stage "rows"))
+      (= stage "rows")
+        (if (and (= first-byte 254) (= (buf-len bytes) 5))
+          (do
+            (nonemptytotal-check (= (count (deref nonemptytotal-rows)) 1)
+                           "NATIVE_SHOP_CART_USER_TOTAL_IFNULL_EXACTLY_ONE_ROW")
+            (nonemptytotal-check (= (get (deref nonemptytotal-rows) 0) "2200")
+                           "NATIVE_SHOP_CART_USER_TOTAL_IFNULL_EXACT_SERVER_TOTAL")
+            (reset! nonemptytotal-stage "done")
+            (reset! nonemptytotal-done true))
+          (do
+            (nonemptytotal-check (< (count (deref nonemptytotal-rows)) 1)
+                           "NATIVE_SHOP_CART_USER_TOTAL_IFNULL_EXTRA_ROW")
+            (let [field (nonemptytotal-text bytes 0)]
+              (nonemptytotal-check (= (get field "next") (buf-len bytes))
+                             "NATIVE_SHOP_CART_USER_TOTAL_IFNULL_ROW_TRAILING_BYTES")
+              (swap! nonemptytotal-rows conj (get field "value")))))
+      :else (throw "NATIVE_SHOP_CART_USER_TOTAL_IFNULL_UNEXPECTED_STAGE"))))
+
+(defn nonemptytotal-drain []
+  (if (>= (buf-len (deref nonemptytotal-buffer)) 4)
+    (let [bytes (deref nonemptytotal-buffer)
+          length (+ (buf-read-u8 bytes 0) (* 256 (buf-read-u8 bytes 1))
+                     (* 65536 (buf-read-u8 bytes 2)))]
+      (nonemptytotal-check (<= length 65536) "NATIVE_SHOP_CART_USER_TOTAL_IFNULL_PACKET_LIMIT")
+      (if (>= (buf-len bytes) (+ 4 length))
+        (do
+          (reset! nonemptytotal-buffer (buf-slice bytes (+ 4 length)
+                                         (- (buf-len bytes) (+ 4 length))))
+          (nonemptytotal-frame (buf-slice bytes 4 length) (buf-read-u8 bytes 3))
+          (nonemptytotal-drain))
+        nil))
+    nil))
+
+(defn native-shop-cart-user-total-ifnull-handler [event connection payload peer]
+  (try
+    (cond
+      (or (= event "connect") (= event "accept"))
+        (do (nonemptytotal-check (nil? (deref nonemptytotal-connection)) "NATIVE_SHOP_CART_USER_TOTAL_IFNULL_SINGLE_CONNECTION")
+            (reset! nonemptytotal-connection connection))
+      (= event "data")
+        (do (reset! nonemptytotal-buffer
+              (buf-concat [(deref nonemptytotal-buffer) (buf-from-binary payload)]))
+            (nonemptytotal-drain))
+      (= event "close")
+        (nonemptytotal-check (deref nonemptytotal-done) "NATIVE_SHOP_CART_USER_TOTAL_IFNULL_PREMATURE_CLOSE")
+      :else nil)
+    (catch [error]
+      (reset! nonemptytotal-error (error_message error))
+      (reset! nonemptytotal-done true))))
+
+(nonemptytotal-check (not (nil? nonemptytotal-control)) "NATIVE_SHOP_CART_USER_TOTAL_IFNULL_HOST_ENV_REQUIRED")
+(nonemptytotal-check (not (file_exists (str nonemptytotal-control "/ports.ready")))
+             "NATIVE_SHOP_CART_USER_TOTAL_IFNULL_CONTROL_NOT_FRESH")
+(let [bridge-port (tcp-client-free-port) daemon-port (tcp-client-free-port)]
+  (nonemptytotal-check (and (number? bridge-port) (number? daemon-port)
+                    (not (= bridge-port daemon-port))) "NATIVE_SHOP_CART_USER_TOTAL_IFNULL_DISTINCT_PORTS")
+  (nonemptytotal-check (= (tcp-server-raw bridge-port "native-shop-cart-user-total-ifnull-handler" "127.0.0.1") "ok")
+               "NATIVE_SHOP_CART_USER_TOTAL_IFNULL_LISTENER_START")
+  (try
+    (do
+      (file_write (str nonemptytotal-control "/ports.json")
+                  (json_str {"bridge" bridge-port "daemon" daemon-port}))
+      (file_write (str nonemptytotal-control "/ports.ready") "ready")
+      (let [deadline (+ (now-ms) 30000)]
+        (while (and (< (now-ms) deadline) (not (deref nonemptytotal-done))) (fl-yield 10)))
+      (nonemptytotal-check (deref nonemptytotal-done) "NATIVE_SHOP_CART_USER_TOTAL_IFNULL_CONTRACT_TIMEOUT")
+      (if (nil? (deref nonemptytotal-error)) nil (throw (deref nonemptytotal-error)))
+      (nonemptytotal-check (= (deref nonemptytotal-stage) "done") "NATIVE_SHOP_CART_USER_TOTAL_IFNULL_CONTRACT_INCOMPLETE")
+      (nonemptytotal-check (= (buf-len (deref nonemptytotal-buffer)) 0) "NATIVE_SHOP_CART_USER_TOTAL_IFNULL_TRAILING_PACKET_BYTES"))
+    (finally (tcp-server-stop bridge-port))))
+(println (str "NATIVE_SHOP_CART_USER_TOTAL_IFNULL_RESULT "
+  (json_str {"ok" true "prepared_parameters" 1
+             "query" "SELECT IFNULL(SUM(shop_cart.qty * shop_products.price), 0) FROM shop_cart JOIN shop_products ON shop_cart.product_id = shop_products.id WHERE shop_cart.user_id=?"
+             "bind" [20] "select_executions" 1 "rows" 1
+             "columns" (deref nonemptytotal-columns) "data" (deref nonemptytotal-rows)
+             "exact_total" true "client_computes_total" false})))
+(println "afj-db95 Native shop nonempty per-user cart IFNULL SUM prepared SELECT PASS")

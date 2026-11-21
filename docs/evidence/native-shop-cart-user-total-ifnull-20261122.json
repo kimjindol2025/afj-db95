@@ -1,0 +1,209 @@
+{
+  "schema": "db95-native-shop-nonempty-cart-ifnull-sum-v1",
+  "date_local": "2026-11-22 Asia/Seoul",
+  "status": "SCOPED_PASS",
+  "commercial": "HOLD",
+  "deployment": "NO",
+  "source": {
+    "baseHead": "fd18ae34fc8d373804793351bf46524664eb93f5",
+    "implementationFilesChanged": [],
+    "newFixture": "tests/native-shop-cart-user-total-ifnull.fls",
+    "fixtureSha256": "f8440593e41093c10cbd68e88237a7ece93b149ba095efcf927c067658eae321",
+    "daemonDependencySha256": {
+      "src/engine.fls": "c45ccc1e47eacda360176e7472dc73271982b9c00a284e824c65d064f01be48f",
+      "src/sql-core.fls": "02b359c7f03c426acccdae1071daf7d74a891492f5d5f18f97be6339fac9e06b",
+      "src/mariadb-wire.fls": "ad22ba6ae03fa70388c6b3a0d1a930e574595b67e5cf58421ef3ea33b3c5c4ff",
+      "src/sha1.fls": "6fc4c3def2d56c4ff7eb76c7cd7917b6e268bdc070a75fe90959a49a08bf39cf",
+      "tests/native-mariadb-daemon.fls": "4aeb91c050734087a9b0e27bffd677cfe48f6bfb5068f39cbbce2efb4c01868d"
+    },
+    "allTrackedSourceNewFixtureSdkAndDaemonBytesUnchangedDuringTrial": true
+  },
+  "contract": {
+    "purpose": "explicit IFNULL preserves nonempty user-cart SUM",
+    "productSeeds": [
+      {
+        "id": 1,
+        "sku": "SKU-1",
+        "name": "Demo Widget",
+        "price": 1500
+      },
+      {
+        "id": 2,
+        "sku": "SKU-2",
+        "name": "Demo Gadget",
+        "price": 2200
+      }
+    ],
+    "cartSeeds": [
+      {
+        "id": 2,
+        "user_id": 20,
+        "product_id": 2,
+        "qty": 1
+      }
+    ],
+    "prepareSql": "SELECT IFNULL(SUM(shop_cart.qty * shop_products.price), 0) FROM shop_cart JOIN shop_products ON shop_cart.product_id = shop_products.id WHERE shop_cart.user_id=?",
+    "bind": [
+      20
+    ],
+    "expectedRows": 1,
+    "expectedServerTextValue": "2200",
+    "requiredRowPayloadHex": "0432323030",
+    "zeroForbidden": true,
+    "nullRowPayloadForbidden": true,
+    "clientComputesTotal": false
+  },
+  "observation": {
+    "passed": 1,
+    "failed": 0,
+    "total": 1,
+    "attempts": 1,
+    "freshClientAotAndRuntimeSeconds": 4.816803972993512,
+    "runtimeHostSeconds": 0.47435505500470754,
+    "hostExit": 0,
+    "typedResult": {
+      "ok": true,
+      "prepared_parameters": 1,
+      "query": "SELECT IFNULL(SUM(shop_cart.qty * shop_products.price), 0) FROM shop_cart JOIN shop_products ON shop_cart.product_id = shop_products.id WHERE shop_cart.user_id=?",
+      "bind": [
+        20
+      ],
+      "select_executions": 1,
+      "rows": 1,
+      "columns": [
+        "IFNULL(SUM(shop_cart.qty * shop_products.price), 0)"
+      ],
+      "data": [
+        "2200"
+      ],
+      "exact_total": true,
+      "client_computes_total": false
+    },
+    "nativeFixtureExecutions": 1,
+    "verifiedCurrentDaemonExecutions": 1,
+    "nativeByteRelayExecutions": 1,
+    "daemonRebuilt": false,
+    "cachedDaemonAotExcluded": true,
+    "allOwnedChildrenReaped": true,
+    "childExits": {
+      "client": 0,
+      "daemon": -15,
+      "native-byte-relay": 0
+    },
+    "storageInitiallyEmpty": true
+  },
+  "validation": {
+    "status": "VERIFIED_FROM_EXISTING_SINGLE_NATIVE_NONEMPTY_CART_IFNULL_TRACE",
+    "setupSql": [
+      "CREATE TABLE shop_products (id INT PRIMARY KEY, sku TEXT, name TEXT, price INT)",
+      "INSERT INTO shop_products (id, sku, name, price) VALUES (1, 'SKU-1', 'Demo Widget', 1500)",
+      "INSERT INTO shop_products (id, sku, name, price) VALUES (2, 'SKU-2', 'Demo Gadget', 2200)",
+      "CREATE TABLE shop_cart (id INT PRIMARY KEY, user_id INT, product_id INT, qty INT)",
+      "INSERT INTO shop_cart (id, user_id, product_id, qty) VALUES (2, 20, 2, 1)"
+    ],
+    "allSetupAcknowledged": true,
+    "onlyUser20CartSeeded": true,
+    "prepareSql": "SELECT IFNULL(SUM(shop_cart.qty * shop_products.price), 0) FROM shop_cart JOIN shop_products ON shop_cart.product_id = shop_products.id WHERE shop_cart.user_id=?",
+    "bind": [
+      20
+    ],
+    "preparedParameterCount": 1,
+    "parameterTypes": [
+      3
+    ],
+    "statementId": 1,
+    "executePayloadHex": "170100000000010000000001030014000000",
+    "preparedSelectExecutions": 1,
+    "responseColumns": [
+      "IFNULL(SUM(shop_cart.qty * shop_products.price), 0)"
+    ],
+    "exactRows": 1,
+    "serverTextValues": [
+      "2200"
+    ],
+    "rowPayloadHex": "0432323030",
+    "nullRowPayloadAbsent": true,
+    "zeroResultAbsent": true,
+    "clientComputesTotal": false,
+    "errPackets": 0,
+    "clientPackets": 8,
+    "daemonPackets": 13,
+    "newNativeRuns": 0,
+    "fixtureUnchanged": true,
+    "productSourcesUnchanged": true,
+    "existingSumScopeRejectionsPassed": 6,
+    "existingSumWhereScopeRejectionsPassed": 4,
+    "existingIfnullScopeRejectionsPassed": 6,
+    "existingOrderScopeRejectionsPassed": 4,
+    "existingGroupedCOUNTAndCOUNTStarEngineChecksPassed": true,
+    "existingSqlStartupAssertionsPassed": 36,
+    "existingQualifiedJoinScopeGuardsPassed": 4,
+    "existingMultiplyScopeGuardsPassed": 4,
+    "existingProjectionAndAggregateChecksPassed": true
+  },
+  "bounds": {
+    "addressSpaceBytesPerProcess": 2147483648,
+    "fixtureRuntimeMs": 30000,
+    "privateHostRuntimeSeconds": 90,
+    "freshClientAotAndRuntimeSeconds": 120,
+    "sharedFlock": "existing /tmp/fl-heavy.lock; one acquisition, no force release",
+    "automaticWholeTrialRetries": 0,
+    "nativeRelayIdleSeconds": 15,
+    "nativeRelayConnectSeconds": 3,
+    "nativeRelayConnectRetries": 30,
+    "nativeRelayConnectRetryIntervalSeconds": 0.1
+  },
+  "toolchain": {
+    "sdkManifestSha256": "c5c90ed5234dc8d5d321fe63950c6c20f87f9f12ac9e51bc4c2edc4ef0101233",
+    "compilerSha256": "f514e043d3f08115e273717462595a69ffd0522614aad5666dec576f04a46dac",
+    "runtimeArchiveSha256": "fe4308c19eba2142049100c17ac08979b5787c1698b6d5e0e9e082a1f6e691fe",
+    "verifiedDaemonElfSha256": "5c87aba9032e9077b07d88cd22987475bc0a2794e0cdb4eca83a27c99a32d626",
+    "daemonProducerReceiptSha256": "2c27075fcd36540c3f2a8a5a4ce5339c2220fb2aa78f710a198cbfde43627dad",
+    "freshFixtureGeneratedCSha256": "8b39794618a5b57816b421054caf2ccbc5583c1f41fd6fdb5627ab5a2178be6e",
+    "freshFixtureElfSha256": "73f4f6245e6cebd14d3cdcd86df7ccc9952914cf1e77557f466dcc4fec902c16",
+    "nativeByteRelaySha256": "cd8741946c6e0008ea4f87129b7cf1c1e3fa5e8159a5ec98d4a7763447b53b4b",
+    "compilerAndGccFlagsUnchanged": true
+  },
+  "audit": {
+    "traceSha256": "55f20465fd73faf771ed6ee55a59fb0aeeda71b5b019cc0d16e8c2b33fbb05fb",
+    "decodedExecs": 17,
+    "resumedExecsJoined": 9,
+    "allTerminalExecStatusesParsed": true,
+    "successfulNodeFamilyExecs": 0,
+    "failedNodeFamilyAttempts": 0,
+    "successfulPythonExecs": 1,
+    "allowedPrivateControllerPythonExecs": 1,
+    "successfulBasenameCounts": {
+      "as": 1,
+      "bash": 1,
+      "bwrap": 1,
+      "cc1": 2,
+      "client-bin": 1,
+      "collect2": 1,
+      "daemon-bin": 1,
+      "flc": 2,
+      "gcc": 2,
+      "grep": 1,
+      "ld": 1,
+      "python3": 1,
+      "socat": 1,
+      "timeout": 1
+    },
+    "timedTraceSha256": "7c44c75c528b787dc6a1a8352b4e768d93a5cac8237a0d9d585532f014e8f023",
+    "privateResultReceiptSha256": "e62fcd030d61fd1f1e3e901d8ed19b031b7d455c68d3f57c5faa938bb1202888",
+    "privateControllerSha256": "c8e765c9fcfaa5d89c052e880f7241cf74592cea5981b5e788ed7b98ae385191",
+    "privateProcessHostSha256": "8a33faf41cef501cd50023efb581f0b31d2811d366e326c5a2b34a85d740a8e3",
+    "wireProofSha256": "9b255fc04c751c1e7f7411dcbe528371af17d8db161406cbd3a48b4e226f3546",
+    "readOnlyOfflineProofSha256": "0a2f04c60e15199b2fbd95932045432e8cbe8ce3e98e337da2cb70a759e9b49a",
+    "readOnlyOfflineHelperSha256": "3e9fe45d6277f09c6643d1a0f2b49974d5bbf3dbc23a630be1b6ef3b82801c18",
+    "privatePythonControllersOutsideProduct": 2
+  },
+  "scope": {
+    "claim": "same IFNULL SUM SQL and user20-only seed with bind20 returns server2200",
+    "priorEmptyIfnullCommit": "fd18ae34fc8d373804793351bf46524664eb93f5",
+    "priorFailuresAndHistoricalWal349EvidencePreserved": true,
+    "fullRegressionOrOriginal71GateRerun": false,
+    "gateResultsPromoted": false,
+    "sqlCoreEngineParserCompilerDaemonTlsNodeAckOriginal25Changed": false
+  }
+}
