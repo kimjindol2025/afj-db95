@@ -1,0 +1,147 @@
+{
+  "schema": "db95-current-head-native-soak/1",
+  "scope": "One approved recovery observation of unchanged Native-service five-minute contract at current product source, using verified current-source AOT and fresh empty storage. Not original worker25.",
+  "baseHead": "f7f15b1c4fccfb3448a5fdb417f806760cd38c8e",
+  "productSourceCommit": "1fd5e4c3092fcd47ec26c1aa4ef8a77274f08dab",
+  "authorization": "msg_430f5179f483",
+  "originalInterruptedAttempt": {
+    "status": "INTERRUPTED_UNVERIFIED",
+    "passed": 0,
+    "failed": 0,
+    "interrupted": 1,
+    "finalTypedMetricsMissing": true,
+    "processesConfirmedAbsent": true,
+    "partialWalBytes": 4911943,
+    "partialWalSha256": "e99e7b3f51c08cdb07b211723c636b5c4d4a40412201d497d45496e3cc056b7c",
+    "noPartialDataReused": true
+  },
+  "qualifiedRecovery": {
+    "status": "PASS",
+    "passed": 1,
+    "failed": 0,
+    "total": 1,
+    "hostExit": 0,
+    "firstError": null,
+    "result": {
+      "ok": true,
+      "clients": 8,
+      "duration_ms": 300000,
+      "elapsed_ms": 300136,
+      "writes": 18032,
+      "batches": 2254,
+      "p95_ms": 145,
+      "max_ms": 273,
+      "throughput_per_second": 60.10666666666667
+    },
+    "baseHead": "f7f15b1c4fccfb3448a5fdb417f806760cd38c8e",
+    "productCoreCommit": "1fd5e4c3092fcd47ec26c1aa4ef8a77274f08dab",
+    "authorization": "msg_430f5179f483",
+    "recoveryAttempts": 1,
+    "originalInterruptedAttempt": {
+      "passed": 0,
+      "failed": 0,
+      "interruptedUnverified": 1,
+      "reusedItsData": false
+    },
+    "reusedCurrentHeadAotElfSha256": {
+      "daemon": "380697550041777ece54e148bafd36aafdc3ab1921c274d468f322e34f3c62b6",
+      "client": "49a293f5f9e5268a80fb96843e778a85e451a07f98c4b5cc13bda23fe924de38",
+      "control": "a1130acb4540461eeaf79077ed9547d02f5859b1c2c59e03ece87ebcbc42d77f"
+    },
+    "aotRebuilt": false,
+    "sourceSdkBinsAndOldPartialWalUnchanged": true,
+    "freshEmptyStorage": true,
+    "runtimeSeconds": 300.5190755290023,
+    "fixedContract": {
+      "clients": 8,
+      "durationMs": 300000,
+      "maxAndRequestMs": 20000,
+      "p95Ms": 15000,
+      "markerSeconds": 60,
+      "portSeconds": 30,
+      "rateMaxRequests": 10000,
+      "rateWindowMs": 60000,
+      "runtimeEnvelopeSeconds": 360,
+      "aotSeparate": true,
+      "addressSpaceBytes": 2147483648
+    },
+    "sdkManifestSha256": "c5c90ed5234dc8d5d321fe63950c6c20f87f9f12ac9e51bc4c2edc4ef0101233",
+    "runtimeArchiveSha256": "fe4308c19eba2142049100c17ac08979b5787c1698b6d5e0e9e082a1f6e691fe",
+    "traceAudit": {
+      "traceSha256": "93cf19da8d81696b91d35ec71d46a387c3267437d6b8c7f33a4c9f3524779c6f",
+      "decodedExecs": 9,
+      "resumedExecsJoined": 0,
+      "allTerminalExecStatusesParsed": true,
+      "successfulNodeFamilyExecs": 0,
+      "failedNodeFamilyAttempts": 0,
+      "successfulPythonExecs": 0,
+      "allowedPrivateControllerPythonExecs": 0,
+      "successfulBasenameCounts": {
+        "bash": 1,
+        "bwrap": 1,
+        "client-bin": 1,
+        "control-bin": 3,
+        "daemon-bin": 1,
+        "mkdir": 1,
+        "timeout": 1
+      }
+    },
+    "privatePythonControllerOutsideTrace": 1,
+    "flockOwnedByDetachedLauncher": true,
+    "artifactsSha256": {
+      "daemon-bin": "380697550041777ece54e148bafd36aafdc3ab1921c274d468f322e34f3c62b6",
+      "client-bin": "49a293f5f9e5268a80fb96843e778a85e451a07f98c4b5cc13bda23fe924de38",
+      "control-bin": "a1130acb4540461eeaf79077ed9547d02f5859b1c2c59e03ece87ebcbc42d77f",
+      "daemon.stdout": "427de2d102d612ce0a5574373de125bc9314b6d837cde363a478a81042cd401b",
+      "daemon.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "ready.stdout": "905ad62efc8e7649eec5e41282d7ad349c1fb338daee86862e7c86560bd69691",
+      "ready.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "client.stdout": "e00a86fbdbc89fcbb337173c6304f46fbe53b7993884bc2a6fbe5c9ba4b8846f",
+      "client.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "result.stdout": "bca8ed57036ebf5b46e4b40b15c8c8a9acd3711cd2b3ca0ad8950e9a632fa284",
+      "result.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "status.txt": "d465ffca342ccf4ab305ad7dfc0047366a84c3b69789ac9f577356856d90c87c"
+    },
+    "wal": {
+      "bytes": 6974551,
+      "sha256": "bd10f9b4fa408b2b3a79cadf6f52f9585098ec4d4e36722434561ac07b797870",
+      "artifactRelativePath": "soak ' 한글 %$\n/storage/tcp.wal"
+    },
+    "originalWorker25AndSourceNotRunOrModified": true,
+    "commercial": "HOLD",
+    "production": "NO"
+  },
+  "sourceSha256": {
+    "src/engine.fls": "691b86022ee95fe21736bab6f7025235d62b403d83c954d4f316c6451ad1fc19",
+    "src/tcp-server.fls": "b5f3988a48e8d1b38b9af60bc632d21498a326cdeb8294d2d6d9a5a3482a0982",
+    "src/compatibility.fls": "19b87d622e3252ba723db20c31ed4b42a675ea403e1988652b91b91836b79b42",
+    "tests/tcp-soak-daemon.fls": "2349c55077b292cb8b263eb7dbd4bb82d3e54ad07bc98c2e9e95aba6925cbdbb",
+    "tests/native-service/run-case.sh": "fe331b9fe126b0dab1532ef84184a96cbd87cd89bfc2a60e998c6136455efde1",
+    "tests/native-service/control.fls": "90c832fb4af2c613413ca93e3556695c8a58ba0833d76cbca6328e38250c1a75",
+    "tests/native-service/tcp-long-soak-client.fls": "cba5717076df2101f72e4033bcf03c7cf1b709aa541f80e89c86c99509e016ce",
+    "tests/tcp-long-soak.fls": "5990030fce1a718bc37828f0a5f625e45cba4b86e2d3ba66a4acbf4b199d079a"
+  },
+  "sdkManifestSha256": "c5c90ed5234dc8d5d321fe63950c6c20f87f9f12ac9e51bc4c2edc4ef0101233",
+  "runtimeArchiveSha256": "fe4308c19eba2142049100c17ac08979b5787c1698b6d5e0e9e082a1f6e691fe",
+  "reusedAotElfSha256": {
+    "daemon": "380697550041777ece54e148bafd36aafdc3ab1921c274d468f322e34f3c62b6",
+    "client": "49a293f5f9e5268a80fb96843e778a85e451a07f98c4b5cc13bda23fe924de38",
+    "control": "a1130acb4540461eeaf79077ed9547d02f5859b1c2c59e03ece87ebcbc42d77f"
+  },
+  "noRebuildAndNoAutomaticRetry": true,
+  "nativePercentileReferenceControls": 8,
+  "oldPartialWalPreservedUnchanged": true,
+  "resultStdoutSha256": "bca8ed57036ebf5b46e4b40b15c8c8a9acd3711cd2b3ca0ad8950e9a632fa284",
+  "clientStdoutSha256": "e00a86fbdbc89fcbb337173c6304f46fbe53b7993884bc2a6fbe5c9ba4b8846f",
+  "original25SourceSha256": "5990030fce1a718bc37828f0a5f625e45cba4b86e2d3ba66a4acbf4b199d079a",
+  "original25NotPromoted": true,
+  "preserved": {
+    "walFix": "1e55d063fe11b3905d79b2ca203f5eb384a7e317",
+    "priorOriginalRegressions349": 349,
+    "regressions349NotRerunHere": true,
+    "case28": "51e80d82087be9ac4de5d28e306388bdd874fe11",
+    "case30": "1fd5e4c3092fcd47ec26c1aa4ef8a77274f08dab",
+    "commercial": "HOLD",
+    "production": "NO"
+  }
+}
