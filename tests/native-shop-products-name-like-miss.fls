@@ -1,0 +1,267 @@
+;; Native product name LIKE miss fixture agreed in msg_7ee88b11aff1.
+;; Server LIKE with bound %NoSuch% must return zero rows without client filtering.
+(load "../src/sha1.fls")
+(define visible-control (env-get "AFJ_NATIVE_SHOP_PRODUCTS_NAME_LIKE_MISS_CONTROL"))
+(define visible-connection (atom nil))
+(define visible-buffer (atom ""))
+(define visible-stage (atom "handshake"))
+(define visible-sequence (atom 0))
+(define visible-columns (atom []))
+(define visible-rows (atom []))
+(define visible-error (atom nil))
+(define visible-done (atom false))
+(define visible-statement (atom nil))
+
+(defn visible-check [condition message]
+  (if (= condition true) true (throw message)))
+
+(defn visible-u32 [value]
+  (buf-concat [(buf-u8 (rem value 256))
+               (buf-u8 (rem (floor (/ value 256)) 256))
+               (buf-u8 (rem (floor (/ value 65536)) 256))
+               (buf-u8 (rem (floor (/ value 16777216)) 256))]))
+
+(defn visible-read-u32 [bytes offset]
+  (+ (buf-read-u8 bytes offset)
+     (* 256 (buf-read-u8 bytes (+ offset 1)))
+     (* 65536 (buf-read-u8 bytes (+ offset 2)))
+     (* 16777216 (buf-read-u8 bytes (+ offset 3)))))
+
+(defn visible-send [payload sequence next-stage response-sequence]
+  (let [length (buf-len payload)
+        frame (buf-concat [(buf-slice (visible-u32 length) 0 3)
+                           (buf-u8 sequence) payload])]
+    (reset! visible-stage next-stage)
+    (reset! visible-sequence response-sequence)
+    (visible-check (= (tcp-write (deref visible-connection) (buf-to-binary frame)) "ok")
+                 "NATIVE_SHOP_PRODUCTS_NAME_LIKE_MISS_PACKET_WRITE")))
+
+(defn visible-command [code text next-stage]
+  (visible-send (buf-concat [(buf-u8 code) (buf-str text)])
+              0 next-stage 1))
+
+(defn visible-text [bytes offset]
+  (visible-check (< offset (buf-len bytes)) "NATIVE_SHOP_PRODUCTS_NAME_LIKE_MISS_TEXT_PREFIX")
+  (let [length (buf-read-u8 bytes offset) next (+ offset 1 length)]
+    (visible-check (and (< length 251) (<= next (buf-len bytes)))
+                 "NATIVE_SHOP_PRODUCTS_NAME_LIKE_MISS_TEXT_LENGTH")
+    {"value" (buf-read-str bytes (+ offset 1) length)
+     "next" next}))
+
+(defn visible-column-name [bytes]
+  (loop [index 0 offset 0]
+    (let [field (visible-text bytes offset)]
+      (if (= index 4) (get field "value")
+        (recur (+ index 1) (get field "next"))))))
+
+(defn visible-login [bytes]
+  (visible-check (= (buf-read-u8 bytes 0) 10) "NATIVE_SHOP_PRODUCTS_NAME_LIKE_MISS_HANDSHAKE_VERSION")
+  (let [version-end
+          (loop [offset 1]
+            (do
+              (visible-check (< offset (buf-len bytes)) "NATIVE_SHOP_PRODUCTS_NAME_LIKE_MISS_HANDSHAKE_LENGTH")
+              (if (= (buf-read-u8 bytes offset) 0) offset (recur (+ offset 1)))))
+        first-offset (+ version-end 5)
+        second-offset (+ first-offset 27)]
+    (visible-check (<= (+ second-offset 12) (buf-len bytes))
+                 "NATIVE_SHOP_PRODUCTS_NAME_LIKE_MISS_SCRAMBLE_LENGTH")
+    (let [scramble (buf-concat [(buf-slice bytes first-offset 8)
+                                (buf-slice bytes second-offset 12)])
+          token (sha1-mysql-native-token "development-only" scramble)
+          login (buf-concat [(visible-u32 172545) (visible-u32 1048576)
+                             (buf-u8 33) (sha1-zero-bytes 23)
+                             (buf-str "root") (buf-u8 0)
+                             (buf-u8 20) token])]
+      (visible-check (= (buf-len token) 20) "NATIVE_SHOP_PRODUCTS_NAME_LIKE_MISS_TOKEN_LENGTH")
+      (visible-send login 1 "login" 2))))
+
+
+(define visible-setup
+  ["CREATE TABLE shop_products (id INT PRIMARY KEY, sku TEXT, name TEXT, price INT, visible INT)"
+   "INSERT INTO shop_products (id, sku, name, price, visible) VALUES (1, 'SKU-1', 'Demo Widget', 1500, 1)"
+   "INSERT INTO shop_products (id, sku, name, price, visible) VALUES (2, 'SKU-2', 'Demo Gadget', 2200, 1)"
+   "CREATE TABLE shop_cart (id INT PRIMARY KEY, user_id INT, product_id INT, qty INT)"
+   "INSERT INTO shop_cart (id, user_id, product_id, qty) VALUES (2, 20, 2, 1)"])
+(define visible-queries
+  [{"sql" "SELECT sku, name, price FROM shop_products WHERE name LIKE ?"
+    "bind" ["%NoSuch%"] "response" "resultset" "columns" ["sku" "name" "price"]
+    "row-count" 0 "expected-row" {}}])
+(define visible-setup-index (atom 0))
+(define visible-query-index (atom 0))
+(define visible-results (atom []))
+(define visible-column-count (atom 0))
+
+(defn visible-row-map [bytes]
+  (loop [index 0 offset 0 result {}]
+    (if (= index (deref visible-column-count))
+      (do
+        (visible-check (= offset (buf-len bytes)) "NATIVE_SHOP_PRODUCTS_NAME_LIKE_MISS_ROW_TRAILING_BYTES")
+        result)
+      (let [field (visible-text bytes offset)]
+        (recur (+ index 1) (get field "next")
+               (assoc result (get (deref visible-columns) index) (get field "value")))))))
+
+(defn visible-prepare-current []
+  (reset! visible-columns [])
+  (reset! visible-rows [])
+  (visible-command 22 (get (get visible-queries (deref visible-query-index)) "sql") "prepare"))
+
+(defn visible-finish-result []
+  (let [index (deref visible-query-index)
+        query (get visible-queries index)
+        rows (deref visible-rows)]
+    (visible-check (= (count rows) (get query "row-count"))
+                    "NATIVE_SHOP_PRODUCTS_NAME_LIKE_MISS_EXACT_ROW_COUNT")
+    (if (= (get query "row-count") 1)
+      (doseq [column (get query "columns")]
+        (visible-check (= (get (get rows 0) column)
+                           (get (get query "expected-row") column))
+                        "NATIVE_SHOP_PRODUCTS_NAME_LIKE_MISS_EXACT_ROW_VALUE"))
+      nil)
+    (swap! visible-results conj
+           {"query" (get query "sql") "bind" (get query "bind")
+            "response" (get query "response") "rows" (count rows) "columns" (deref visible-columns) "data" rows})
+    (if (< (+ index 1) (count visible-queries))
+      (do (swap! visible-query-index + 1) (visible-prepare-current))
+      (do (reset! visible-stage "done") (reset! visible-done true)))))
+
+(defn visible-frame [bytes sequence]
+  (visible-check (> (buf-len bytes) 0) "NATIVE_SHOP_PRODUCTS_NAME_LIKE_MISS_EMPTY_PACKET")
+  (visible-check (= sequence (deref visible-sequence)) "NATIVE_SHOP_PRODUCTS_NAME_LIKE_MISS_PACKET_SEQUENCE")
+  (swap! visible-sequence + 1)
+  (let [stage (deref visible-stage) first-byte (buf-read-u8 bytes 0)]
+    (if (= first-byte 255)
+      (if (>= (buf-len bytes) 9)
+        (throw (str "NATIVE_SHOP_PRODUCTS_NAME_LIKE_MISS_SERVER_ERROR_" stage " code="
+                    (+ (buf-read-u8 bytes 1) (* 256 (buf-read-u8 bytes 2)))
+                    " message=" (buf-read-str bytes 9 (- (buf-len bytes) 9))))
+        (throw "NATIVE_SHOP_PRODUCTS_NAME_LIKE_MISS_SHORT_SERVER_ERROR"))
+      nil)
+    (cond
+      (= stage "handshake") (visible-login bytes)
+      (= stage "login")
+        (do (visible-check (= first-byte 0) "NATIVE_SHOP_PRODUCTS_NAME_LIKE_MISS_LOGIN_ACK")
+            (visible-command 3 (get visible-setup 0) "setup"))
+      (= stage "setup")
+        (do
+          (visible-check (= first-byte 0) "NATIVE_SHOP_PRODUCTS_NAME_LIKE_MISS_SETUP_ACK")
+          (swap! visible-setup-index + 1)
+          (if (< (deref visible-setup-index) (count visible-setup))
+            (visible-command 3 (get visible-setup (deref visible-setup-index)) "setup")
+            (visible-prepare-current)))
+      (= stage "prepare")
+        (let [parameters (count (get (get visible-queries (deref visible-query-index)) "bind"))]
+          (visible-check (and (= first-byte 0) (>= (buf-len bytes) 12))
+                          "NATIVE_SHOP_PRODUCTS_NAME_LIKE_MISS_PREPARE_ACK")
+          (visible-check (and (= (buf-read-u8 bytes 7) parameters)
+                               (= (buf-read-u8 bytes 8) 0))
+                          "NATIVE_SHOP_PRODUCTS_NAME_LIKE_MISS_PARAMETER_COUNT")
+          (reset! visible-statement (visible-read-u32 bytes 1))
+          (let [bind (get (get visible-queries (deref visible-query-index)) "bind")
+                execute (atom (buf-concat [(buf-u8 23) (visible-u32 (deref visible-statement))
+                                           (buf-u8 0) (visible-u32 1)
+                                           (buf-u8 0) (buf-u8 1)]))]
+            ;; Existing Native INT32 and VAR_STRING parameter types.
+            (doseq [value bind]
+              (visible-check (or (number? value) (string? value))
+                            "NATIVE_SHOP_PRODUCTS_NAME_LIKE_MISS_BIND_TYPE")
+              (reset! execute (buf-concat [(deref execute)
+                                           (buf-u8 (if (number? value) 3 253)) (buf-u8 0)])))
+            (doseq [value bind]
+              (let [encoded (if (number? value)
+                              (visible-u32 value)
+                              (let [text (buf-str value)]
+                                (visible-check (< (buf-len text) 251)
+                                              "NATIVE_SHOP_PRODUCTS_NAME_LIKE_MISS_SHORT_TEXT_BIND")
+                                (buf-concat [(buf-u8 (buf-len text)) text])))]
+                (reset! execute (buf-concat [(deref execute) encoded]))))
+            (visible-send (deref execute) 0 "select" 1)))
+      (= stage "select")
+        (let [query (get visible-queries (deref visible-query-index))]
+          (visible-check (and (= (buf-len bytes) 1)
+                             (> first-byte 0) (< first-byte 65))
+                        "NATIVE_SHOP_PRODUCTS_NAME_LIKE_MISS_RESULT_HEADER")
+          (reset! visible-column-count first-byte)
+          (reset! visible-stage "columns"))
+      (= stage "columns")
+        (do
+          (swap! visible-columns conj (visible-column-name bytes))
+          (if (= (count (deref visible-columns)) (deref visible-column-count))
+            (reset! visible-stage "columns-end") nil))
+      (= stage "columns-end")
+        (do
+          (visible-check (and (= first-byte 254) (= (buf-len bytes) 5))
+                          "NATIVE_SHOP_PRODUCTS_NAME_LIKE_MISS_COLUMN_EOF")
+          ;; An empty result need not expose id metadata; ERR and rows remain strict.
+          (if (= (get (get visible-queries (deref visible-query-index)) "row-count") 0) nil
+            (visible-check (= (deref visible-columns)
+                               (get (get visible-queries (deref visible-query-index)) "columns"))
+                            "NATIVE_SHOP_PRODUCTS_NAME_LIKE_MISS_RESULT_SCHEMA"))
+          (reset! visible-stage "rows"))
+      (= stage "rows")
+        (if (and (= first-byte 254) (= (buf-len bytes) 5))
+          (visible-finish-result)
+          (do
+            (visible-check (< (count (deref visible-rows))
+                               (get (get visible-queries (deref visible-query-index)) "row-count"))
+                            "NATIVE_SHOP_PRODUCTS_NAME_LIKE_MISS_EXTRA_ROW")
+            (swap! visible-rows conj (visible-row-map bytes))))
+      :else (throw "NATIVE_SHOP_PRODUCTS_NAME_LIKE_MISS_UNEXPECTED_STAGE"))))
+(defn visible-drain []
+  (if (>= (buf-len (deref visible-buffer)) 4)
+    (let [bytes (deref visible-buffer)
+          length (+ (buf-read-u8 bytes 0) (* 256 (buf-read-u8 bytes 1))
+                     (* 65536 (buf-read-u8 bytes 2)))]
+      (visible-check (<= length 65536) "NATIVE_SHOP_PRODUCTS_NAME_LIKE_MISS_PACKET_LIMIT")
+      (if (>= (buf-len bytes) (+ 4 length))
+        (do
+          (reset! visible-buffer (buf-slice bytes (+ 4 length)
+                                         (- (buf-len bytes) (+ 4 length))))
+          (visible-frame (buf-slice bytes 4 length) (buf-read-u8 bytes 3))
+          (visible-drain))
+        nil))
+    nil))
+
+(defn native-shop-products-name-like-miss-handler [event connection payload peer]
+  (try
+    (cond
+      (or (= event "connect") (= event "accept"))
+        (do (visible-check (nil? (deref visible-connection)) "NATIVE_SHOP_PRODUCTS_NAME_LIKE_MISS_SINGLE_CONNECTION")
+            (reset! visible-connection connection))
+      (= event "data")
+        (do (reset! visible-buffer
+              (buf-concat [(deref visible-buffer) (buf-from-binary payload)]))
+            (visible-drain))
+      (= event "close")
+        (visible-check (deref visible-done) "NATIVE_SHOP_PRODUCTS_NAME_LIKE_MISS_PREMATURE_CLOSE")
+      :else nil)
+    (catch [error]
+      (reset! visible-error (error_message error))
+      (reset! visible-done true))))
+
+(visible-check (not (nil? visible-control)) "NATIVE_SHOP_PRODUCTS_NAME_LIKE_MISS_HOST_ENV_REQUIRED")
+(visible-check (not (file_exists (str visible-control "/ports.ready")))
+             "NATIVE_SHOP_PRODUCTS_NAME_LIKE_MISS_CONTROL_NOT_FRESH")
+(let [bridge-port (tcp-client-free-port) daemon-port (tcp-client-free-port)]
+  (visible-check (and (number? bridge-port) (number? daemon-port)
+                    (not (= bridge-port daemon-port))) "NATIVE_SHOP_PRODUCTS_NAME_LIKE_MISS_DISTINCT_PORTS")
+  (visible-check (= (tcp-server-raw bridge-port "native-shop-products-name-like-miss-handler" "127.0.0.1") "ok")
+               "NATIVE_SHOP_PRODUCTS_NAME_LIKE_MISS_LISTENER_START")
+  (try
+    (do
+      (file_write (str visible-control "/ports.json")
+                  (json_str {"bridge" bridge-port "daemon" daemon-port}))
+      (file_write (str visible-control "/ports.ready") "ready")
+      (let [deadline (+ (now-ms) 30000)]
+        (while (and (< (now-ms) deadline) (not (deref visible-done))) (fl-yield 10)))
+      (visible-check (deref visible-done) "NATIVE_SHOP_PRODUCTS_NAME_LIKE_MISS_CONTRACT_TIMEOUT")
+      (if (nil? (deref visible-error)) nil (throw (deref visible-error)))
+      (visible-check (= (deref visible-stage) "done") "NATIVE_SHOP_PRODUCTS_NAME_LIKE_MISS_CONTRACT_INCOMPLETE")
+      (visible-check (= (buf-len (deref visible-buffer)) 0) "NATIVE_SHOP_PRODUCTS_NAME_LIKE_MISS_TRAILING_PACKET_BYTES"))
+    (finally (tcp-server-stop bridge-port))))
+(visible-check (= (count (deref visible-results)) 1) "NATIVE_SHOP_PRODUCTS_NAME_LIKE_MISS_ONE_RESULT")
+(println (str "NATIVE_SHOP_PRODUCTS_NAME_LIKE_MISS_RESULT "
+  (json_str {"ok" true "prepared_executions" 1 "prepared_select_executions" 1
+             "rows" 0 "exact_name_like_miss_select" true "err_packets" 0
+             "results" (deref visible-results)})))
+(println "afj-db95 Native shop product name LIKE miss prepared SELECT PASS")
