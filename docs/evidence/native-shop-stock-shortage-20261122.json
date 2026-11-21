@@ -1,0 +1,298 @@
+{
+  "schema": "db95-native-shop-stock-shortage-observation-v1",
+  "date_local": "2026-11-22 Asia/Seoul",
+  "status": "SCOPED_PASS",
+  "commercial": "HOLD",
+  "deployment": "NO",
+  "source": {
+    "baseHead": "1414d4ddcf104eed5facfdd738f7b69f24d71cc5",
+    "implementationFilesChanged": [],
+    "newFixture": "tests/native-shop-stock-shortage.fls",
+    "fixtureSha256": "adfd2d39538ed6d4ec49074c32ed8bde69e21a70847045e63ba1fc0914ef6ab7",
+    "daemonDependencySha256": {
+      "src/engine.fls": "6058a56b9ccd6d474692be1da502316991f21b5afae7e837a322a1d0133d8f0c",
+      "src/sql-core.fls": "156529064a95cb506b405a629be86cd1184718478c1051039038e357d6fc0981",
+      "src/mariadb-wire.fls": "ad22ba6ae03fa70388c6b3a0d1a930e574595b67e5cf58421ef3ea33b3c5c4ff",
+      "src/sha1.fls": "6fc4c3def2d56c4ff7eb76c7cd7917b6e268bdc070a75fe90959a49a08bf39cf",
+      "tests/native-mariadb-daemon.fls": "4aeb91c050734087a9b0e27bffd677cfe48f6bfb5068f39cbbce2efb4c01868d"
+    },
+    "allTrackedSourceNewFixtureSdkAndDaemonBytesUnchangedDuringTrial": true
+  },
+  "contract": {
+    "purpose": "agreed Native shortage-fixture readback with no stock UPDATE and no order INSERT",
+    "productSeed": {
+      "id": 1,
+      "sku": "SKU-1",
+      "name": "Demo Widget",
+      "price": 1500,
+      "stock": 1
+    },
+    "cartSeed": {
+      "id": 1,
+      "product_id": 1,
+      "qty": 2
+    },
+    "ordersTableInitiallyEmpty": true,
+    "preparedQueries": [
+      "SELECT id, stock FROM shop_products WHERE id=?",
+      "SELECT id FROM shop_orders ORDER BY id",
+      "SELECT qty FROM shop_cart WHERE id=?"
+    ],
+    "bindings": [
+      [
+        1
+      ],
+      [],
+      [
+        1
+      ]
+    ],
+    "expectedStockRow": {
+      "id": "1",
+      "stock": "1"
+    },
+    "expectedOrderRows": [],
+    "expectedCartRow": {
+      "qty": "2"
+    },
+    "stockUpdateExecutions": 0,
+    "orderInsertExecutions": 0,
+    "emptyResultMetadataIdNotRequired": true
+  },
+  "observation": {
+    "passed": 1,
+    "failed": 0,
+    "total": 1,
+    "attempts": 1,
+    "freshClientAotAndRuntimeSeconds": 5.2952595870010555,
+    "runtimeHostSeconds": 0.5449519419926219,
+    "hostExit": 0,
+    "typedResult": {
+      "ok": true,
+      "initial_stock": 1,
+      "requested_qty": 2,
+      "prepared_select_executions": 3,
+      "order_insert_executions": 0,
+      "stock_update_executions": 0,
+      "err_packets": 0,
+      "results": [
+        {
+          "query": "SELECT id, stock FROM shop_products WHERE id=?",
+          "bind": [
+            1
+          ],
+          "rows": 1,
+          "columns": [
+            "id",
+            "stock"
+          ],
+          "data": [
+            {
+              "id": "1",
+              "stock": "1"
+            }
+          ]
+        },
+        {
+          "query": "SELECT id FROM shop_orders ORDER BY id",
+          "bind": [],
+          "rows": 0,
+          "columns": [
+            "result"
+          ],
+          "data": []
+        },
+        {
+          "query": "SELECT qty FROM shop_cart WHERE id=?",
+          "bind": [
+            1
+          ],
+          "rows": 1,
+          "columns": [
+            "qty"
+          ],
+          "data": [
+            {
+              "qty": "2"
+            }
+          ]
+        }
+      ]
+    },
+    "nativeFixtureExecutions": 1,
+    "verifiedCurrentDaemonExecutions": 1,
+    "nativeByteRelayExecutions": 1,
+    "daemonRebuilt": false,
+    "cachedDaemonAotExcluded": true,
+    "allOwnedChildrenReaped": true,
+    "childExits": {
+      "client": 0,
+      "daemon": -15,
+      "native-byte-relay": 0
+    },
+    "storageInitiallyEmpty": true
+  },
+  "validation": {
+    "status": "VERIFIED_FROM_EXISTING_SINGLE_NATIVE_STOCK_SHORTAGE_TRACE",
+    "commandBytes": [
+      3,
+      3,
+      3,
+      3,
+      3,
+      22,
+      23,
+      22,
+      23,
+      22,
+      23
+    ],
+    "setupSql": [
+      "CREATE TABLE shop_products (id INT PRIMARY KEY, sku TEXT, name TEXT, price INT, stock INT)",
+      "INSERT INTO shop_products (id, sku, name, price, stock) VALUES (1, 'SKU-1', 'Demo Widget', 1500, 1)",
+      "CREATE TABLE shop_cart (id INT PRIMARY KEY, product_id INT, qty INT)",
+      "INSERT INTO shop_cart (id, product_id, qty) VALUES (1, 1, 2)",
+      "CREATE TABLE shop_orders (id INT PRIMARY KEY, product_id INT, qty INT, total INT)"
+    ],
+    "allSetupAcknowledged": true,
+    "preparedQueries": [
+      "SELECT id, stock FROM shop_products WHERE id=?",
+      "SELECT id FROM shop_orders ORDER BY id",
+      "SELECT qty FROM shop_cart WHERE id=?"
+    ],
+    "preparedParameterCounts": [
+      1,
+      0,
+      1
+    ],
+    "bindings": [
+      [
+        1
+      ],
+      [],
+      [
+        1
+      ]
+    ],
+    "statementIds": [
+      1,
+      2,
+      3
+    ],
+    "executePayloadHex": [
+      "170100000000010000000001030001000000",
+      "17020000000001000000",
+      "170300000000010000000001030001000000"
+    ],
+    "preparedSelectExecutions": 3,
+    "stockUpdateExecutions": 0,
+    "orderInsertExecutions": 0,
+    "responseColumns": [
+      [
+        "id",
+        "stock"
+      ],
+      [
+        "result"
+      ],
+      [
+        "qty"
+      ]
+    ],
+    "responseRows": [
+      [
+        {
+          "id": "1",
+          "stock": "1"
+        }
+      ],
+      [],
+      [
+        {
+          "qty": "2"
+        }
+      ]
+    ],
+    "stockUnchanged": 1,
+    "ordersEmpty": true,
+    "cartQtyUnchanged": 2,
+    "errPackets": 0,
+    "clientPackets": 12,
+    "daemonPackets": 25,
+    "engineAndSqlCoreSourceUnchanged": true,
+    "newNativeRuns": 0,
+    "existingSumScopeRejectionsPassed": 6,
+    "existingOrderScopeRejectionsPassed": 4,
+    "existingGroupedCOUNTAndCOUNTStarEngineChecksPassed": true,
+    "existingSqlStartupAssertionsPassed": 36,
+    "existingQualifiedJoinScopeGuardsPassed": 4,
+    "existingMultiplyScopeGuardsPassed": 4,
+    "existingProjectionAndAggregateChecksPassed": true
+  },
+  "bounds": {
+    "addressSpaceBytesPerProcess": 2147483648,
+    "fixtureRuntimeMs": 30000,
+    "privateHostRuntimeSeconds": 90,
+    "freshClientAotAndRuntimeSeconds": 120,
+    "sharedFlock": "existing /tmp/fl-heavy.lock; one waiter, natural acquisition, no force release",
+    "automaticWholeTrialRetries": 0,
+    "nativeRelayIdleSeconds": 15,
+    "nativeRelayConnectSeconds": 3,
+    "nativeRelayConnectRetries": 30,
+    "nativeRelayConnectRetryIntervalSeconds": 0.1
+  },
+  "toolchain": {
+    "sdkManifestSha256": "c5c90ed5234dc8d5d321fe63950c6c20f87f9f12ac9e51bc4c2edc4ef0101233",
+    "compilerSha256": "f514e043d3f08115e273717462595a69ffd0522614aad5666dec576f04a46dac",
+    "runtimeArchiveSha256": "fe4308c19eba2142049100c17ac08979b5787c1698b6d5e0e9e082a1f6e691fe",
+    "verifiedDaemonElfSha256": "dda5ded9119fa5ba2c9b1eb0c18c298ae0f16471e4408b67a9bfed9944054e84",
+    "daemonProducerReceiptSha256": "44860ef3e647f6d4b6c267fb32f340a279c082aacadf373b40ff6aab9c1b74ac",
+    "freshFixtureGeneratedCSha256": "f21ffc62f2c1385899a42e1001736241788f00389e7b8ceff5aaff7b85330ee5",
+    "freshFixtureElfSha256": "15eb599fd61c8c90f67758281711337e69529dd9ee0a9eb2840ac992dc836bd7",
+    "nativeByteRelaySha256": "cd8741946c6e0008ea4f87129b7cf1c1e3fa5e8159a5ec98d4a7763447b53b4b",
+    "compilerAndGccFlagsUnchanged": true
+  },
+  "audit": {
+    "traceSha256": "c87d172b4db6cc927df92987221b568073167b87521085933ce8267959ea802a",
+    "decodedExecs": 17,
+    "resumedExecsJoined": 9,
+    "allTerminalExecStatusesParsed": true,
+    "successfulNodeFamilyExecs": 0,
+    "failedNodeFamilyAttempts": 0,
+    "successfulPythonExecs": 1,
+    "allowedPrivateControllerPythonExecs": 1,
+    "successfulBasenameCounts": {
+      "as": 1,
+      "bash": 1,
+      "bwrap": 1,
+      "cc1": 2,
+      "client-bin": 1,
+      "collect2": 1,
+      "daemon-bin": 1,
+      "flc": 2,
+      "gcc": 2,
+      "grep": 1,
+      "ld": 1,
+      "python3": 1,
+      "socat": 1,
+      "timeout": 1
+    },
+    "timedTraceSha256": "98538b7ac7b9eec9e2ff7879ce02afe00d5a0964abd22cfa86c2062792548ab3",
+    "privateResultReceiptSha256": "cc869443c07542d412c84d3db48211c40ff1d6e651163d090031e7898355016f",
+    "privateControllerSha256": "c23436a6bd8eda275569194b095a438007fd9f3edd4acb8018b624da728be555",
+    "privateProcessHostSha256": "1c394eaa691e29ebca3a17457d32c8f41c316129f3b24ba458bdb9e1f8dfeb54",
+    "wireProofSha256": "25fb916d0152a9133ece51d8d972b895dcd86ff1e7f13f0b17d723364b31fbc7",
+    "readOnlyOfflineProofSha256": "c18804bc487c1ddf4f2633f4995c8c4d8be6847ea2ba7a84a8df6104768c5c1b",
+    "readOnlyOfflineHelperSha256": "3e9fe45d6277f09c6643d1a0f2b49974d5bbf3dbc23a630be1b6ef3b82801c18",
+    "privatePythonControllersOutsideProduct": 2
+  },
+  "scope": {
+    "claim": "three exact prepared SELECT observations for the authorized shortage fixture; no mutation attempted after seeding",
+    "checkoutRejectionOrConcurrencyContractExercised": false,
+    "priorCartTotalCommit": "1414d4ddcf104eed5facfdd738f7b69f24d71cc5",
+    "priorFailuresAndHistoricalWal349EvidencePreserved": true,
+    "fullRegressionOrOriginal71GateRerun": false,
+    "gateResultsPromoted": false,
+    "sqlCoreEngineParserCompilerDaemonTlsNodeAckOriginal25Changed": false
+  }
+}

@@ -1,0 +1,260 @@
+;; Native stock-shortage observation fixture agreed in msg_1c748071a17c.
+;; stock=1 < qty=2: no UPDATE and no order INSERT; verify stock/orders/cart over PREPARE.
+(load "../src/sha1.fls")
+(define shortage-control (env-get "AFJ_NATIVE_SHOP_STOCK_SHORTAGE_CONTROL"))
+(define shortage-connection (atom nil))
+(define shortage-buffer (atom ""))
+(define shortage-stage (atom "handshake"))
+(define shortage-sequence (atom 0))
+(define shortage-columns (atom []))
+(define shortage-rows (atom []))
+(define shortage-error (atom nil))
+(define shortage-done (atom false))
+(define shortage-statement (atom nil))
+
+(defn shortage-check [condition message]
+  (if (= condition true) true (throw message)))
+
+(defn shortage-u32 [value]
+  (buf-concat [(buf-u8 (rem value 256))
+               (buf-u8 (rem (floor (/ value 256)) 256))
+               (buf-u8 (rem (floor (/ value 65536)) 256))
+               (buf-u8 (rem (floor (/ value 16777216)) 256))]))
+
+(defn shortage-read-u32 [bytes offset]
+  (+ (buf-read-u8 bytes offset)
+     (* 256 (buf-read-u8 bytes (+ offset 1)))
+     (* 65536 (buf-read-u8 bytes (+ offset 2)))
+     (* 16777216 (buf-read-u8 bytes (+ offset 3)))))
+
+(defn shortage-send [payload sequence next-stage response-sequence]
+  (let [length (buf-len payload)
+        frame (buf-concat [(buf-slice (shortage-u32 length) 0 3)
+                           (buf-u8 sequence) payload])]
+    (reset! shortage-stage next-stage)
+    (reset! shortage-sequence response-sequence)
+    (shortage-check (= (tcp-write (deref shortage-connection) (buf-to-binary frame)) "ok")
+                 "NATIVE_SHOP_STOCK_SHORTAGE_PACKET_WRITE")))
+
+(defn shortage-command [code text next-stage]
+  (shortage-send (buf-concat [(buf-u8 code) (buf-str text)])
+              0 next-stage 1))
+
+(defn shortage-text [bytes offset]
+  (shortage-check (< offset (buf-len bytes)) "NATIVE_SHOP_STOCK_SHORTAGE_TEXT_PREFIX")
+  (let [length (buf-read-u8 bytes offset) next (+ offset 1 length)]
+    (shortage-check (and (< length 251) (<= next (buf-len bytes)))
+                 "NATIVE_SHOP_STOCK_SHORTAGE_TEXT_LENGTH")
+    {"value" (buf-read-str bytes (+ offset 1) length)
+     "next" next}))
+
+(defn shortage-column-name [bytes]
+  (loop [index 0 offset 0]
+    (let [field (shortage-text bytes offset)]
+      (if (= index 4) (get field "value")
+        (recur (+ index 1) (get field "next"))))))
+
+(defn shortage-login [bytes]
+  (shortage-check (= (buf-read-u8 bytes 0) 10) "NATIVE_SHOP_STOCK_SHORTAGE_HANDSHAKE_VERSION")
+  (let [version-end
+          (loop [offset 1]
+            (do
+              (shortage-check (< offset (buf-len bytes)) "NATIVE_SHOP_STOCK_SHORTAGE_HANDSHAKE_LENGTH")
+              (if (= (buf-read-u8 bytes offset) 0) offset (recur (+ offset 1)))))
+        first-offset (+ version-end 5)
+        second-offset (+ first-offset 27)]
+    (shortage-check (<= (+ second-offset 12) (buf-len bytes))
+                 "NATIVE_SHOP_STOCK_SHORTAGE_SCRAMBLE_LENGTH")
+    (let [scramble (buf-concat [(buf-slice bytes first-offset 8)
+                                (buf-slice bytes second-offset 12)])
+          token (sha1-mysql-native-token "development-only" scramble)
+          login (buf-concat [(shortage-u32 172545) (shortage-u32 1048576)
+                             (buf-u8 33) (sha1-zero-bytes 23)
+                             (buf-str "root") (buf-u8 0)
+                             (buf-u8 20) token])]
+      (shortage-check (= (buf-len token) 20) "NATIVE_SHOP_STOCK_SHORTAGE_TOKEN_LENGTH")
+      (shortage-send login 1 "login" 2))))
+
+
+(define shortage-setup
+  ["CREATE TABLE shop_products (id INT PRIMARY KEY, sku TEXT, name TEXT, price INT, stock INT)"
+   "INSERT INTO shop_products (id, sku, name, price, stock) VALUES (1, 'SKU-1', 'Demo Widget', 1500, 1)"
+   "CREATE TABLE shop_cart (id INT PRIMARY KEY, product_id INT, qty INT)"
+   "INSERT INTO shop_cart (id, product_id, qty) VALUES (1, 1, 2)"
+   "CREATE TABLE shop_orders (id INT PRIMARY KEY, product_id INT, qty INT, total INT)"])
+(define shortage-queries
+  [{"sql" "SELECT id, stock FROM shop_products WHERE id=?" "bind" [1]
+    "columns" ["id" "stock"] "row-count" 1}
+   {"sql" "SELECT id FROM shop_orders ORDER BY id" "bind" []
+    "columns" [] "row-count" 0}
+   {"sql" "SELECT qty FROM shop_cart WHERE id=?" "bind" [1]
+    "columns" ["qty"] "row-count" 1}])
+(define shortage-setup-index (atom 0))
+(define shortage-query-index (atom 0))
+(define shortage-results (atom []))
+(define shortage-column-count (atom 0))
+
+(defn shortage-row-map [bytes]
+  (loop [index 0 offset 0 result {}]
+    (if (= index (deref shortage-column-count))
+      (do
+        (shortage-check (= offset (buf-len bytes)) "NATIVE_SHOP_STOCK_SHORTAGE_ROW_TRAILING_BYTES")
+        result)
+      (let [field (shortage-text bytes offset)]
+        (recur (+ index 1) (get field "next")
+               (assoc result (get (deref shortage-columns) index) (get field "value")))))))
+
+(defn shortage-prepare-current []
+  (reset! shortage-columns [])
+  (reset! shortage-rows [])
+  (shortage-command 22 (get (get shortage-queries (deref shortage-query-index)) "sql") "prepare"))
+
+(defn shortage-finish-result []
+  (let [index (deref shortage-query-index)
+        query (get shortage-queries index)
+        rows (deref shortage-rows)]
+    (shortage-check (= (count rows) (get query "row-count"))
+                    "NATIVE_SHOP_STOCK_SHORTAGE_EXACT_ROW_COUNT")
+    (if (= index 0)
+      (shortage-check (and (= (get (get rows 0) "id") "1")
+                           (= (get (get rows 0) "stock") "1"))
+                      "NATIVE_SHOP_STOCK_SHORTAGE_STOCK_UNCHANGED")
+      (if (= index 2)
+        (shortage-check (= (get (get rows 0) "qty") "2")
+                        "NATIVE_SHOP_STOCK_SHORTAGE_CART_UNCHANGED")
+        nil))
+    (swap! shortage-results conj
+           {"query" (get query "sql") "bind" (get query "bind")
+            "rows" (count rows) "columns" (deref shortage-columns) "data" rows})
+    (if (< (+ index 1) (count shortage-queries))
+      (do (swap! shortage-query-index + 1) (shortage-prepare-current))
+      (do (reset! shortage-stage "done") (reset! shortage-done true)))))
+
+(defn shortage-frame [bytes sequence]
+  (shortage-check (> (buf-len bytes) 0) "NATIVE_SHOP_STOCK_SHORTAGE_EMPTY_PACKET")
+  (shortage-check (= sequence (deref shortage-sequence)) "NATIVE_SHOP_STOCK_SHORTAGE_PACKET_SEQUENCE")
+  (swap! shortage-sequence + 1)
+  (let [stage (deref shortage-stage) first-byte (buf-read-u8 bytes 0)]
+    (if (= first-byte 255)
+      (if (>= (buf-len bytes) 9)
+        (throw (str "NATIVE_SHOP_STOCK_SHORTAGE_SERVER_ERROR_" stage " code="
+                    (+ (buf-read-u8 bytes 1) (* 256 (buf-read-u8 bytes 2)))
+                    " message=" (buf-read-str bytes 9 (- (buf-len bytes) 9))))
+        (throw "NATIVE_SHOP_STOCK_SHORTAGE_SHORT_SERVER_ERROR"))
+      nil)
+    (cond
+      (= stage "handshake") (shortage-login bytes)
+      (= stage "login")
+        (do (shortage-check (= first-byte 0) "NATIVE_SHOP_STOCK_SHORTAGE_LOGIN_ACK")
+            (shortage-command 3 (get shortage-setup 0) "setup"))
+      (= stage "setup")
+        (do
+          (shortage-check (= first-byte 0) "NATIVE_SHOP_STOCK_SHORTAGE_SETUP_ACK")
+          (swap! shortage-setup-index + 1)
+          (if (< (deref shortage-setup-index) (count shortage-setup))
+            (shortage-command 3 (get shortage-setup (deref shortage-setup-index)) "setup")
+            (shortage-prepare-current)))
+      (= stage "prepare")
+        (let [parameters (count (get (get shortage-queries (deref shortage-query-index)) "bind"))]
+          (shortage-check (and (= first-byte 0) (>= (buf-len bytes) 12))
+                          "NATIVE_SHOP_STOCK_SHORTAGE_PREPARE_ACK")
+          (shortage-check (and (= (buf-read-u8 bytes 7) parameters)
+                               (= (buf-read-u8 bytes 8) 0))
+                          "NATIVE_SHOP_STOCK_SHORTAGE_PARAMETER_COUNT")
+          (reset! shortage-statement (shortage-read-u32 bytes 1))
+          (let [header (buf-concat [(buf-u8 23) (shortage-u32 (deref shortage-statement))
+                                    (buf-u8 0) (shortage-u32 1)])
+                execute (if (= parameters 0) header
+                          (buf-concat [header (buf-u8 0) (buf-u8 1)
+                                       (buf-u8 3) (buf-u8 0) (shortage-u32 1)]))]
+            (shortage-send execute 0 "select" 1)))
+      (= stage "select")
+        (do
+          (shortage-check (and (= (buf-len bytes) 1)
+                               (= first-byte (if (= (deref shortage-query-index) 0) 2 1)))
+                          "NATIVE_SHOP_STOCK_SHORTAGE_RESULT_HEADER")
+          (reset! shortage-column-count first-byte)
+          (reset! shortage-stage "columns"))
+      (= stage "columns")
+        (do
+          (swap! shortage-columns conj (shortage-column-name bytes))
+          (if (= (count (deref shortage-columns)) (deref shortage-column-count))
+            (reset! shortage-stage "columns-end") nil))
+      (= stage "columns-end")
+        (do
+          (shortage-check (and (= first-byte 254) (= (buf-len bytes) 5))
+                          "NATIVE_SHOP_STOCK_SHORTAGE_COLUMN_EOF")
+          ;; An empty result need not expose id metadata; ERR and rows remain strict.
+          (if (= (deref shortage-query-index) 1) nil
+            (shortage-check (= (deref shortage-columns)
+                               (get (get shortage-queries (deref shortage-query-index)) "columns"))
+                            "NATIVE_SHOP_STOCK_SHORTAGE_RESULT_SCHEMA"))
+          (reset! shortage-stage "rows"))
+      (= stage "rows")
+        (if (and (= first-byte 254) (= (buf-len bytes) 5))
+          (shortage-finish-result)
+          (do
+            (shortage-check (< (count (deref shortage-rows))
+                               (get (get shortage-queries (deref shortage-query-index)) "row-count"))
+                            "NATIVE_SHOP_STOCK_SHORTAGE_EXTRA_ROW")
+            (swap! shortage-rows conj (shortage-row-map bytes))))
+      :else (throw "NATIVE_SHOP_STOCK_SHORTAGE_UNEXPECTED_STAGE"))))
+(defn shortage-drain []
+  (if (>= (buf-len (deref shortage-buffer)) 4)
+    (let [bytes (deref shortage-buffer)
+          length (+ (buf-read-u8 bytes 0) (* 256 (buf-read-u8 bytes 1))
+                     (* 65536 (buf-read-u8 bytes 2)))]
+      (shortage-check (<= length 65536) "NATIVE_SHOP_STOCK_SHORTAGE_PACKET_LIMIT")
+      (if (>= (buf-len bytes) (+ 4 length))
+        (do
+          (reset! shortage-buffer (buf-slice bytes (+ 4 length)
+                                         (- (buf-len bytes) (+ 4 length))))
+          (shortage-frame (buf-slice bytes 4 length) (buf-read-u8 bytes 3))
+          (shortage-drain))
+        nil))
+    nil))
+
+(defn native-shop-stock-shortage-handler [event connection payload peer]
+  (try
+    (cond
+      (or (= event "connect") (= event "accept"))
+        (do (shortage-check (nil? (deref shortage-connection)) "NATIVE_SHOP_STOCK_SHORTAGE_SINGLE_CONNECTION")
+            (reset! shortage-connection connection))
+      (= event "data")
+        (do (reset! shortage-buffer
+              (buf-concat [(deref shortage-buffer) (buf-from-binary payload)]))
+            (shortage-drain))
+      (= event "close")
+        (shortage-check (deref shortage-done) "NATIVE_SHOP_STOCK_SHORTAGE_PREMATURE_CLOSE")
+      :else nil)
+    (catch [error]
+      (reset! shortage-error (error_message error))
+      (reset! shortage-done true))))
+
+(shortage-check (not (nil? shortage-control)) "NATIVE_SHOP_STOCK_SHORTAGE_HOST_ENV_REQUIRED")
+(shortage-check (not (file_exists (str shortage-control "/ports.ready")))
+             "NATIVE_SHOP_STOCK_SHORTAGE_CONTROL_NOT_FRESH")
+(let [bridge-port (tcp-client-free-port) daemon-port (tcp-client-free-port)]
+  (shortage-check (and (number? bridge-port) (number? daemon-port)
+                    (not (= bridge-port daemon-port))) "NATIVE_SHOP_STOCK_SHORTAGE_DISTINCT_PORTS")
+  (shortage-check (= (tcp-server-raw bridge-port "native-shop-stock-shortage-handler" "127.0.0.1") "ok")
+               "NATIVE_SHOP_STOCK_SHORTAGE_LISTENER_START")
+  (try
+    (do
+      (file_write (str shortage-control "/ports.json")
+                  (json_str {"bridge" bridge-port "daemon" daemon-port}))
+      (file_write (str shortage-control "/ports.ready") "ready")
+      (let [deadline (+ (now-ms) 30000)]
+        (while (and (< (now-ms) deadline) (not (deref shortage-done))) (fl-yield 10)))
+      (shortage-check (deref shortage-done) "NATIVE_SHOP_STOCK_SHORTAGE_CONTRACT_TIMEOUT")
+      (if (nil? (deref shortage-error)) nil (throw (deref shortage-error)))
+      (shortage-check (= (deref shortage-stage) "done") "NATIVE_SHOP_STOCK_SHORTAGE_CONTRACT_INCOMPLETE")
+      (shortage-check (= (buf-len (deref shortage-buffer)) 0) "NATIVE_SHOP_STOCK_SHORTAGE_TRAILING_PACKET_BYTES"))
+    (finally (tcp-server-stop bridge-port))))
+(shortage-check (= (count (deref shortage-results)) 3) "NATIVE_SHOP_STOCK_SHORTAGE_THREE_SELECT_RESULTS")
+(println (str "NATIVE_SHOP_STOCK_SHORTAGE_RESULT "
+  (json_str {"ok" true "initial_stock" 1 "requested_qty" 2
+             "prepared_select_executions" 3 "order_insert_executions" 0
+             "stock_update_executions" 0 "err_packets" 0
+             "results" (deref shortage-results)})))
+(println "afj-db95 Native shop stock shortage unchanged stock no order cart retained PASS")
