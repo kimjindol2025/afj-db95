@@ -1,0 +1,231 @@
+{
+  "schema": "db95-native-shop-products-visible-minimum-price-miss-v1",
+  "date_local": "2026-11-22 Asia/Seoul",
+  "status": "SCOPED_PASS",
+  "commercial": "HOLD",
+  "deployment": "NO",
+  "authorization": "msg_cad7ec7dbaad",
+  "source": {
+    "baseHead": "05d836e436af978d60b29e4e102d609aed2b5291",
+    "implementationFilesChanged": [],
+    "newFixture": "tests/native-shop-products-visible-min-price-miss.fls",
+    "fixtureSha256": "f460d057ae8c9c949e810cb9b977ff5f9657ddaf342053919893f43e1e619e79",
+    "dependencySha256": {
+      "src/sql-core.fls": "b82c90983bf6b1120c77e929e9eee4560f00faaa38e46cbaa28698876d595047",
+      "src/engine.fls": "1914b1c941ff19552c0047677d6209a0b72b797c0554668c743636dd0874c90c",
+      "src/mariadb-wire.fls": "ad22ba6ae03fa70388c6b3a0d1a930e574595b67e5cf58421ef3ea33b3c5c4ff",
+      "src/sha1.fls": "6fc4c3def2d56c4ff7eb76c7cd7917b6e268bdc070a75fe90959a49a08bf39cf",
+      "tests/native-mariadb-daemon.fls": "4aeb91c050734087a9b0e27bffd677cfe48f6bfb5068f39cbbce2efb4c01868d"
+    },
+    "allFiveDependenciesMatchNativeProducerAndCommittedHead": true,
+    "allTrackedSourcesFixtureSdkDaemonUnchangedDuringGate": true
+  },
+  "contract": {
+    "prepareSql": "SELECT sku, name, price FROM shop_products WHERE visible=? AND price >= ?",
+    "bind": [
+      1,
+      3000
+    ],
+    "setupSql": [
+      "CREATE TABLE shop_products (id INT PRIMARY KEY, sku TEXT, name TEXT, price INT, visible INT)",
+      "INSERT INTO shop_products (id, sku, name, price, visible) VALUES (1, 'SKU-1', 'Demo Widget', 1500, 1)",
+      "INSERT INTO shop_products (id, sku, name, price, visible) VALUES (2, 'SKU-2', 'Demo Gadget', 2200, 1)",
+      "CREATE TABLE shop_cart (id INT PRIMARY KEY, user_id INT, product_id INT, qty INT)",
+      "INSERT INTO shop_cart (id, user_id, product_id, qty) VALUES (2, 20, 2, 1)"
+    ],
+    "bothProductsVisible": true,
+    "expectedRows": 0,
+    "expectedData": [],
+    "bothProductsAbsent": true,
+    "errPackets": 0,
+    "emptyResultDoesNotRequireProjectedMetadata": true,
+    "clientFilteringTruncationFabrication": false,
+    "highestSeedPrice": 2200,
+    "minimumPriceRejectsBothProducts": true
+  },
+  "observation": {
+    "status": "PASS",
+    "passed": 1,
+    "failed": 0,
+    "total": 1,
+    "attempts": 1,
+    "clientAotAndRuntimeSeconds": 5.762551108011394,
+    "processHostSeconds": 0.78624424400914,
+    "result": {
+      "ok": true,
+      "prepared_executions": 1,
+      "prepared_select_executions": 1,
+      "rows": 0,
+      "exact_visible_min_price_miss_select": true,
+      "err_packets": 0,
+      "results": [
+        {
+          "query": "SELECT sku, name, price FROM shop_products WHERE visible=? AND price >= ?",
+          "bind": [
+            1,
+            3000
+          ],
+          "response": "resultset",
+          "rows": 0,
+          "columns": [
+            "result"
+          ],
+          "data": []
+        }
+      ]
+    },
+    "allOwnedChildrenReaped": true,
+    "newNativeRunsForOfflineAudit": 0
+  },
+  "cachedDaemon": {
+    "producerCommit": "05d836e436af978d60b29e4e102d609aed2b5291",
+    "producerNativeStatus": "PASS",
+    "producerElfSha256": "c2e78d907946ced7591f0e571a9801618f8a19bff774291b943a792571c897a1",
+    "allFiveDependenciesAndFullSdkVerified": true,
+    "daemonAotExecutions": 0,
+    "oldDaemonNotSubstituted": true
+  },
+  "bounds": {
+    "gateSeconds": 120,
+    "addressSpaceBytes": 2147483648,
+    "includes": "client parse/generate/syntax/link plus one PREPARE/EXECUTE",
+    "daemonAotExecutions": 0,
+    "gateExtended": false,
+    "nativeNetwork": "private loopback namespace",
+    "storage": "fresh empty private storage",
+    "sharedLock": "natural flock; no force release or duplicates",
+    "automaticRetries": 0
+  },
+  "toolchain": {
+    "sdkManifestSha256": "c5c90ed5234dc8d5d321fe63950c6c20f87f9f12ac9e51bc4c2edc4ef0101233",
+    "compilerSha256": "f514e043d3f08115e273717462595a69ffd0522614aad5666dec576f04a46dac",
+    "runtimeArchiveSha256": "fe4308c19eba2142049100c17ac08979b5787c1698b6d5e0e9e082a1f6e691fe",
+    "sdkFileCount": 125,
+    "flagsUnchanged": true
+  },
+  "audit": {
+    "wire": {
+      "status": "VERIFIED_FROM_SINGLE_NATIVE_VISIBLE_MINIMUM_PRICE_MISS_TRACE",
+      "setupSql": [
+        "CREATE TABLE shop_products (id INT PRIMARY KEY, sku TEXT, name TEXT, price INT, visible INT)",
+        "INSERT INTO shop_products (id, sku, name, price, visible) VALUES (1, 'SKU-1', 'Demo Widget', 1500, 1)",
+        "INSERT INTO shop_products (id, sku, name, price, visible) VALUES (2, 'SKU-2', 'Demo Gadget', 2200, 1)",
+        "CREATE TABLE shop_cart (id INT PRIMARY KEY, user_id INT, product_id INT, qty INT)",
+        "INSERT INTO shop_cart (id, user_id, product_id, qty) VALUES (2, 20, 2, 1)"
+      ],
+      "bothProductsVisible": true,
+      "allSetupAcknowledged": true,
+      "prepareSql": "SELECT sku, name, price FROM shop_products WHERE visible=? AND price >= ?",
+      "bind": [
+        1,
+        3000
+      ],
+      "preparedParameterCount": 2,
+      "parameterTypes": [
+        3,
+        3
+      ],
+      "statementId": 1,
+      "executePayloadHex": "1701000000000100000000010300030001000000b80b0000",
+      "preparedSelectExecutions": 1,
+      "responseHeaderHex": "01",
+      "responseColumns": [
+        "result"
+      ],
+      "responseRows": [],
+      "exactRows": 0,
+      "bothProductsAbsent": true,
+      "serverAppliedEqualityAndGreaterOrEqual": true,
+      "clientFiltersTruncatesOrFabricatesRows": false,
+      "errPackets": 0,
+      "clientPackets": 8,
+      "daemonPackets": 12,
+      "columnEofHex": "fe00000200",
+      "rowEofHex": "fe00000200",
+      "newNativeRuns": 0,
+      "cachedCurrentDaemonVerified": true,
+      "daemonAotRerunsDuringGate": 0,
+      "engineUnchanged": true,
+      "fixtureUnchanged": true,
+      "allProductImplementationFilesUnchanged": true,
+      "existingEqualityLowerBoundScopeRejectionsPassed": 4,
+      "existingNumericBoundScopeRejectionsPassed": 4,
+      "existingNumericIntervalScopeRejectionsPassed": 4,
+      "existingWhereOrderScopeRejectionsPassed": 4,
+      "literalContainsScopeRejectionsPassed": 6,
+      "existingOffsetScopeRejectionsPassed": 4,
+      "unsupportedOffsetRejected": 3,
+      "existingOrderedLimitScopeRejectionsPassed": 4,
+      "existingCountWhereScopeRejectionsPassed": 4,
+      "existingIfnullScopeRejectionsPassed": 6,
+      "existingSumWhereScopeRejectionsPassed": 4,
+      "existingSumScopeRejectionsPassed": 6,
+      "existingOrderScopeRejectionsPassed": 4,
+      "existingGroupedCOUNTAndCOUNTStarEngineChecksPassed": true,
+      "existingSqlStartupAssertionsPassed": 36,
+      "existingQualifiedJoinScopeGuardsPassed": 4,
+      "existingMultiplyScopeGuardsPassed": 4,
+      "existingProjectionAndAggregateChecksPassed": true
+    },
+    "successfulExecCounts": {
+      "as": 1,
+      "bash": 1,
+      "bwrap": 1,
+      "cc1": 2,
+      "client-bin": 1,
+      "collect2": 1,
+      "daemon-bin": 1,
+      "flc": 2,
+      "gcc": 2,
+      "grep": 1,
+      "ld": 1,
+      "python3": 1,
+      "socat": 1,
+      "timeout": 1
+    },
+    "nodeAttempts": 0,
+    "nodeExecutions": 0,
+    "privatePythonControllersOutsideProduct": 2,
+    "protocolAuthenticationSetupBindingsAssertions": "FreeLang",
+    "relay": "installed native socat opaque byte relay"
+  },
+  "preserved": {
+    "previousLikeHitNativeProof": "2827806b",
+    "originalLike1064Fail": true,
+    "priorPageProofs": [
+      "ff96edd8",
+      "8fe0419b",
+      "efccfdf1"
+    ],
+    "originalCountFreshBothTimeoutFail": true,
+    "plainEmptySumNullRecord": true,
+    "walCommit": "1e55d063fe11b3905d79b2ca203f5eb384a7e317",
+    "historical349": "retained; no fresh full regression",
+    "original71Gate": "not rerun or promoted",
+    "original25": "TIMEOUT FAIL and unstaged fixture retained",
+    "commercialHOLD": true,
+    "priorInclusiveIntervalProof": "4e294936",
+    "originalPriceInterval1064Fail": true,
+    "previousSingleBoundProofs": [
+      "ec8a4e92",
+      "e6eaaea9"
+    ],
+    "priorVisibleMinimumPriceProof": "05d836e4",
+    "originalVisibleMinimumPrice1064Fail": true
+  },
+  "artifactSha256": {
+    "native/inputs.private.json": "ec72ad90aaa6ac65a827cf02ef93ca349c29207fad1d33b046f7f39d5e410772",
+    "native/results.private.json": "8fcc3b22f14ced6d12f7b0137357517d683058c0dd80762630af4eadc372b8e1",
+    "native/trial.trace": "18b2e997e39482eae8e5f5405cb398cafab5ca92c4a9dd1cf75d89bd1abd2825",
+    "native/exec-audit.private.json": "68a06c75d2442ef0821fcd715cc0d349014a9b405ebaa343229733abf03ed651",
+    "native/run.py": "a1ee78beecef8d59d75aac09839d16ebcaac866d0fbbdea42e5b87ea5ec2f949",
+    "native/process-host.private.py": "fb30daf0caa414d042d208283957548fe526a3e045747dfe57bb8e18a5c153a3",
+    "native/offline-proof.private.py": "8921c9f04bfa95fd69d6a60d62a5eba5b14adc5f989b379271d85eca76747ed5",
+    "native/wire-proof.private.json": "3d61e23f7ed860200569d76b51d319be28c117a83e49991e91defe1f01cc8c43",
+    "native/client.c": "406e82ebb10f172dda4d8d18dff04f0d624e58061680fccbee33506e9722f5c7",
+    "native/client-bin": "d9407999b2eb3ca4ea235bd631bd1b083c3a72751b4c51a1ebc800ee907c8cbe",
+    "native/daemon-bin": "c2e78d907946ced7591f0e571a9801618f8a19bff774291b943a792571c897a1",
+    "producer/inputs.private.json": "5deb49619606e7be5686efa716cc40feaa413e48d072e21e1b38731fd061beb2",
+    "producer/results.private.json": "e53518ceaab56a44cad6c9be31b046881f771138c8cfde5b525315e486bc5287"
+  }
+}
