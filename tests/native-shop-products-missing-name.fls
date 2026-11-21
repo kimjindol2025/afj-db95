@@ -1,0 +1,265 @@
+;; Native missing product-name lookup fixture agreed in msg_11802be245dc.
+;; Two product seeds; No Such Item bind must return no rows and no ERR, with no id metadata requirement.
+(load "../src/sha1.fls")
+(define missingname-control (env-get "AFJ_NATIVE_SHOP_PRODUCTS_MISSING_NAME_CONTROL"))
+(define missingname-connection (atom nil))
+(define missingname-buffer (atom ""))
+(define missingname-stage (atom "handshake"))
+(define missingname-sequence (atom 0))
+(define missingname-columns (atom []))
+(define missingname-rows (atom []))
+(define missingname-error (atom nil))
+(define missingname-done (atom false))
+(define missingname-statement (atom nil))
+
+(defn missingname-check [condition message]
+  (if (= condition true) true (throw message)))
+
+(defn missingname-u32 [value]
+  (buf-concat [(buf-u8 (rem value 256))
+               (buf-u8 (rem (floor (/ value 256)) 256))
+               (buf-u8 (rem (floor (/ value 65536)) 256))
+               (buf-u8 (rem (floor (/ value 16777216)) 256))]))
+
+(defn missingname-read-u32 [bytes offset]
+  (+ (buf-read-u8 bytes offset)
+     (* 256 (buf-read-u8 bytes (+ offset 1)))
+     (* 65536 (buf-read-u8 bytes (+ offset 2)))
+     (* 16777216 (buf-read-u8 bytes (+ offset 3)))))
+
+(defn missingname-send [payload sequence next-stage response-sequence]
+  (let [length (buf-len payload)
+        frame (buf-concat [(buf-slice (missingname-u32 length) 0 3)
+                           (buf-u8 sequence) payload])]
+    (reset! missingname-stage next-stage)
+    (reset! missingname-sequence response-sequence)
+    (missingname-check (= (tcp-write (deref missingname-connection) (buf-to-binary frame)) "ok")
+                 "NATIVE_SHOP_PRODUCTS_MISSING_NAME_PACKET_WRITE")))
+
+(defn missingname-command [code text next-stage]
+  (missingname-send (buf-concat [(buf-u8 code) (buf-str text)])
+              0 next-stage 1))
+
+(defn missingname-text [bytes offset]
+  (missingname-check (< offset (buf-len bytes)) "NATIVE_SHOP_PRODUCTS_MISSING_NAME_TEXT_PREFIX")
+  (let [length (buf-read-u8 bytes offset) next (+ offset 1 length)]
+    (missingname-check (and (< length 251) (<= next (buf-len bytes)))
+                 "NATIVE_SHOP_PRODUCTS_MISSING_NAME_TEXT_LENGTH")
+    {"value" (buf-read-str bytes (+ offset 1) length)
+     "next" next}))
+
+(defn missingname-column-name [bytes]
+  (loop [index 0 offset 0]
+    (let [field (missingname-text bytes offset)]
+      (if (= index 4) (get field "value")
+        (recur (+ index 1) (get field "next"))))))
+
+(defn missingname-login [bytes]
+  (missingname-check (= (buf-read-u8 bytes 0) 10) "NATIVE_SHOP_PRODUCTS_MISSING_NAME_HANDSHAKE_VERSION")
+  (let [version-end
+          (loop [offset 1]
+            (do
+              (missingname-check (< offset (buf-len bytes)) "NATIVE_SHOP_PRODUCTS_MISSING_NAME_HANDSHAKE_LENGTH")
+              (if (= (buf-read-u8 bytes offset) 0) offset (recur (+ offset 1)))))
+        first-offset (+ version-end 5)
+        second-offset (+ first-offset 27)]
+    (missingname-check (<= (+ second-offset 12) (buf-len bytes))
+                 "NATIVE_SHOP_PRODUCTS_MISSING_NAME_SCRAMBLE_LENGTH")
+    (let [scramble (buf-concat [(buf-slice bytes first-offset 8)
+                                (buf-slice bytes second-offset 12)])
+          token (sha1-mysql-native-token "development-only" scramble)
+          login (buf-concat [(missingname-u32 172545) (missingname-u32 1048576)
+                             (buf-u8 33) (sha1-zero-bytes 23)
+                             (buf-str "root") (buf-u8 0)
+                             (buf-u8 20) token])]
+      (missingname-check (= (buf-len token) 20) "NATIVE_SHOP_PRODUCTS_MISSING_NAME_TOKEN_LENGTH")
+      (missingname-send login 1 "login" 2))))
+
+
+(define missingname-setup
+  ["CREATE TABLE shop_products (id INT PRIMARY KEY, sku TEXT, name TEXT, price INT)"
+   "INSERT INTO shop_products (id, sku, name, price) VALUES (1, 'SKU-1', 'Demo Widget', 1500)"
+   "INSERT INTO shop_products (id, sku, name, price) VALUES (2, 'SKU-2', 'Demo Gadget', 2200)"])
+(define missingname-queries
+  [{"sql" "SELECT id, sku, name, price FROM shop_products WHERE name=?"
+    "bind" ["No Such Item"] "response" "resultset" "columns" [] "row-count" 0}])
+(define missingname-setup-index (atom 0))
+(define missingname-query-index (atom 0))
+(define missingname-results (atom []))
+(define missingname-column-count (atom 0))
+
+(defn missingname-row-map [bytes]
+  (loop [index 0 offset 0 result {}]
+    (if (= index (deref missingname-column-count))
+      (do
+        (missingname-check (= offset (buf-len bytes)) "NATIVE_SHOP_PRODUCTS_MISSING_NAME_ROW_TRAILING_BYTES")
+        result)
+      (let [field (missingname-text bytes offset)]
+        (recur (+ index 1) (get field "next")
+               (assoc result (get (deref missingname-columns) index) (get field "value")))))))
+
+(defn missingname-prepare-current []
+  (reset! missingname-columns [])
+  (reset! missingname-rows [])
+  (missingname-command 22 (get (get missingname-queries (deref missingname-query-index)) "sql") "prepare"))
+
+(defn missingname-finish-result []
+  (let [index (deref missingname-query-index)
+        query (get missingname-queries index)
+        rows (deref missingname-rows)]
+    (missingname-check (= (count rows) (get query "row-count"))
+                    "NATIVE_SHOP_PRODUCTS_MISSING_NAME_EXACT_ROW_COUNT")
+    (if (= (get query "row-count") 1)
+      (doseq [column (get query "columns")]
+        (missingname-check (= (get (get rows 0) column)
+                           (get (get query "expected-row") column))
+                        "NATIVE_SHOP_PRODUCTS_MISSING_NAME_EXACT_ROW_VALUE"))
+      nil)
+    (swap! missingname-results conj
+           {"query" (get query "sql") "bind" (get query "bind")
+            "response" (get query "response") "rows" (count rows) "columns" (deref missingname-columns) "data" rows})
+    (if (< (+ index 1) (count missingname-queries))
+      (do (swap! missingname-query-index + 1) (missingname-prepare-current))
+      (do (reset! missingname-stage "done") (reset! missingname-done true)))))
+
+(defn missingname-frame [bytes sequence]
+  (missingname-check (> (buf-len bytes) 0) "NATIVE_SHOP_PRODUCTS_MISSING_NAME_EMPTY_PACKET")
+  (missingname-check (= sequence (deref missingname-sequence)) "NATIVE_SHOP_PRODUCTS_MISSING_NAME_PACKET_SEQUENCE")
+  (swap! missingname-sequence + 1)
+  (let [stage (deref missingname-stage) first-byte (buf-read-u8 bytes 0)]
+    (if (= first-byte 255)
+      (if (>= (buf-len bytes) 9)
+        (throw (str "NATIVE_SHOP_PRODUCTS_MISSING_NAME_SERVER_ERROR_" stage " code="
+                    (+ (buf-read-u8 bytes 1) (* 256 (buf-read-u8 bytes 2)))
+                    " message=" (buf-read-str bytes 9 (- (buf-len bytes) 9))))
+        (throw "NATIVE_SHOP_PRODUCTS_MISSING_NAME_SHORT_SERVER_ERROR"))
+      nil)
+    (cond
+      (= stage "handshake") (missingname-login bytes)
+      (= stage "login")
+        (do (missingname-check (= first-byte 0) "NATIVE_SHOP_PRODUCTS_MISSING_NAME_LOGIN_ACK")
+            (missingname-command 3 (get missingname-setup 0) "setup"))
+      (= stage "setup")
+        (do
+          (missingname-check (= first-byte 0) "NATIVE_SHOP_PRODUCTS_MISSING_NAME_SETUP_ACK")
+          (swap! missingname-setup-index + 1)
+          (if (< (deref missingname-setup-index) (count missingname-setup))
+            (missingname-command 3 (get missingname-setup (deref missingname-setup-index)) "setup")
+            (missingname-prepare-current)))
+      (= stage "prepare")
+        (let [parameters (count (get (get missingname-queries (deref missingname-query-index)) "bind"))]
+          (missingname-check (and (= first-byte 0) (>= (buf-len bytes) 12))
+                          "NATIVE_SHOP_PRODUCTS_MISSING_NAME_PREPARE_ACK")
+          (missingname-check (and (= (buf-read-u8 bytes 7) parameters)
+                               (= (buf-read-u8 bytes 8) 0))
+                          "NATIVE_SHOP_PRODUCTS_MISSING_NAME_PARAMETER_COUNT")
+          (reset! missingname-statement (missingname-read-u32 bytes 1))
+          (let [bind (get (get missingname-queries (deref missingname-query-index)) "bind")
+                execute (atom (buf-concat [(buf-u8 23) (missingname-u32 (deref missingname-statement))
+                                           (buf-u8 0) (missingname-u32 1)
+                                           (buf-u8 0) (buf-u8 1)]))]
+            ;; Existing Native INT32 and VAR_STRING parameter types.
+            (doseq [value bind]
+              (missingname-check (or (number? value) (string? value))
+                            "NATIVE_SHOP_PRODUCTS_MISSING_NAME_BIND_TYPE")
+              (reset! execute (buf-concat [(deref execute)
+                                           (buf-u8 (if (number? value) 3 253)) (buf-u8 0)])))
+            (doseq [value bind]
+              (let [encoded (if (number? value)
+                              (missingname-u32 value)
+                              (let [text (buf-str value)]
+                                (missingname-check (< (buf-len text) 251)
+                                              "NATIVE_SHOP_PRODUCTS_MISSING_NAME_SHORT_TEXT_BIND")
+                                (buf-concat [(buf-u8 (buf-len text)) text])))]
+                (reset! execute (buf-concat [(deref execute) encoded]))))
+            (missingname-send (deref execute) 0 "select" 1)))
+      (= stage "select")
+        (let [query (get missingname-queries (deref missingname-query-index))]
+          (missingname-check (and (= (buf-len bytes) 1)
+                             (= first-byte (if (= (get query "row-count") 0)
+                                             1 (count (get query "columns")))))
+                        "NATIVE_SHOP_PRODUCTS_MISSING_NAME_RESULT_HEADER")
+          (reset! missingname-column-count first-byte)
+          (reset! missingname-stage "columns"))
+      (= stage "columns")
+        (do
+          (swap! missingname-columns conj (missingname-column-name bytes))
+          (if (= (count (deref missingname-columns)) (deref missingname-column-count))
+            (reset! missingname-stage "columns-end") nil))
+      (= stage "columns-end")
+        (do
+          (missingname-check (and (= first-byte 254) (= (buf-len bytes) 5))
+                          "NATIVE_SHOP_PRODUCTS_MISSING_NAME_COLUMN_EOF")
+          ;; An empty result need not expose id metadata; ERR and rows remain strict.
+          (if (= (get (get missingname-queries (deref missingname-query-index)) "row-count") 0) nil
+            (missingname-check (= (deref missingname-columns)
+                               (get (get missingname-queries (deref missingname-query-index)) "columns"))
+                            "NATIVE_SHOP_PRODUCTS_MISSING_NAME_RESULT_SCHEMA"))
+          (reset! missingname-stage "rows"))
+      (= stage "rows")
+        (if (and (= first-byte 254) (= (buf-len bytes) 5))
+          (missingname-finish-result)
+          (do
+            (missingname-check (< (count (deref missingname-rows))
+                               (get (get missingname-queries (deref missingname-query-index)) "row-count"))
+                            "NATIVE_SHOP_PRODUCTS_MISSING_NAME_EXTRA_ROW")
+            (swap! missingname-rows conj (missingname-row-map bytes))))
+      :else (throw "NATIVE_SHOP_PRODUCTS_MISSING_NAME_UNEXPECTED_STAGE"))))
+(defn missingname-drain []
+  (if (>= (buf-len (deref missingname-buffer)) 4)
+    (let [bytes (deref missingname-buffer)
+          length (+ (buf-read-u8 bytes 0) (* 256 (buf-read-u8 bytes 1))
+                     (* 65536 (buf-read-u8 bytes 2)))]
+      (missingname-check (<= length 65536) "NATIVE_SHOP_PRODUCTS_MISSING_NAME_PACKET_LIMIT")
+      (if (>= (buf-len bytes) (+ 4 length))
+        (do
+          (reset! missingname-buffer (buf-slice bytes (+ 4 length)
+                                         (- (buf-len bytes) (+ 4 length))))
+          (missingname-frame (buf-slice bytes 4 length) (buf-read-u8 bytes 3))
+          (missingname-drain))
+        nil))
+    nil))
+
+(defn native-shop-products-missing-name-handler [event connection payload peer]
+  (try
+    (cond
+      (or (= event "connect") (= event "accept"))
+        (do (missingname-check (nil? (deref missingname-connection)) "NATIVE_SHOP_PRODUCTS_MISSING_NAME_SINGLE_CONNECTION")
+            (reset! missingname-connection connection))
+      (= event "data")
+        (do (reset! missingname-buffer
+              (buf-concat [(deref missingname-buffer) (buf-from-binary payload)]))
+            (missingname-drain))
+      (= event "close")
+        (missingname-check (deref missingname-done) "NATIVE_SHOP_PRODUCTS_MISSING_NAME_PREMATURE_CLOSE")
+      :else nil)
+    (catch [error]
+      (reset! missingname-error (error_message error))
+      (reset! missingname-done true))))
+
+(missingname-check (not (nil? missingname-control)) "NATIVE_SHOP_PRODUCTS_MISSING_NAME_HOST_ENV_REQUIRED")
+(missingname-check (not (file_exists (str missingname-control "/ports.ready")))
+             "NATIVE_SHOP_PRODUCTS_MISSING_NAME_CONTROL_NOT_FRESH")
+(let [bridge-port (tcp-client-free-port) daemon-port (tcp-client-free-port)]
+  (missingname-check (and (number? bridge-port) (number? daemon-port)
+                    (not (= bridge-port daemon-port))) "NATIVE_SHOP_PRODUCTS_MISSING_NAME_DISTINCT_PORTS")
+  (missingname-check (= (tcp-server-raw bridge-port "native-shop-products-missing-name-handler" "127.0.0.1") "ok")
+               "NATIVE_SHOP_PRODUCTS_MISSING_NAME_LISTENER_START")
+  (try
+    (do
+      (file_write (str missingname-control "/ports.json")
+                  (json_str {"bridge" bridge-port "daemon" daemon-port}))
+      (file_write (str missingname-control "/ports.ready") "ready")
+      (let [deadline (+ (now-ms) 30000)]
+        (while (and (< (now-ms) deadline) (not (deref missingname-done))) (fl-yield 10)))
+      (missingname-check (deref missingname-done) "NATIVE_SHOP_PRODUCTS_MISSING_NAME_CONTRACT_TIMEOUT")
+      (if (nil? (deref missingname-error)) nil (throw (deref missingname-error)))
+      (missingname-check (= (deref missingname-stage) "done") "NATIVE_SHOP_PRODUCTS_MISSING_NAME_CONTRACT_INCOMPLETE")
+      (missingname-check (= (buf-len (deref missingname-buffer)) 0) "NATIVE_SHOP_PRODUCTS_MISSING_NAME_TRAILING_PACKET_BYTES"))
+    (finally (tcp-server-stop bridge-port))))
+(missingname-check (= (count (deref missingname-results)) 1) "NATIVE_SHOP_PRODUCTS_MISSING_NAME_ONE_RESULT")
+(println (str "NATIVE_SHOP_PRODUCTS_MISSING_NAME_RESULT "
+  (json_str {"ok" true "prepared_executions" 1 "prepared_select_executions" 1
+             "rows" 0 "empty_name_select" true "err_packets" 0
+             "results" (deref missingname-results)})))
+(println "afj-db95 Native shop missing product name prepared SELECT PASS")
