@@ -1,0 +1,275 @@
+{
+  "schema": "db95-native-shop-cart-quantity-update-v1",
+  "date_local": "2026-11-21 Asia/Seoul",
+  "status": "SCOPED_PASS",
+  "commercial": "HOLD",
+  "deployment": "NO",
+  "source": {
+    "baseHead": "b23924d00c679f7787f72a368edcde224d9b5e43",
+    "newFixture": "tests/native-shop-cart-quantity.fls",
+    "fixtureSha256": "daf6949afdbf28ff864204737eba5715cf9da8eadb3df0436b0604e87293d3de",
+    "daemonDependencySha256": {
+      "src/engine.fls": "691b86022ee95fe21736bab6f7025235d62b403d83c954d4f316c6451ad1fc19",
+      "src/sql-core.fls": "5d499eaa262028ba7ee997ed28f8fbfcf1da04498c62fb1cb4ec361da102707d",
+      "src/mariadb-wire.fls": "ad22ba6ae03fa70388c6b3a0d1a930e574595b67e5cf58421ef3ea33b3c5c4ff",
+      "src/sha1.fls": "6fc4c3def2d56c4ff7eb76c7cd7917b6e268bdc070a75fe90959a49a08bf39cf",
+      "tests/native-mariadb-daemon.fls": "4aeb91c050734087a9b0e27bffd677cfe48f6bfb5068f39cbbce2efb4c01868d"
+    },
+    "existingSourceFilesChanged": false,
+    "allTrackedSourceNewFixtureSdkAndDaemonUnchangedDuringTrial": true,
+    "freeLangParserCompilerRuntimeOrProtocolChanged": false
+  },
+  "contract": {
+    "purpose": "isolated Native prepared cart quantity change from 2 to 5",
+    "table": "shop_cart",
+    "productSeed": {
+      "id": 1,
+      "sku": "SKU-1",
+      "name": "Demo Widget",
+      "price": 1500
+    },
+    "cartSeed": {
+      "id": 1,
+      "product_id": 1,
+      "qty": 2
+    },
+    "prepareUpdateSql": "UPDATE shop_cart SET qty=? WHERE id=?",
+    "updateBind": [
+      5,
+      1
+    ],
+    "preparedUpdateExecutions": 1,
+    "prepareSelectSql": "SELECT id, product_id, qty FROM shop_cart WHERE id=?",
+    "selectBind": [
+      1
+    ],
+    "preparedSelectExecutions": 1,
+    "expectedRows": 1,
+    "expectedColumns": [
+      "id",
+      "product_id",
+      "qty"
+    ],
+    "expectedWireRow": {
+      "id": "1",
+      "product_id": "1",
+      "qty": "5"
+    },
+    "updateResult": "existing daemon returns a row resultset; fixture consumes and checks it before issuing SELECT",
+    "wireSqlWhitespacePreserved": true,
+    "transport": "case71 Native FL raw TCP callback; installed Native socat opaque byte relay; existing Native MariaDB daemon/engine",
+    "framingAuthenticationSetupBindingsAndAssertions": "FreeLang fixture; private host only fixed owned process/file lifetimes"
+  },
+  "observation": {
+    "passed": 1,
+    "failed": 0,
+    "total": 1,
+    "attempts": 1,
+    "wholeTrialSecondsIncludingFreshFixtureAot": 5.718185719990288,
+    "runtimeHostSeconds": 0.4136192190053407,
+    "reusedDaemonAotExcluded": true,
+    "hostExit": 0,
+    "typedResult": {
+      "ok": true,
+      "table": "shop_cart",
+      "initial_qty": 2,
+      "update_sql": "UPDATE shop_cart SET qty=? WHERE id=?",
+      "update_bind": [
+        5,
+        1
+      ],
+      "prepared_update_executions": 1,
+      "update_result_received": true,
+      "select_sql": "SELECT id, product_id, qty FROM shop_cart WHERE id=?",
+      "select_bind": [
+        1
+      ],
+      "prepared_select_executions": 1,
+      "rows": 1,
+      "columns": [
+        "id",
+        "product_id",
+        "qty"
+      ],
+      "row": {
+        "id": "1",
+        "product_id": "1",
+        "qty": "5"
+      },
+      "exact_select": true
+    },
+    "nativeFixtureExecutions": 1,
+    "freshDaemonExecutions": 1,
+    "nativeByteRelayExecutions": 1,
+    "childExits": {
+      "client": 0,
+      "daemon": -15,
+      "native-byte-relay": 0
+    },
+    "allOwnedChildrenReaped": true,
+    "storageInitiallyEmpty": true
+  },
+  "validation": {
+    "status": "VERIFIED_FROM_EXISTING_SINGLE_NATIVE_CART_QUANTITY_TRACE",
+    "commandBytes": [
+      3,
+      3,
+      3,
+      3,
+      22,
+      23,
+      22,
+      23
+    ],
+    "setupSql": [
+      "CREATE TABLE shop_products (id INT PRIMARY KEY, sku TEXT, name TEXT, price INT)",
+      "INSERT INTO shop_products (id, sku, name, price) VALUES (1, 'SKU-1', 'Demo Widget', 1500)",
+      "CREATE TABLE shop_cart (id INT PRIMARY KEY, product_id INT, qty INT)",
+      "INSERT INTO shop_cart (id, product_id, qty) VALUES (1, 1, 2)"
+    ],
+    "initialCartQty": 2,
+    "allSetupAcknowledged": true,
+    "preparedSql": [
+      "UPDATE shop_cart SET qty=? WHERE id=?",
+      "SELECT id, product_id, qty FROM shop_cart WHERE id=?"
+    ],
+    "bindings": [
+      [
+        5,
+        1
+      ],
+      [
+        1
+      ]
+    ],
+    "statementIds": [
+      1,
+      2
+    ],
+    "executionsPerStatement": [
+      1,
+      1
+    ],
+    "responses": [
+      {
+        "command": "update",
+        "columns": [
+          "id",
+          "product_id",
+          "qty"
+        ],
+        "rows": [
+          {
+            "id": "1",
+            "product_id": "1",
+            "qty": "5"
+          }
+        ],
+        "exactRows": 1
+      },
+      {
+        "command": "select",
+        "columns": [
+          "id",
+          "product_id",
+          "qty"
+        ],
+        "rows": [
+          {
+            "id": "1",
+            "product_id": "1",
+            "qty": "5"
+          }
+        ],
+        "exactRows": 1
+      }
+    ],
+    "sqlWhitespacePreserved": true,
+    "errPackets": 0,
+    "clientPackets": 9,
+    "daemonPackets": 22,
+    "existingSqlStartupAssertionsPassed": 36,
+    "existingProjectionMissingCommaRejectionPassed": true,
+    "existingAggregateLeftJoinChecksPassed": true,
+    "newNativeRuns": 0
+  },
+  "bounds": {
+    "freshFixtureAotAndRuntimeSeconds": 120,
+    "addressSpaceBytesPerProcess": 2147483648,
+    "fixtureRuntimeMs": 30000,
+    "privateHostRuntimeSeconds": 90,
+    "nativeRelayIdleSeconds": 15,
+    "nativeRelayConnectSeconds": 3,
+    "nativeRelayConnectRetries": 30,
+    "nativeRelayConnectRetryIntervalSeconds": 0.1,
+    "sharedFlock": "existing /tmp/fl-heavy.lock; no force release",
+    "automaticWholeTrialRetries": 0
+  },
+  "toolchain": {
+    "sdkManifestSha256": "c5c90ed5234dc8d5d321fe63950c6c20f87f9f12ac9e51bc4c2edc4ef0101233",
+    "compilerSha256": "f514e043d3f08115e273717462595a69ffd0522614aad5666dec576f04a46dac",
+    "runtimeArchiveSha256": "fe4308c19eba2142049100c17ac08979b5787c1698b6d5e0e9e082a1f6e691fe",
+    "reusedDaemonProducerCommit": "edfa9fad1580df5a284e5a57422f1701e293b87e",
+    "reusedDaemonSourceMatchesCurrentHead": true,
+    "reusedDaemonElfSha256": "5a01aacf514c6201779e774365b1f2bd7dc7e515f4e5945d2d6969f02a4a7d91",
+    "daemonRebuilt": false,
+    "freshFixtureGeneratedCSha256": "88d1d497165a6863012adb86fc6720e03318eb003e8550c570041bdd122194b1",
+    "freshFixtureElfSha256": "971862096853bfe572eaa7a1eef83a81d7590491c5eddc5a2ccb3b334b6914f5",
+    "nativeByteRelaySha256": "cd8741946c6e0008ea4f87129b7cf1c1e3fa5e8159a5ec98d4a7763447b53b4b",
+    "compilerAndGccFlagsUnchanged": true
+  },
+  "audit": {
+    "traceSha256": "01a1f8611b3da2ec84f6048a46fba73db9ebf049c1d769a24f1afac9864c33b1",
+    "decodedExecs": 17,
+    "resumedExecsJoined": 9,
+    "allTerminalExecStatusesParsed": true,
+    "successfulNodeFamilyExecs": 0,
+    "failedNodeFamilyAttempts": 0,
+    "successfulPythonExecs": 1,
+    "allowedPrivateControllerPythonExecs": 1,
+    "successfulBasenameCounts": {
+      "as": 1,
+      "bash": 1,
+      "bwrap": 1,
+      "cc1": 2,
+      "client-bin": 1,
+      "collect2": 1,
+      "daemon-bin": 1,
+      "flc": 2,
+      "gcc": 2,
+      "grep": 1,
+      "ld": 1,
+      "python3": 1,
+      "socat": 1,
+      "timeout": 1
+    },
+    "timedTraceSha256": "7ead6befdf0f2f32d543dd9604ec449be01660985e0c19657d3627cb836cb821",
+    "trialPrivatePythonControllersOutsideProduct": 2,
+    "privateHostPythonExecsInsideTrace": 1,
+    "privateProcessHostSha256": "750e77cfb09fefff71c103000c50cc557ec34311ae8095568708066ecb92980e",
+    "privateControllerSha256": "3725b13569f1a2580b79580e2fe1ddcf0b07a67186fd7210d57a6ca3563a62ea",
+    "privateResultReceiptSha256": "80db987eb0913bfe2b8f1e8b6fbc482ccb137cc67d23309456a9b26644a77511",
+    "wireAuditSha256": "64672a5bcebf7f13294c742fc69fd6f7282b0f712382da17bfb826c4f30accc2"
+  },
+  "preserved": {
+    "priorCartCommit": "edfa9fad1580df5a284e5a57422f1701e293b87e",
+    "priorProductCommit": "3f3c162d685e0be79c742c01f9ff7e0a7b46230d",
+    "productFixtureSha256": "fd2116c8b4484cc60b366c59e13ebf6ed7e48c7e2d0ea3090973b0542af5a788",
+    "cartFixtureSha256": "c1cca51b3d67085d6adf21b2cf6e6b545a6b7e0c2b6c74ab9e95f993d776b8d3",
+    "case71FixtureSha256": "76d33e64e3576560b814f7ba716273859cbbec81ea718417ec8079ea70177625",
+    "sqlCoreSha256": "5d499eaa262028ba7ee997ed28f8fbfcf1da04498c62fb1cb4ec361da102707d",
+    "walCommit": "1e55d063fe11b3905d79b2ca203f5eb384a7e317",
+    "tcpServerSha256": "b5f3988a48e8d1b38b9af60bc632d21498a326cdeb8294d2d6d9a5a3482a0982",
+    "old349RegressionEvidence": "historical evidence retained; full suite not rerun for this fixture",
+    "original71GateFailures": "retained; no mapping or result promotion",
+    "original25": "TIMEOUT FAIL and pre-existing uncommitted one-byte fixture change preserved",
+    "whole71GateRerun": false,
+    "tlsNodeAckOriginal25Changes": false,
+    "originalReleaseGateSha256": "e464a355883b76a7780707f5acb2a19f187a21961f6eaa2653abe828aa583f99",
+    "nativeReleaseGateSha256": "662e50036dbc8ec5abd7fafe6e3179f1a91427dc32fe3d1cfe4b36190888c250",
+    "priorOrderCommit": "b19e743422ea72f63a9ee655a0a84582a422e1eb",
+    "priorPaymentCompletionCommit": "785527fc1887005dbf46af600135a0590de3061f",
+    "priorProductsListCommit": "b23924d00c679f7787f72a368edcde224d9b5e43",
+    "priorProductsListFixtureSha256": "777bbcfd18620347d38449178af1ed2f3bc5123f8012d9f613e0add3c248621f"
+  }
+}
