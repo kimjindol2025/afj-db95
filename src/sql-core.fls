@@ -317,6 +317,22 @@
          "order-by" (token-at tokens 8)})
       nil)))
 
+(defn parse-select-greater-or-equal [raw-tokens]
+  (let [tokens (sql-select-projection-tokens raw-tokens)]
+    (if (and (= (count tokens) 8)
+             (regex_match (token-at tokens 1) "^[A-Za-z_][A-Za-z0-9_]*(,[A-Za-z_][A-Za-z0-9_]*)*$")
+             (keyword? (token-at tokens 2) "FROM")
+             (regex_match (token-at tokens 3) "^[A-Za-z_][A-Za-z0-9_]*$")
+             (keyword? (token-at tokens 4) "WHERE")
+             (regex_match (token-at tokens 5) "^[A-Za-z_][A-Za-z0-9_]*$")
+             (= (token-at tokens 6) ">=")
+             (regex_match (token-at tokens 7) "^-?[0-9]+$"))
+      {"type" "select" "table" (token-at tokens 3)
+       "columns" (regex_split (token-at tokens 1) ",")
+       "where" {"column" (token-at tokens 5) "operator" ">="
+                "value" (sql-value (token-at tokens 7))}}
+      nil)))
+
 (defn parse-select-like-contains [raw-tokens]
   (let [tokens (sql-select-projection-tokens raw-tokens)]
     (if (and (= (count tokens) 8)
@@ -576,11 +592,14 @@
         (if (nil? limited)
           (let [ordered (parse-select-ordered tokens)]
             (if (nil? ordered)
-              (let [contains (parse-select-like-contains tokens)]
-                (if (nil? contains)
-                  (let [joined (parse-select-qualified-inner-join tokens)]
-                    (if (nil? joined) (parse-select-standard tokens) joined))
-                  contains))
+              (let [ranged (parse-select-greater-or-equal tokens)]
+                (if (nil? ranged)
+                  (let [contains (parse-select-like-contains tokens)]
+                    (if (nil? contains)
+                      (let [joined (parse-select-qualified-inner-join tokens)]
+                        (if (nil? joined) (parse-select-standard tokens) joined))
+                      contains))
+                  ranged))
               ordered))
           limited))
       collation)))
@@ -1104,6 +1123,19 @@
     (if (= rejected true) true
       (throw "WHERE ORDER BY scope guard failure"))))
 (println "afj-db95 WHERE ORDER BY scope guards PASS")
+
+(doseq [query
+        ["SELECT sku, name, price FROM shop_products WHERE price > 2000"
+         "SELECT sku, name, price FROM shop_products WHERE price <= 2000"
+         "SELECT sku, name, price FROM shop_products WHERE price >= 2000 AND visible=1"
+         "SELECT sku AS item, name, price FROM shop_products WHERE price >= 2000"]]
+  (let [rejected (try
+                   (do (parse-sql query) false)
+                   (catch [error]
+                     (str-includes (error_message error) "unsupported SELECT form")))]
+    (if (= rejected true) true
+      (throw "projected greater-or-equal scope guard failure"))))
+(println "afj-db95 projected greater-or-equal scope guards PASS")
 
 (doseq [query
         ["SELECT shop_cart.qty * shop_products.price FROM shop_cart JOIN shop_products ON shop_cart.product_id = shop_products.id ORDER BY other.id"
