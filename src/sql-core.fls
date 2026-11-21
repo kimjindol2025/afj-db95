@@ -400,7 +400,8 @@
                               (keyword? (get tail 8) "WHERE")
                               (= (count (regex_split (get tail 9) "=")) 2))
             sum-aggregate (sql-join-sum-aggregate projection)
-            sum-suffix (and (= (count tail) 8) (not (nil? sum-aggregate)))
+            sum-suffix (and (or (= (count tail) 8) where-suffix)
+                            (not (nil? sum-aggregate)))
             order-suffix (and (= (count tail) 11)
                               (keyword? (get tail 8) "ORDER")
                               (keyword? (get tail 9) "BY")
@@ -448,8 +449,11 @@
                   (if (and (sql-join-qualified-column? column)
                            (= (get key 0) left-table))
                     ;; Existing engine filters/indexes before JOIN.
-                    (assoc ast "where" {"column" (get key 1)
-                                       "equals" (get predicate "value")})
+                    (assoc (if sum-suffix
+                             (assoc (dissoc ast "columns") "aggregate" sum-aggregate)
+                             ast)
+                           "where" {"column" (get key 1)
+                                    "equals" (get predicate "value")})
                     nil))
                 (if sum-suffix
                   (assoc (dissoc ast "columns") "aggregate" sum-aggregate)
@@ -890,6 +894,19 @@
     (if (= rejected true) true
       (throw "qualified SUM scope guard failure"))))
 (println "afj-db95 qualified SUM scope guards PASS")
+
+(doseq [query
+        ["SELECT SUM(shop_cart.qty * shop_products.price) FROM shop_cart JOIN shop_products ON shop_cart.product_id = shop_products.id WHERE other.user_id=10"
+         "SELECT SUM(shop_cart.qty * shop_products.price) FROM shop_cart JOIN shop_products ON shop_cart.product_id = shop_products.id WHERE user_id=10"
+         "SELECT SUM(shop_cart.qty * shop_products.price) FROM shop_cart JOIN shop_products ON shop_cart.product_id = shop_products.id WHERE shop_cart.user_id=10 AND shop_cart.id=1"
+         "SELECT SUM(shop_cart.qty * shop_products.price) FROM shop_cart JOIN shop_products ON shop_cart.product_id = shop_products.id WHERE shop_cart.user_id=10 ORDER BY shop_cart.id"]]
+  (let [rejected (try
+                   (do (parse-sql query) false)
+                   (catch [error]
+                     (str-includes (error_message error) "unsupported SELECT form")))]
+    (if (= rejected true) true
+      (throw "qualified SUM WHERE scope guard failure"))))
+(println "afj-db95 qualified SUM WHERE scope guards PASS")
 
 (doseq [query
         ["SELECT shop_cart.qty * shop_products.price FROM shop_cart JOIN shop_products ON shop_cart.product_id = shop_products.id ORDER BY other.id"
