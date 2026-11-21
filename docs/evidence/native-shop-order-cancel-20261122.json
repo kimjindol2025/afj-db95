@@ -1,0 +1,412 @@
+{
+  "schema": "db95-native-shop-order-cancel-v1",
+  "date_local": "2026-11-22 Asia/Seoul",
+  "status": "SCOPED_PASS",
+  "commercial": "HOLD",
+  "deployment": "NO",
+  "source": {
+    "baseHead": "6f2fbfa99ba2850ee34adc06d9846a1501e41dda",
+    "implementationFilesChanged": [],
+    "newFixture": "tests/native-shop-order-cancel.fls",
+    "fixtureSha256": "7f546da2ec05e8c8dff1083c475f451e3c0d631c672e255ec41a891cfddfd9fa",
+    "daemonDependencySha256": {
+      "src/engine.fls": "6058a56b9ccd6d474692be1da502316991f21b5afae7e837a322a1d0133d8f0c",
+      "src/sql-core.fls": "156529064a95cb506b405a629be86cd1184718478c1051039038e357d6fc0981",
+      "src/mariadb-wire.fls": "ad22ba6ae03fa70388c6b3a0d1a930e574595b67e5cf58421ef3ea33b3c5c4ff",
+      "src/sha1.fls": "6fc4c3def2d56c4ff7eb76c7cd7917b6e268bdc070a75fe90959a49a08bf39cf",
+      "tests/native-mariadb-daemon.fls": "4aeb91c050734087a9b0e27bffd677cfe48f6bfb5068f39cbbce2efb4c01868d"
+    },
+    "allTrackedSourceNewFixtureSdkAndDaemonBytesUnchangedDuringTrial": true
+  },
+  "contract": {
+    "purpose": "four-statement Native order cancellation DB contract",
+    "productSeed": {
+      "id": 1,
+      "sku": "SKU-1",
+      "name": "Demo Widget",
+      "price": 1500,
+      "stock": 8
+    },
+    "orderSeed": {
+      "id": 1,
+      "product_id": 1,
+      "qty": 2,
+      "total": 3000,
+      "status": "placed"
+    },
+    "preparedQueries": [
+      "UPDATE shop_orders SET status=? WHERE id=?",
+      "UPDATE shop_products SET stock=? WHERE id=?",
+      "SELECT id, status FROM shop_orders WHERE id=?",
+      "SELECT id, stock FROM shop_products WHERE id=?"
+    ],
+    "bindings": [
+      [
+        "cancelled",
+        1
+      ],
+      [
+        10,
+        1
+      ],
+      [
+        1
+      ],
+      [
+        1
+      ]
+    ],
+    "expectedOrderRow": {
+      "id": "1",
+      "status": "cancelled"
+    },
+    "expectedStockRow": {
+      "id": "1",
+      "stock": "10"
+    },
+    "orderUpdateExecutions": 1,
+    "stockUpdateExecutions": 1,
+    "preparedSelectExecutions": 2,
+    "statementExecution": "sequential, one of each command"
+  },
+  "observation": {
+    "passed": 1,
+    "failed": 0,
+    "total": 1,
+    "attempts": 1,
+    "freshClientAotAndRuntimeSeconds": 5.82019265400595,
+    "runtimeHostSeconds": 0.629430154003785,
+    "hostExit": 0,
+    "typedResult": {
+      "ok": true,
+      "initial_stock": 8,
+      "restored_stock": 10,
+      "initial_status": "placed",
+      "prepared_executions": 4,
+      "order_update_executions": 1,
+      "stock_update_executions": 1,
+      "prepared_select_executions": 2,
+      "err_packets": 0,
+      "results": [
+        {
+          "query": "UPDATE shop_orders SET status=? WHERE id=?",
+          "bind": [
+            "cancelled",
+            1
+          ],
+          "response": "resultset",
+          "rows": 1,
+          "columns": [
+            "id",
+            "product_id",
+            "qty",
+            "total",
+            "status"
+          ],
+          "data": [
+            {
+              "id": "1",
+              "product_id": "1",
+              "qty": "2",
+              "total": "3000",
+              "status": "cancelled"
+            }
+          ]
+        },
+        {
+          "query": "UPDATE shop_products SET stock=? WHERE id=?",
+          "bind": [
+            10,
+            1
+          ],
+          "response": "resultset",
+          "rows": 1,
+          "columns": [
+            "id",
+            "sku",
+            "name",
+            "price",
+            "stock"
+          ],
+          "data": [
+            {
+              "id": "1",
+              "sku": "SKU-1",
+              "name": "Demo Widget",
+              "price": "1500",
+              "stock": "10"
+            }
+          ]
+        },
+        {
+          "query": "SELECT id, status FROM shop_orders WHERE id=?",
+          "bind": [
+            1
+          ],
+          "response": "resultset",
+          "rows": 1,
+          "columns": [
+            "id",
+            "status"
+          ],
+          "data": [
+            {
+              "id": "1",
+              "status": "cancelled"
+            }
+          ]
+        },
+        {
+          "query": "SELECT id, stock FROM shop_products WHERE id=?",
+          "bind": [
+            1
+          ],
+          "response": "resultset",
+          "rows": 1,
+          "columns": [
+            "id",
+            "stock"
+          ],
+          "data": [
+            {
+              "id": "1",
+              "stock": "10"
+            }
+          ]
+        }
+      ]
+    },
+    "nativeFixtureExecutions": 1,
+    "verifiedCurrentDaemonExecutions": 1,
+    "nativeByteRelayExecutions": 1,
+    "daemonRebuilt": false,
+    "cachedDaemonAotExcluded": true,
+    "allOwnedChildrenReaped": true,
+    "childExits": {
+      "client": 0,
+      "daemon": -15,
+      "native-byte-relay": 0
+    },
+    "storageInitiallyEmpty": true
+  },
+  "validation": {
+    "status": "VERIFIED_FROM_EXISTING_SINGLE_NATIVE_ORDER_CANCEL_TRACE",
+    "commandBytes": [
+      3,
+      3,
+      3,
+      3,
+      22,
+      23,
+      22,
+      23,
+      22,
+      23,
+      22,
+      23
+    ],
+    "setupSql": [
+      "CREATE TABLE shop_products (id INT PRIMARY KEY, sku TEXT, name TEXT, price INT, stock INT)",
+      "INSERT INTO shop_products (id, sku, name, price, stock) VALUES (1, 'SKU-1', 'Demo Widget', 1500, 8)",
+      "CREATE TABLE shop_orders (id INT PRIMARY KEY, product_id INT, qty INT, total INT, status TEXT)",
+      "INSERT INTO shop_orders (id, product_id, qty, total, status) VALUES (1, 1, 2, 3000, 'placed')"
+    ],
+    "allSetupAcknowledged": true,
+    "preparedQueries": [
+      "UPDATE shop_orders SET status=? WHERE id=?",
+      "UPDATE shop_products SET stock=? WHERE id=?",
+      "SELECT id, status FROM shop_orders WHERE id=?",
+      "SELECT id, stock FROM shop_products WHERE id=?"
+    ],
+    "preparedParameterCounts": [
+      2,
+      2,
+      1,
+      1
+    ],
+    "bindings": [
+      [
+        "cancelled",
+        1
+      ],
+      [
+        10,
+        1
+      ],
+      [
+        1
+      ],
+      [
+        1
+      ]
+    ],
+    "parameterTypes": [
+      [
+        253,
+        3
+      ],
+      [
+        3,
+        3
+      ],
+      [
+        3
+      ],
+      [
+        3
+      ]
+    ],
+    "statementIds": [
+      1,
+      2,
+      3,
+      4
+    ],
+    "executePayloadHex": [
+      "170100000000010000000001fd0003000963616e63656c6c656401000000",
+      "170200000000010000000001030003000a00000001000000",
+      "170300000000010000000001030001000000",
+      "170400000000010000000001030001000000"
+    ],
+    "preparedExecutions": 4,
+    "orderUpdateExecutions": 1,
+    "stockUpdateExecutions": 1,
+    "preparedSelectExecutions": 2,
+    "responseColumns": [
+      [
+        "id",
+        "product_id",
+        "qty",
+        "total",
+        "status"
+      ],
+      [
+        "id",
+        "sku",
+        "name",
+        "price",
+        "stock"
+      ],
+      [
+        "id",
+        "status"
+      ],
+      [
+        "id",
+        "stock"
+      ]
+    ],
+    "responseRows": [
+      [
+        {
+          "id": "1",
+          "product_id": "1",
+          "qty": "2",
+          "total": "3000",
+          "status": "cancelled"
+        }
+      ],
+      [
+        {
+          "id": "1",
+          "sku": "SKU-1",
+          "name": "Demo Widget",
+          "price": "1500",
+          "stock": "10"
+        }
+      ],
+      [
+        {
+          "id": "1",
+          "status": "cancelled"
+        }
+      ],
+      [
+        {
+          "id": "1",
+          "stock": "10"
+        }
+      ]
+    ],
+    "finalOrderStatus": "cancelled",
+    "finalStock": 10,
+    "errPackets": 0,
+    "clientPackets": 13,
+    "daemonPackets": 40,
+    "engineAndSqlCoreSourceUnchanged": true,
+    "newNativeRuns": 0,
+    "existingSumScopeRejectionsPassed": 6,
+    "existingOrderScopeRejectionsPassed": 4,
+    "existingGroupedCOUNTAndCOUNTStarEngineChecksPassed": true,
+    "existingSqlStartupAssertionsPassed": 36,
+    "existingQualifiedJoinScopeGuardsPassed": 4,
+    "existingMultiplyScopeGuardsPassed": 4,
+    "existingProjectionAndAggregateChecksPassed": true
+  },
+  "bounds": {
+    "addressSpaceBytesPerProcess": 2147483648,
+    "fixtureRuntimeMs": 30000,
+    "privateHostRuntimeSeconds": 90,
+    "freshClientAotAndRuntimeSeconds": 120,
+    "sharedFlock": "existing /tmp/fl-heavy.lock; one waiter, natural acquisition, no force release",
+    "automaticWholeTrialRetries": 0,
+    "nativeRelayIdleSeconds": 15,
+    "nativeRelayConnectSeconds": 3,
+    "nativeRelayConnectRetries": 30,
+    "nativeRelayConnectRetryIntervalSeconds": 0.1
+  },
+  "toolchain": {
+    "sdkManifestSha256": "c5c90ed5234dc8d5d321fe63950c6c20f87f9f12ac9e51bc4c2edc4ef0101233",
+    "compilerSha256": "f514e043d3f08115e273717462595a69ffd0522614aad5666dec576f04a46dac",
+    "runtimeArchiveSha256": "fe4308c19eba2142049100c17ac08979b5787c1698b6d5e0e9e082a1f6e691fe",
+    "verifiedDaemonElfSha256": "dda5ded9119fa5ba2c9b1eb0c18c298ae0f16471e4408b67a9bfed9944054e84",
+    "daemonProducerReceiptSha256": "44860ef3e647f6d4b6c267fb32f340a279c082aacadf373b40ff6aab9c1b74ac",
+    "freshFixtureGeneratedCSha256": "f0cce2ad50575eb86d490d19d9a8c4d148c22e4d328c530d4e4a3722a78de475",
+    "freshFixtureElfSha256": "3220e950f9520ee650722266b47992a58a9f515bfa2ffd83833732dfb6b1dbae",
+    "nativeByteRelaySha256": "cd8741946c6e0008ea4f87129b7cf1c1e3fa5e8159a5ec98d4a7763447b53b4b",
+    "compilerAndGccFlagsUnchanged": true
+  },
+  "audit": {
+    "traceSha256": "03be00893c391d1d66a1ed92884228544edf2270257796060a8b57be5a10a5fa",
+    "decodedExecs": 17,
+    "resumedExecsJoined": 9,
+    "allTerminalExecStatusesParsed": true,
+    "successfulNodeFamilyExecs": 0,
+    "failedNodeFamilyAttempts": 0,
+    "successfulPythonExecs": 1,
+    "allowedPrivateControllerPythonExecs": 1,
+    "successfulBasenameCounts": {
+      "as": 1,
+      "bash": 1,
+      "bwrap": 1,
+      "cc1": 2,
+      "client-bin": 1,
+      "collect2": 1,
+      "daemon-bin": 1,
+      "flc": 2,
+      "gcc": 2,
+      "grep": 1,
+      "ld": 1,
+      "python3": 1,
+      "socat": 1,
+      "timeout": 1
+    },
+    "timedTraceSha256": "c89c37eedb1c850510487e6cad4ba5acb0b2864ac493f7c42d35847f82bc2698",
+    "privateResultReceiptSha256": "b741bebafe4ce6db11197c55610855ceb9a906a50d17374a3c2b327cc4e0b615",
+    "privateControllerSha256": "99bff0f1172046fdcb261fad665aa445440b9d762fa77af7fc367f63b41b7bc6",
+    "privateProcessHostSha256": "dfa96d5bcfac5076b29da198f4553818a597c824831e64219bd70192233710a4",
+    "wireProofSha256": "f39b35fe36fe664f669bf949c061f62ddd486037eda0e5d6f2bfc905af40c49c",
+    "readOnlyOfflineProofSha256": "ae460fedf4a4355d28f43b969e6425a45ed67b1b47bb746e49e31511fc51f1ab",
+    "readOnlyOfflineHelperSha256": "3e9fe45d6277f09c6643d1a0f2b49974d5bbf3dbc23a630be1b6ef3b82801c18",
+    "privatePythonControllersOutsideProduct": 2
+  },
+  "scope": {
+    "claim": "the four agreed prepared SQL statements and exact server readbacks",
+    "atomicCancellationIdempotencyOrExternalRefundContractExercised": false,
+    "priorStockCheckoutCommit": "6f2fbfa99ba2850ee34adc06d9846a1501e41dda",
+    "priorFailuresAndHistoricalWal349EvidencePreserved": true,
+    "fullRegressionOrOriginal71GateRerun": false,
+    "gateResultsPromoted": false,
+    "sqlCoreEngineParserCompilerDaemonTlsNodeAckOriginal25Changed": false
+  }
+}

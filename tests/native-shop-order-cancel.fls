@@ -1,0 +1,276 @@
+;; Native order-cancellation DB fixture agreed in msg_cd986e1fbfb7.
+;; Prepared status UPDATE, stock restoration UPDATE and exact order/product readbacks.
+(load "../src/sha1.fls")
+(define cancel-control (env-get "AFJ_NATIVE_SHOP_ORDER_CANCEL_CONTROL"))
+(define cancel-connection (atom nil))
+(define cancel-buffer (atom ""))
+(define cancel-stage (atom "handshake"))
+(define cancel-sequence (atom 0))
+(define cancel-columns (atom []))
+(define cancel-rows (atom []))
+(define cancel-error (atom nil))
+(define cancel-done (atom false))
+(define cancel-statement (atom nil))
+
+(defn cancel-check [condition message]
+  (if (= condition true) true (throw message)))
+
+(defn cancel-u32 [value]
+  (buf-concat [(buf-u8 (rem value 256))
+               (buf-u8 (rem (floor (/ value 256)) 256))
+               (buf-u8 (rem (floor (/ value 65536)) 256))
+               (buf-u8 (rem (floor (/ value 16777216)) 256))]))
+
+(defn cancel-read-u32 [bytes offset]
+  (+ (buf-read-u8 bytes offset)
+     (* 256 (buf-read-u8 bytes (+ offset 1)))
+     (* 65536 (buf-read-u8 bytes (+ offset 2)))
+     (* 16777216 (buf-read-u8 bytes (+ offset 3)))))
+
+(defn cancel-send [payload sequence next-stage response-sequence]
+  (let [length (buf-len payload)
+        frame (buf-concat [(buf-slice (cancel-u32 length) 0 3)
+                           (buf-u8 sequence) payload])]
+    (reset! cancel-stage next-stage)
+    (reset! cancel-sequence response-sequence)
+    (cancel-check (= (tcp-write (deref cancel-connection) (buf-to-binary frame)) "ok")
+                 "NATIVE_SHOP_ORDER_CANCEL_PACKET_WRITE")))
+
+(defn cancel-command [code text next-stage]
+  (cancel-send (buf-concat [(buf-u8 code) (buf-str text)])
+              0 next-stage 1))
+
+(defn cancel-text [bytes offset]
+  (cancel-check (< offset (buf-len bytes)) "NATIVE_SHOP_ORDER_CANCEL_TEXT_PREFIX")
+  (let [length (buf-read-u8 bytes offset) next (+ offset 1 length)]
+    (cancel-check (and (< length 251) (<= next (buf-len bytes)))
+                 "NATIVE_SHOP_ORDER_CANCEL_TEXT_LENGTH")
+    {"value" (buf-read-str bytes (+ offset 1) length)
+     "next" next}))
+
+(defn cancel-column-name [bytes]
+  (loop [index 0 offset 0]
+    (let [field (cancel-text bytes offset)]
+      (if (= index 4) (get field "value")
+        (recur (+ index 1) (get field "next"))))))
+
+(defn cancel-login [bytes]
+  (cancel-check (= (buf-read-u8 bytes 0) 10) "NATIVE_SHOP_ORDER_CANCEL_HANDSHAKE_VERSION")
+  (let [version-end
+          (loop [offset 1]
+            (do
+              (cancel-check (< offset (buf-len bytes)) "NATIVE_SHOP_ORDER_CANCEL_HANDSHAKE_LENGTH")
+              (if (= (buf-read-u8 bytes offset) 0) offset (recur (+ offset 1)))))
+        first-offset (+ version-end 5)
+        second-offset (+ first-offset 27)]
+    (cancel-check (<= (+ second-offset 12) (buf-len bytes))
+                 "NATIVE_SHOP_ORDER_CANCEL_SCRAMBLE_LENGTH")
+    (let [scramble (buf-concat [(buf-slice bytes first-offset 8)
+                                (buf-slice bytes second-offset 12)])
+          token (sha1-mysql-native-token "development-only" scramble)
+          login (buf-concat [(cancel-u32 172545) (cancel-u32 1048576)
+                             (buf-u8 33) (sha1-zero-bytes 23)
+                             (buf-str "root") (buf-u8 0)
+                             (buf-u8 20) token])]
+      (cancel-check (= (buf-len token) 20) "NATIVE_SHOP_ORDER_CANCEL_TOKEN_LENGTH")
+      (cancel-send login 1 "login" 2))))
+
+
+(define cancel-setup
+  ["CREATE TABLE shop_products (id INT PRIMARY KEY, sku TEXT, name TEXT, price INT, stock INT)"
+   "INSERT INTO shop_products (id, sku, name, price, stock) VALUES (1, 'SKU-1', 'Demo Widget', 1500, 8)"
+   "CREATE TABLE shop_orders (id INT PRIMARY KEY, product_id INT, qty INT, total INT, status TEXT)"
+   "INSERT INTO shop_orders (id, product_id, qty, total, status) VALUES (1, 1, 2, 3000, 'placed')"])
+(define cancel-queries
+  [{"sql" "UPDATE shop_orders SET status=? WHERE id=?"
+    "bind" ["cancelled" 1] "response" "resultset" "columns" ["id" "product_id" "qty" "total" "status"]
+    "row-count" 1 "expected-row" {"id" "1" "product_id" "1" "qty" "2" "total" "3000" "status" "cancelled"}}
+   {"sql" "UPDATE shop_products SET stock=? WHERE id=?"
+    "bind" [10 1] "response" "resultset" "columns" ["id" "sku" "name" "price" "stock"]
+    "row-count" 1 "expected-row" {"id" "1" "sku" "SKU-1" "name" "Demo Widget" "price" "1500" "stock" "10"}}
+   {"sql" "SELECT id, status FROM shop_orders WHERE id=?"
+    "bind" [1] "response" "resultset" "columns" ["id" "status"]
+    "row-count" 1 "expected-row" {"id" "1" "status" "cancelled"}}
+   {"sql" "SELECT id, stock FROM shop_products WHERE id=?"
+    "bind" [1] "response" "resultset" "columns" ["id" "stock"]
+    "row-count" 1 "expected-row" {"id" "1" "stock" "10"}}])
+(define cancel-setup-index (atom 0))
+(define cancel-query-index (atom 0))
+(define cancel-results (atom []))
+(define cancel-column-count (atom 0))
+
+(defn cancel-row-map [bytes]
+  (loop [index 0 offset 0 result {}]
+    (if (= index (deref cancel-column-count))
+      (do
+        (cancel-check (= offset (buf-len bytes)) "NATIVE_SHOP_ORDER_CANCEL_ROW_TRAILING_BYTES")
+        result)
+      (let [field (cancel-text bytes offset)]
+        (recur (+ index 1) (get field "next")
+               (assoc result (get (deref cancel-columns) index) (get field "value")))))))
+
+(defn cancel-prepare-current []
+  (reset! cancel-columns [])
+  (reset! cancel-rows [])
+  (cancel-command 22 (get (get cancel-queries (deref cancel-query-index)) "sql") "prepare"))
+
+(defn cancel-finish-result []
+  (let [index (deref cancel-query-index)
+        query (get cancel-queries index)
+        rows (deref cancel-rows)]
+    (cancel-check (= (count rows) (get query "row-count"))
+                    "NATIVE_SHOP_ORDER_CANCEL_EXACT_ROW_COUNT")
+    (if (= (get query "row-count") 1)
+      (doseq [column (get query "columns")]
+        (cancel-check (= (get (get rows 0) column)
+                           (get (get query "expected-row") column))
+                        "NATIVE_SHOP_ORDER_CANCEL_EXACT_ROW_VALUE"))
+      nil)
+    (swap! cancel-results conj
+           {"query" (get query "sql") "bind" (get query "bind")
+            "response" (get query "response") "rows" (count rows) "columns" (deref cancel-columns) "data" rows})
+    (if (< (+ index 1) (count cancel-queries))
+      (do (swap! cancel-query-index + 1) (cancel-prepare-current))
+      (do (reset! cancel-stage "done") (reset! cancel-done true)))))
+
+(defn cancel-frame [bytes sequence]
+  (cancel-check (> (buf-len bytes) 0) "NATIVE_SHOP_ORDER_CANCEL_EMPTY_PACKET")
+  (cancel-check (= sequence (deref cancel-sequence)) "NATIVE_SHOP_ORDER_CANCEL_PACKET_SEQUENCE")
+  (swap! cancel-sequence + 1)
+  (let [stage (deref cancel-stage) first-byte (buf-read-u8 bytes 0)]
+    (if (= first-byte 255)
+      (if (>= (buf-len bytes) 9)
+        (throw (str "NATIVE_SHOP_ORDER_CANCEL_SERVER_ERROR_" stage " code="
+                    (+ (buf-read-u8 bytes 1) (* 256 (buf-read-u8 bytes 2)))
+                    " message=" (buf-read-str bytes 9 (- (buf-len bytes) 9))))
+        (throw "NATIVE_SHOP_ORDER_CANCEL_SHORT_SERVER_ERROR"))
+      nil)
+    (cond
+      (= stage "handshake") (cancel-login bytes)
+      (= stage "login")
+        (do (cancel-check (= first-byte 0) "NATIVE_SHOP_ORDER_CANCEL_LOGIN_ACK")
+            (cancel-command 3 (get cancel-setup 0) "setup"))
+      (= stage "setup")
+        (do
+          (cancel-check (= first-byte 0) "NATIVE_SHOP_ORDER_CANCEL_SETUP_ACK")
+          (swap! cancel-setup-index + 1)
+          (if (< (deref cancel-setup-index) (count cancel-setup))
+            (cancel-command 3 (get cancel-setup (deref cancel-setup-index)) "setup")
+            (cancel-prepare-current)))
+      (= stage "prepare")
+        (let [parameters (count (get (get cancel-queries (deref cancel-query-index)) "bind"))]
+          (cancel-check (and (= first-byte 0) (>= (buf-len bytes) 12))
+                          "NATIVE_SHOP_ORDER_CANCEL_PREPARE_ACK")
+          (cancel-check (and (= (buf-read-u8 bytes 7) parameters)
+                               (= (buf-read-u8 bytes 8) 0))
+                          "NATIVE_SHOP_ORDER_CANCEL_PARAMETER_COUNT")
+          (reset! cancel-statement (cancel-read-u32 bytes 1))
+          (let [bind (get (get cancel-queries (deref cancel-query-index)) "bind")
+                execute (atom (buf-concat [(buf-u8 23) (cancel-u32 (deref cancel-statement))
+                                           (buf-u8 0) (cancel-u32 1)
+                                           (buf-u8 0) (buf-u8 1)]))]
+            ;; Existing Native INT32 and VAR_STRING parameter types.
+            (doseq [value bind]
+              (cancel-check (or (number? value) (string? value))
+                            "NATIVE_SHOP_ORDER_CANCEL_BIND_TYPE")
+              (reset! execute (buf-concat [(deref execute)
+                                           (buf-u8 (if (number? value) 3 253)) (buf-u8 0)])))
+            (doseq [value bind]
+              (let [encoded (if (number? value)
+                              (cancel-u32 value)
+                              (let [text (buf-str value)]
+                                (cancel-check (< (buf-len text) 251)
+                                              "NATIVE_SHOP_ORDER_CANCEL_SHORT_TEXT_BIND")
+                                (buf-concat [(buf-u8 (buf-len text)) text])))]
+                (reset! execute (buf-concat [(deref execute) encoded]))))
+            (cancel-send (deref execute) 0 "select" 1)))
+      (= stage "select")
+        (let [query (get cancel-queries (deref cancel-query-index))]
+          (cancel-check (and (= (buf-len bytes) 1)
+                             (= first-byte (count (get query "columns"))))
+                        "NATIVE_SHOP_ORDER_CANCEL_RESULT_HEADER")
+          (reset! cancel-column-count first-byte)
+          (reset! cancel-stage "columns"))
+      (= stage "columns")
+        (do
+          (swap! cancel-columns conj (cancel-column-name bytes))
+          (if (= (count (deref cancel-columns)) (deref cancel-column-count))
+            (reset! cancel-stage "columns-end") nil))
+      (= stage "columns-end")
+        (do
+          (cancel-check (and (= first-byte 254) (= (buf-len bytes) 5))
+                          "NATIVE_SHOP_ORDER_CANCEL_COLUMN_EOF")
+          ;; An empty result need not expose id metadata; ERR and rows remain strict.
+          (if (= (get (get cancel-queries (deref cancel-query-index)) "row-count") 0) nil
+            (cancel-check (= (deref cancel-columns)
+                               (get (get cancel-queries (deref cancel-query-index)) "columns"))
+                            "NATIVE_SHOP_ORDER_CANCEL_RESULT_SCHEMA"))
+          (reset! cancel-stage "rows"))
+      (= stage "rows")
+        (if (and (= first-byte 254) (= (buf-len bytes) 5))
+          (cancel-finish-result)
+          (do
+            (cancel-check (< (count (deref cancel-rows))
+                               (get (get cancel-queries (deref cancel-query-index)) "row-count"))
+                            "NATIVE_SHOP_ORDER_CANCEL_EXTRA_ROW")
+            (swap! cancel-rows conj (cancel-row-map bytes))))
+      :else (throw "NATIVE_SHOP_ORDER_CANCEL_UNEXPECTED_STAGE"))))
+(defn cancel-drain []
+  (if (>= (buf-len (deref cancel-buffer)) 4)
+    (let [bytes (deref cancel-buffer)
+          length (+ (buf-read-u8 bytes 0) (* 256 (buf-read-u8 bytes 1))
+                     (* 65536 (buf-read-u8 bytes 2)))]
+      (cancel-check (<= length 65536) "NATIVE_SHOP_ORDER_CANCEL_PACKET_LIMIT")
+      (if (>= (buf-len bytes) (+ 4 length))
+        (do
+          (reset! cancel-buffer (buf-slice bytes (+ 4 length)
+                                         (- (buf-len bytes) (+ 4 length))))
+          (cancel-frame (buf-slice bytes 4 length) (buf-read-u8 bytes 3))
+          (cancel-drain))
+        nil))
+    nil))
+
+(defn native-shop-order-cancel-handler [event connection payload peer]
+  (try
+    (cond
+      (or (= event "connect") (= event "accept"))
+        (do (cancel-check (nil? (deref cancel-connection)) "NATIVE_SHOP_ORDER_CANCEL_SINGLE_CONNECTION")
+            (reset! cancel-connection connection))
+      (= event "data")
+        (do (reset! cancel-buffer
+              (buf-concat [(deref cancel-buffer) (buf-from-binary payload)]))
+            (cancel-drain))
+      (= event "close")
+        (cancel-check (deref cancel-done) "NATIVE_SHOP_ORDER_CANCEL_PREMATURE_CLOSE")
+      :else nil)
+    (catch [error]
+      (reset! cancel-error (error_message error))
+      (reset! cancel-done true))))
+
+(cancel-check (not (nil? cancel-control)) "NATIVE_SHOP_ORDER_CANCEL_HOST_ENV_REQUIRED")
+(cancel-check (not (file_exists (str cancel-control "/ports.ready")))
+             "NATIVE_SHOP_ORDER_CANCEL_CONTROL_NOT_FRESH")
+(let [bridge-port (tcp-client-free-port) daemon-port (tcp-client-free-port)]
+  (cancel-check (and (number? bridge-port) (number? daemon-port)
+                    (not (= bridge-port daemon-port))) "NATIVE_SHOP_ORDER_CANCEL_DISTINCT_PORTS")
+  (cancel-check (= (tcp-server-raw bridge-port "native-shop-order-cancel-handler" "127.0.0.1") "ok")
+               "NATIVE_SHOP_ORDER_CANCEL_LISTENER_START")
+  (try
+    (do
+      (file_write (str cancel-control "/ports.json")
+                  (json_str {"bridge" bridge-port "daemon" daemon-port}))
+      (file_write (str cancel-control "/ports.ready") "ready")
+      (let [deadline (+ (now-ms) 30000)]
+        (while (and (< (now-ms) deadline) (not (deref cancel-done))) (fl-yield 10)))
+      (cancel-check (deref cancel-done) "NATIVE_SHOP_ORDER_CANCEL_CONTRACT_TIMEOUT")
+      (if (nil? (deref cancel-error)) nil (throw (deref cancel-error)))
+      (cancel-check (= (deref cancel-stage) "done") "NATIVE_SHOP_ORDER_CANCEL_CONTRACT_INCOMPLETE")
+      (cancel-check (= (buf-len (deref cancel-buffer)) 0) "NATIVE_SHOP_ORDER_CANCEL_TRAILING_PACKET_BYTES"))
+    (finally (tcp-server-stop bridge-port))))
+(cancel-check (= (count (deref cancel-results)) 4) "NATIVE_SHOP_ORDER_CANCEL_FOUR_RESULTS")
+(println (str "NATIVE_SHOP_ORDER_CANCEL_RESULT "
+  (json_str {"ok" true "initial_stock" 8 "restored_stock" 10 "initial_status" "placed"
+             "prepared_executions" 4 "order_update_executions" 1
+             "stock_update_executions" 1 "prepared_select_executions" 2 "err_packets" 0
+             "results" (deref cancel-results)})))
+(println "afj-db95 Native shop order cancel status stock prepared contract PASS")
