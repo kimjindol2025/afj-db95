@@ -249,7 +249,25 @@
     nil))
 
 ;; MariaDB corpus compatibility: grouped COUNT with aliases and LEFT JOIN.
-(defn parse-select-standard [tokens]
+(defn sql-select-projection-tokens [tokens]
+  (loop [index 1]
+    (if (>= index (count tokens))
+      tokens
+      (if (keyword? (token-at tokens index) "FROM")
+        (let [projection (str_join (take (- index 1) (drop 1 tokens)) " ")]
+          ;; Normalize only a validated plain identifier list. Missing commas,
+          ;; expressions and quoted values retain their original token stream.
+          (if (regex_match projection
+                           "^[A-Za-z_][A-Za-z0-9_]*(\\s*,\\s*[A-Za-z_][A-Za-z0-9_]*)*$")
+            (let [columns (map (fn [column] (str-trim column))
+                               (regex_split projection ","))]
+              (concat [(token-at tokens 0) (str_join columns ",")]
+                      (drop index tokens)))
+            tokens))
+        (recur (+ index 1))))))
+
+(defn parse-select-standard [raw-tokens]
+  (let [tokens (sql-select-projection-tokens raw-tokens)]
   (if (and (= (count tokens) 6)
            (keyword? (token-at tokens 2) "FROM")
            (keyword? (token-at tokens 4) "WHERE")
@@ -311,7 +329,7 @@
          "join" {"type" "left" "table" join-table
                  "table-alias" join-alias "left" join-left "right" join-right}
          "group-by" group-by "order-by" order-by})
-      (parse-select-basic tokens))))))
+      (parse-select-basic tokens)))))))
 
 (defn parse-select [tokens]
   (let [collation (parse-select-collation tokens)]
@@ -679,6 +697,20 @@
             {"type" "savepoint" "op" "ROLLBACK_TO" "name" "before_update"})
 (assert-sql "RELEASE SAVEPOINT before_update"
             {"type" "savepoint" "op" "RELEASE" "name" "before_update"})
+
+(assert-sql "SELECT id, sku, name, price FROM shop_products WHERE id=1"
+            {"type" "select" "columns" ["id" "sku" "name" "price"]
+             "table" "shop_products" "where" {"column" "id" "equals" "1"}})
+(assert-sql "SELECT id ,sku , name,price FROM shop_products WHERE id=1"
+            {"type" "select" "columns" ["id" "sku" "name" "price"]
+             "table" "shop_products" "where" {"column" "id" "equals" "1"}})
+(let [missing-comma-rejected
+        (try
+          (do (parse-sql "SELECT id sku FROM shop_products WHERE id=1") false)
+          (catch [error] (str-includes (error_message error) "unsupported SELECT")))]
+  (if (= missing-comma-rejected true)
+    (println "afj-db95 SQL projection comma/space contract PASS")
+    (throw "SQL projection comma/space contract failure")))
 
 (let [aggregate (parse-sql "SELECT COUNT(*) AS remaining FROM users")
       schema-create (parse-sql
