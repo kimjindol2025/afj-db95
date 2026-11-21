@@ -1,0 +1,65 @@
+;; Independent Native wire contract, outside the original71-case mapping.
+;; A fixed process host starts the existing daemon on port.txt after port.ready
+;; with AFJ_DB_RATE_MAX_REQUESTS=3 and AFJ_DB_RATE_WINDOW_MS=60000.
+;; No login/probe request consumes the budget before these four pings.
+(define peer-control (env-get "AFJ_NATIVE_PEER_CONTROL"))
+(define peer-first-fd (atom nil))
+(define peer-second-fd (atom nil))
+(define peer-result (atom nil))
+
+(defn peer-check [condition message]
+  (if (= condition true) true (throw message)))
+
+(defn peer-connect [port]
+  (let [deadline (+ (now-ms) 30000) connected (atom nil)]
+    (while (and (< (now-ms) deadline) (nil? (deref connected)))
+      (let [fd (tcp-client-open "127.0.0.1" port 200)]
+        (if (nil? fd) (sleep_ms 25) (reset! connected fd))))
+    (peer-check (not (nil? (deref connected))) "NATIVE_PEER_TCP_READY_TIMEOUT")
+    (deref connected)))
+
+(defn peer-ping [fd]
+  (peer-check (= (tcp-client-write fd (str (json_str {"type" "ping"}) "\n")) "ok")
+              "NATIVE_PEER_SOCKET_WRITE")
+  (let [line (tcp-client-read-line fd 3000)]
+    (peer-check (not (nil? line)) "NATIVE_PEER_RESPONSE_TIMEOUT")
+    (json-parse line)))
+
+(defn peer-close [holder]
+  (let [fd (deref holder)]
+    (if (nil? fd) nil
+      (do (tcp-client-close fd) (reset! holder nil)))))
+
+(peer-check (not (nil? peer-control)) "NATIVE_PEER_HOST_ENV_REQUIRED")
+(peer-check (not (file_exists (str peer-control "/port.ready")))
+            "NATIVE_PEER_CONTROL_NOT_FRESH")
+(let [port (tcp-client-free-port)]
+  (peer-check (number? port) "NATIVE_PEER_PORT_UNAVAILABLE")
+  (file_write (str peer-control "/port.txt") (str port))
+  (file_write (str peer-control "/port.ready") "ready")
+  (try
+    (do
+      (reset! peer-first-fd (peer-connect port))
+      (reset! peer-second-fd (peer-connect port))
+      (peer-check (not (= (deref peer-first-fd) (deref peer-second-fd)))
+                  "NATIVE_PEER_DISTINCT_CONNECTIONS")
+      (let [first (peer-ping (deref peer-first-fd))
+            second (peer-ping (deref peer-second-fd))
+            third (peer-ping (deref peer-first-fd))
+            fourth (peer-ping (deref peer-second-fd))]
+        (peer-check (= (get first "ok") true) "NATIVE_PEER_FIRST_PING")
+        (peer-check (= (get second "ok") true) "NATIVE_PEER_SECOND_PING")
+        (peer-check (= (get third "ok") true) "NATIVE_PEER_THIRD_PING")
+        (peer-check (= (get fourth "ok") false) "NATIVE_PEER_FOURTH_MUST_FAIL")
+        (peer-check (= (get fourth "error") "RATE_LIMITED")
+                    "NATIVE_PEER_FOURTH_RATE_LIMITED")
+        (reset! peer-result
+          {"ok" true "connections" 2 "max_requests" 3 "allowed" 3
+           "request_order" [1 2 1 2] "fourth_ok" (get fourth "ok")
+           "fourth_error" (get fourth "error")})))
+    (finally
+      (peer-close peer-first-fd)
+      (peer-close peer-second-fd))))
+(peer-check (not (nil? (deref peer-result))) "NATIVE_PEER_RESULT_MISSING")
+(println (str "NATIVE_TCP_PEER_BUDGET_RESULT " (json_str (deref peer-result))))
+(println "afj-db95 Native TCP shared peer request budget PASS")
