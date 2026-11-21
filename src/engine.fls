@@ -848,8 +848,22 @@
 (defn engine-project-row [row columns]
   (let [projected (atom {})]
     (doseq [column columns]
-      (reset! projected
-              (assoc (deref projected) (engine-key column) (get row column))))
+      (if (string? column)
+        (reset! projected
+                (assoc (deref projected) (engine-key column) (get row column)))
+        (if (= (get column "type") "multiply")
+          (let [left (get row (get column "left"))
+                right (get row (get column "right"))
+                value (if (or (nil? left) (nil? right))
+                        nil
+                        (let [left-number (engine-btree-compare-value left)
+                              right-number (engine-btree-compare-value right)]
+                          (if (and (number? left-number) (number? right-number))
+                            (* left-number right-number)
+                            (throw "SQL_MULTIPLY_NUMERIC_REQUIRED"))))]
+            (reset! projected
+                    (assoc (deref projected) (get column "name") value)))
+          (throw "unsupported projection expression"))))
     (deref projected)))
 
 (defn engine-group-count [rows column]
