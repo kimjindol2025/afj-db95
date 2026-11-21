@@ -1,0 +1,294 @@
+{
+  "schema": "db95-native-shop-cart-total-sum-v1",
+  "date_local": "2026-11-21 Asia/Seoul",
+  "status": "SCOPED_PASS",
+  "commercial": "HOLD",
+  "deployment": "NO",
+  "source": {
+    "baseHead": "795ffe4a5ed51155034dbc25743aa45c80a9387d",
+    "implementationFilesChanged": [
+      "src/sql-core.fls",
+      "src/engine.fls"
+    ],
+    "onlyChangedEngineFunction": "engine-aggregate-count",
+    "sqlCoreSha256Before": "8b917b23bece6f0cb65e5b8660117d37db6dfd10d62f918a32a81af3051b94c2",
+    "sqlCoreSha256After": "156529064a95cb506b405a629be86cd1184718478c1051039038e357d6fc0981",
+    "engineSha256Before": "d06f1cb3837d686f8128aa570af94cd5de13cdea74f25db89138e08423e1cfea",
+    "engineSha256After": "6058a56b9ccd6d474692be1da502316991f21b5afae7e837a322a1d0133d8f0c",
+    "newFixture": "tests/native-shop-cart-total.fls",
+    "fixtureSha256BeforeAndAfterFix": "04ff2b08f948313758b2b59937c23b4323acbdea30e1c4d28bba196fdf9bfc6d",
+    "sameFixtureSqlExpected": true,
+    "daemonDependencySha256": {
+      "src/engine.fls": "6058a56b9ccd6d474692be1da502316991f21b5afae7e837a322a1d0133d8f0c",
+      "src/sql-core.fls": "156529064a95cb506b405a629be86cd1184718478c1051039038e357d6fc0981",
+      "src/mariadb-wire.fls": "ad22ba6ae03fa70388c6b3a0d1a930e574595b67e5cf58421ef3ea33b3c5c4ff",
+      "src/sha1.fls": "6fc4c3def2d56c4ff7eb76c7cd7917b6e268bdc070a75fe90959a49a08bf39cf",
+      "tests/native-mariadb-daemon.fls": "4aeb91c050734087a9b0e27bffd677cfe48f6bfb5068f39cbbce2efb4c01868d"
+    },
+    "executeSelectAndEngineProjectRowChanged": false,
+    "daemonEntryProtocolFreeLangCompilerOrSdkChanged": false,
+    "allCandidateSourceAndSdkBytesUnchangedDuringTrial": true
+  },
+  "contract": {
+    "purpose": "isolated Native cart total returned by server-side SUM of qualified multiplication",
+    "productSeedRows": [
+      {
+        "id": 1,
+        "sku": "SKU-1",
+        "name": "Demo Widget",
+        "price": 1500
+      },
+      {
+        "id": 2,
+        "sku": "SKU-2",
+        "name": "Demo Gadget",
+        "price": 2200
+      }
+    ],
+    "cartSeedRows": [
+      {
+        "id": 1,
+        "product_id": 1,
+        "qty": 2
+      },
+      {
+        "id": 2,
+        "product_id": 2,
+        "qty": 1
+      }
+    ],
+    "prepareSql": "SELECT SUM(shop_cart.qty * shop_products.price) FROM shop_cart JOIN shop_products ON shop_cart.product_id = shop_products.id",
+    "preparedParameterCount": 0,
+    "bind": [],
+    "preparedSelectExecutions": 1,
+    "expectedRows": 1,
+    "expectedServerColumnNames": [
+      "SUM(shop_cart.qty * shop_products.price)"
+    ],
+    "expectedServerTextValues": [
+      "5200"
+    ],
+    "oneServerSumQuery": true,
+    "noClientCalculation": true,
+    "wireSqlWhitespacePreserved": true,
+    "transport": "case71 Native FL raw TCP callback; installed Native socat opaque byte relay; existing Native MariaDB daemon/engine",
+    "framingAuthenticationSetupBindingsAndAssertions": "FreeLang fixture; private host only fixed owned process/file lifetimes"
+  },
+  "fix": {
+    "sql": "sole SUM(qualified-column * qualified-column) on the existing two-table INNER JOIN; no WHERE/ORDER/GROUP BY/AS added",
+    "aggregateAst": {
+      "function": "sum",
+      "expression": {
+        "type": "multiply",
+        "left": "shop_cart.qty",
+        "right": "shop_products.price",
+        "name": "shop_cart.qty * shop_products.price"
+      },
+      "alias": "SUM(shop_cart.qty * shop_products.price)"
+    },
+    "aliasKeyMeaning": "existing internal result-column label, not SQL alias syntax",
+    "legacyJoinFallback": "reject unsupported SUM forms in SUM helper before legacy basic JOIN wildcard fallback",
+    "engine": "SUM branch reuses unchanged engine-project-row multiply AST evaluator, accumulates non-NULL values on server, returns one aggregate row; COUNT else body byte-identical",
+    "newSumScopeRejections": [
+      "single column SUM",
+      "literal multiplication",
+      "unknown table qualifier",
+      "SQL AS alias",
+      "AVG multiplication",
+      "COUNT multiplication"
+    ],
+    "newSumScopeRejectionsPassed": 6,
+    "COUNTBranchRetained": true
+  },
+  "observation": {
+    "passed": 1,
+    "failed": 0,
+    "total": 1,
+    "attemptsInAcceptedCohort": 1,
+    "recordedNativeCohorts": 3,
+    "eachCohortSeparatelyAuthorized": true,
+    "wholeTrialSecondsIncludingFreshBothAots": 97.07557681300386,
+    "runtimeHostSeconds": 0.5989583040063735,
+    "hostExit": 0,
+    "typedResult": {
+      "ok": true,
+      "prepared_parameters": 0,
+      "query": "SELECT SUM(shop_cart.qty * shop_products.price) FROM shop_cart JOIN shop_products ON shop_cart.product_id = shop_products.id",
+      "bind": [],
+      "select_executions": 1,
+      "rows": 1,
+      "columns": [
+        "SUM(shop_cart.qty * shop_products.price)"
+      ],
+      "data": [
+        "5200"
+      ],
+      "exact_total": true,
+      "client_computes_total": false
+    },
+    "nativeFixtureExecutions": 1,
+    "freshDaemonExecutions": 1,
+    "nativeByteRelayExecutions": 1,
+    "childExits": {
+      "client": 0,
+      "daemon": -15,
+      "native-byte-relay": 0
+    },
+    "allOwnedChildrenReaped": true,
+    "storageInitiallyEmpty": true,
+    "priorFailures": [
+      {
+        "cohort": "shop-native-cart-total-v1",
+        "passed": 0,
+        "failed": 1,
+        "total": 1,
+        "firstError": {
+          "log": "client.stderr",
+          "message": "Uncaught error (line 218): [listing-frame] NATIVE_SHOP_CART_TOTAL_SERVER_ERROR_select code=1064 message=unsupported SELECT form"
+        },
+        "seconds": 4.815713024989236,
+        "privateReceiptSha256": "e40d9a8d4e9afcb16a24f07a891e4903c9c4993825058729854df99a4a2b7062",
+        "traceSha256": "5e8a58baa9020966cbf62689463c2df156961ee2e2923330cfd39575348b2ae5",
+        "preserved": true,
+        "committed": false
+      },
+      {
+        "cohort": "shop-native-cart-total-v2",
+        "passed": 0,
+        "failed": 1,
+        "total": 1,
+        "firstError": {
+          "log": "daemon.stderr",
+          "message": "Uncaught error (line 890): qualified SUM scope guard failure"
+        },
+        "seconds": 97.40003291799803,
+        "privateReceiptSha256": "c4de7eef63ebe05921cfc6287c16233be115e77e5348adee1a29976d804c3fc0",
+        "traceSha256": "71f3240c4e1d46be0e7bdef1e3f9b8780cdc764755b5bfa777b1c4daa4a2a696",
+        "preserved": true,
+        "committed": false
+      }
+    ],
+    "sameFixtureAcrossThreeCohorts": true
+  },
+  "validation": {
+    "status": "VERIFIED_FROM_EXISTING_SINGLE_NATIVE_SUM_TRACE",
+    "commandBytes": [
+      3,
+      3,
+      3,
+      3,
+      3,
+      3,
+      22,
+      23
+    ],
+    "setupSql": [
+      "CREATE TABLE shop_products (id INT PRIMARY KEY, sku TEXT, name TEXT, price INT)",
+      "INSERT INTO shop_products (id, sku, name, price) VALUES (1, 'SKU-1', 'Demo Widget', 1500)",
+      "INSERT INTO shop_products (id, sku, name, price) VALUES (2, 'SKU-2', 'Demo Gadget', 2200)",
+      "CREATE TABLE shop_cart (id INT PRIMARY KEY, product_id INT, qty INT)",
+      "INSERT INTO shop_cart (id, product_id, qty) VALUES (1, 1, 2)",
+      "INSERT INTO shop_cart (id, product_id, qty) VALUES (2, 2, 1)"
+    ],
+    "allSetupAcknowledged": true,
+    "exactPreparedSql": "SELECT SUM(shop_cart.qty * shop_products.price) FROM shop_cart JOIN shop_products ON shop_cart.product_id = shop_products.id",
+    "preparedParameterCount": 0,
+    "binding": [],
+    "statementId": 1,
+    "preparedSelectExecutions": 1,
+    "oneServerSumQuery": true,
+    "noClientCalculation": true,
+    "sqlWhitespacePreserved": true,
+    "responseColumns": [
+      "SUM(shop_cart.qty * shop_products.price)"
+    ],
+    "responseTextValues": [
+      "5200"
+    ],
+    "exactRows": 1,
+    "errPackets": 0,
+    "clientPackets": 9,
+    "daemonPackets": 14,
+    "newSumScopeRejectionsPassed": 6,
+    "existingOrderScopeRejectionsPassed": 4,
+    "orderByRelationPlanInvariantPassed": true,
+    "COUNTBranchByteForBytePreserved": true,
+    "existingGroupedCOUNTAndCOUNTStarEngineChecksPassed": true,
+    "engineOnlyFunctionChanged": "engine-aggregate-count",
+    "newNativeRuns": 0,
+    "existingSqlStartupAssertionsPassed": 36,
+    "existingQualifiedJoinScopeGuardsPassed": 4,
+    "existingMultiplyScopeGuardsPassed": 4,
+    "existingProjectionAndAggregateChecksPassed": true
+  },
+  "bounds": {
+    "addressSpaceBytesPerProcess": 2147483648,
+    "fixtureRuntimeMs": 30000,
+    "privateHostRuntimeSeconds": 90,
+    "nativeRelayIdleSeconds": 15,
+    "nativeRelayConnectSeconds": 3,
+    "nativeRelayConnectRetries": 30,
+    "nativeRelayConnectRetryIntervalSeconds": 0.1,
+    "sharedFlock": "existing /tmp/fl-heavy.lock; no force release",
+    "automaticWholeTrialRetries": 0,
+    "freshBothAotsAndRuntimeSeconds": 120
+  },
+  "toolchain": {
+    "sdkManifestSha256": "c5c90ed5234dc8d5d321fe63950c6c20f87f9f12ac9e51bc4c2edc4ef0101233",
+    "compilerSha256": "f514e043d3f08115e273717462595a69ffd0522614aad5666dec576f04a46dac",
+    "runtimeArchiveSha256": "fe4308c19eba2142049100c17ac08979b5787c1698b6d5e0e9e082a1f6e691fe",
+    "freshDaemonGeneratedCSha256": "181c8ab3e555e7cd8808bd3e82004502997097fd2544b460ba4198008aa81cb7",
+    "freshDaemonElfSha256": "dda5ded9119fa5ba2c9b1eb0c18c298ae0f16471e4408b67a9bfed9944054e84",
+    "freshFixtureGeneratedCSha256": "92ed5f91b8e66f434a0eab53a5261f74fad383b8b1a04a184647fc6a83e50da8",
+    "freshFixtureElfSha256": "920e30955d49a077ee26992a006ea5eef22d2244c5adeeacf87fc6b9e72001c7",
+    "nativeByteRelaySha256": "cd8741946c6e0008ea4f87129b7cf1c1e3fa5e8159a5ec98d4a7763447b53b4b",
+    "freshBothAots": true,
+    "compilerAndGccFlagsUnchanged": true
+  },
+  "audit": {
+    "traceSha256": "1610776f92ab1f6cce6d1279d081a28767133574c1a66f460615da4158df5418",
+    "decodedExecs": 27,
+    "resumedExecsJoined": 14,
+    "allTerminalExecStatusesParsed": true,
+    "successfulNodeFamilyExecs": 0,
+    "failedNodeFamilyAttempts": 0,
+    "successfulPythonExecs": 1,
+    "allowedPrivateControllerPythonExecs": 1,
+    "successfulBasenameCounts": {
+      "as": 2,
+      "bash": 1,
+      "bwrap": 1,
+      "cc1": 4,
+      "client-bin": 1,
+      "collect2": 2,
+      "daemon-bin": 1,
+      "flc": 4,
+      "gcc": 4,
+      "grep": 2,
+      "ld": 2,
+      "python3": 1,
+      "socat": 1,
+      "timeout": 1
+    },
+    "timedTraceSha256": "61c51a79522fd22f009c2cede7a8b8e9d472a6485be0fc3a46b39829a30d2be0",
+    "acceptedTrialPrivatePythonControllersOutsideProduct": 2,
+    "privateProcessHostSha256": "fc2a2d7b7e3863aca575b7158fbca669f95f81a9510dd17e5e97cae48f176488",
+    "privateControllerSha256": "f587efa4dd01b55193637139079480ee4110f6bc9df1a1af308944b468d07aec",
+    "privateResultReceiptSha256": "44860ef3e647f6d4b6c267fb32f340a279c082aacadf373b40ff6aab9c1b74ac",
+    "wireAuditSha256": "82e2d802b6c0a172e68e33e28fdc395b29c3df28803d0ff05403b143d83cf360",
+    "readOnlyOfflineAuditHelperSha256": "3e9fe45d6277f09c6643d1a0f2b49974d5bbf3dbc23a630be1b6ef3b82801c18",
+    "readOnlySumWireProofSha256": "2865d632015dda22d8c5301d89bdd80176c2894a5e286e3acc32626f5179f7eb"
+  },
+  "preserved": {
+    "previousTwoLineTotalsCommit": "795ffe4a5ed51155034dbc25743aa45c80a9387d",
+    "previousTwoLineTotalsFixtureSha256": "6d80027f414f30a9ac15771fae42edbdec4bb15e33f3c10cf224e12bf4c0628f",
+    "walCommit": "1e55d063fe11b3905d79b2ca203f5eb384a7e317",
+    "historical349RegressionEvidence": "retained; full suite not rerun on this SQL/engine candidate",
+    "original71GateFailures": "retained; no mapping or result promotion",
+    "original25": "TIMEOUT FAIL and pre-existing uncommitted one-byte fixture change retained",
+    "originalReleaseGateSha256": "e464a355883b76a7780707f5acb2a19f187a21961f6eaa2653abe828aa583f99",
+    "nativeReleaseGateSha256": "662e50036dbc8ec5abd7fafe6e3179f1a91427dc32fe3d1cfe4b36190888c250",
+    "whole71GateRerun": false,
+    "tlsNodeAckOriginal25Changes": false
+  }
+}

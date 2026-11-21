@@ -820,6 +820,18 @@
          left)))
 
 (defn engine-aggregate-count [rows aggregate group-by output-column]
+  (if (= (get aggregate "function") "sum")
+    (let [expression (get aggregate "expression")
+          total (atom nil)]
+      (doseq [row rows]
+        (let [projected (engine-project-row row [expression])
+              value (get projected (get expression "name"))]
+          (if (nil? value)
+            nil
+            (reset! total (if (nil? (deref total))
+                            value
+                            (+ (deref total) value))))))
+      [(assoc {} output-column (deref total))])
   (let [groups (atom {})
         count-column (get aggregate "column")]
     (doseq [row rows]
@@ -843,7 +855,7 @@
                        (assoc {} (engine-key (last group-by))
                               (get group "group")))]
              (assoc row output-column (get group "count"))))
-         (keys (deref groups)))))
+         (keys (deref groups))))))
 
 (defn engine-project-row [row columns]
   (let [projected (atom {})]
