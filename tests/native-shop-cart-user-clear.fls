@@ -1,0 +1,268 @@
+;; Native user-specific cart clearing fixture agreed in msg_d7ec6b6a7648.
+;; Delete user10 only, verify its empty cart and retained user20 row.
+(load "../src/sha1.fls")
+(define clearcart-control (env-get "AFJ_NATIVE_SHOP_CART_USER_CLEAR_CONTROL"))
+(define clearcart-connection (atom nil))
+(define clearcart-buffer (atom ""))
+(define clearcart-stage (atom "handshake"))
+(define clearcart-sequence (atom 0))
+(define clearcart-columns (atom []))
+(define clearcart-rows (atom []))
+(define clearcart-error (atom nil))
+(define clearcart-done (atom false))
+(define clearcart-statement (atom nil))
+
+(defn clearcart-check [condition message]
+  (if (= condition true) true (throw message)))
+
+(defn clearcart-u32 [value]
+  (buf-concat [(buf-u8 (rem value 256))
+               (buf-u8 (rem (floor (/ value 256)) 256))
+               (buf-u8 (rem (floor (/ value 65536)) 256))
+               (buf-u8 (rem (floor (/ value 16777216)) 256))]))
+
+(defn clearcart-read-u32 [bytes offset]
+  (+ (buf-read-u8 bytes offset)
+     (* 256 (buf-read-u8 bytes (+ offset 1)))
+     (* 65536 (buf-read-u8 bytes (+ offset 2)))
+     (* 16777216 (buf-read-u8 bytes (+ offset 3)))))
+
+(defn clearcart-send [payload sequence next-stage response-sequence]
+  (let [length (buf-len payload)
+        frame (buf-concat [(buf-slice (clearcart-u32 length) 0 3)
+                           (buf-u8 sequence) payload])]
+    (reset! clearcart-stage next-stage)
+    (reset! clearcart-sequence response-sequence)
+    (clearcart-check (= (tcp-write (deref clearcart-connection) (buf-to-binary frame)) "ok")
+                 "NATIVE_SHOP_CART_USER_CLEAR_PACKET_WRITE")))
+
+(defn clearcart-command [code text next-stage]
+  (clearcart-send (buf-concat [(buf-u8 code) (buf-str text)])
+              0 next-stage 1))
+
+(defn clearcart-text [bytes offset]
+  (clearcart-check (< offset (buf-len bytes)) "NATIVE_SHOP_CART_USER_CLEAR_TEXT_PREFIX")
+  (let [length (buf-read-u8 bytes offset) next (+ offset 1 length)]
+    (clearcart-check (and (< length 251) (<= next (buf-len bytes)))
+                 "NATIVE_SHOP_CART_USER_CLEAR_TEXT_LENGTH")
+    {"value" (buf-read-str bytes (+ offset 1) length)
+     "next" next}))
+
+(defn clearcart-column-name [bytes]
+  (loop [index 0 offset 0]
+    (let [field (clearcart-text bytes offset)]
+      (if (= index 4) (get field "value")
+        (recur (+ index 1) (get field "next"))))))
+
+(defn clearcart-login [bytes]
+  (clearcart-check (= (buf-read-u8 bytes 0) 10) "NATIVE_SHOP_CART_USER_CLEAR_HANDSHAKE_VERSION")
+  (let [version-end
+          (loop [offset 1]
+            (do
+              (clearcart-check (< offset (buf-len bytes)) "NATIVE_SHOP_CART_USER_CLEAR_HANDSHAKE_LENGTH")
+              (if (= (buf-read-u8 bytes offset) 0) offset (recur (+ offset 1)))))
+        first-offset (+ version-end 5)
+        second-offset (+ first-offset 27)]
+    (clearcart-check (<= (+ second-offset 12) (buf-len bytes))
+                 "NATIVE_SHOP_CART_USER_CLEAR_SCRAMBLE_LENGTH")
+    (let [scramble (buf-concat [(buf-slice bytes first-offset 8)
+                                (buf-slice bytes second-offset 12)])
+          token (sha1-mysql-native-token "development-only" scramble)
+          login (buf-concat [(clearcart-u32 172545) (clearcart-u32 1048576)
+                             (buf-u8 33) (sha1-zero-bytes 23)
+                             (buf-str "root") (buf-u8 0)
+                             (buf-u8 20) token])]
+      (clearcart-check (= (buf-len token) 20) "NATIVE_SHOP_CART_USER_CLEAR_TOKEN_LENGTH")
+      (clearcart-send login 1 "login" 2))))
+
+
+(define clearcart-setup
+  ["CREATE TABLE shop_cart (id INT PRIMARY KEY, user_id INT, product_id INT, qty INT)"
+   "INSERT INTO shop_cart (id, user_id, product_id, qty) VALUES (1, 10, 1, 2)"
+   "INSERT INTO shop_cart (id, user_id, product_id, qty) VALUES (2, 20, 2, 1)"])
+(define clearcart-queries
+  [{"sql" "DELETE FROM shop_cart WHERE user_id=?"
+    "bind" [10] "response" "resultset" "columns" ["id" "user_id" "product_id" "qty"]
+    "row-count" 1 "expected-row" {"id" "2" "user_id" "20" "product_id" "2" "qty" "1"}}
+   {"sql" "SELECT id FROM shop_cart WHERE user_id=?"
+    "bind" [10] "response" "resultset" "columns" [] "row-count" 0}
+   {"sql" "SELECT id, user_id, product_id, qty FROM shop_cart WHERE user_id=?"
+    "bind" [20] "response" "resultset" "columns" ["id" "user_id" "product_id" "qty"]
+    "row-count" 1 "expected-row" {"id" "2" "user_id" "20" "product_id" "2" "qty" "1"}}])
+(define clearcart-setup-index (atom 0))
+(define clearcart-query-index (atom 0))
+(define clearcart-results (atom []))
+(define clearcart-column-count (atom 0))
+
+(defn clearcart-row-map [bytes]
+  (loop [index 0 offset 0 result {}]
+    (if (= index (deref clearcart-column-count))
+      (do
+        (clearcart-check (= offset (buf-len bytes)) "NATIVE_SHOP_CART_USER_CLEAR_ROW_TRAILING_BYTES")
+        result)
+      (let [field (clearcart-text bytes offset)]
+        (recur (+ index 1) (get field "next")
+               (assoc result (get (deref clearcart-columns) index) (get field "value")))))))
+
+(defn clearcart-prepare-current []
+  (reset! clearcart-columns [])
+  (reset! clearcart-rows [])
+  (clearcart-command 22 (get (get clearcart-queries (deref clearcart-query-index)) "sql") "prepare"))
+
+(defn clearcart-finish-result []
+  (let [index (deref clearcart-query-index)
+        query (get clearcart-queries index)
+        rows (deref clearcart-rows)]
+    (clearcart-check (= (count rows) (get query "row-count"))
+                    "NATIVE_SHOP_CART_USER_CLEAR_EXACT_ROW_COUNT")
+    (if (= (get query "row-count") 1)
+      (doseq [column (get query "columns")]
+        (clearcart-check (= (get (get rows 0) column)
+                           (get (get query "expected-row") column))
+                        "NATIVE_SHOP_CART_USER_CLEAR_EXACT_ROW_VALUE"))
+      nil)
+    (swap! clearcart-results conj
+           {"query" (get query "sql") "bind" (get query "bind")
+            "response" (get query "response") "rows" (count rows) "columns" (deref clearcart-columns) "data" rows})
+    (if (< (+ index 1) (count clearcart-queries))
+      (do (swap! clearcart-query-index + 1) (clearcart-prepare-current))
+      (do (reset! clearcart-stage "done") (reset! clearcart-done true)))))
+
+(defn clearcart-frame [bytes sequence]
+  (clearcart-check (> (buf-len bytes) 0) "NATIVE_SHOP_CART_USER_CLEAR_EMPTY_PACKET")
+  (clearcart-check (= sequence (deref clearcart-sequence)) "NATIVE_SHOP_CART_USER_CLEAR_PACKET_SEQUENCE")
+  (swap! clearcart-sequence + 1)
+  (let [stage (deref clearcart-stage) first-byte (buf-read-u8 bytes 0)]
+    (if (= first-byte 255)
+      (if (>= (buf-len bytes) 9)
+        (throw (str "NATIVE_SHOP_CART_USER_CLEAR_SERVER_ERROR_" stage " code="
+                    (+ (buf-read-u8 bytes 1) (* 256 (buf-read-u8 bytes 2)))
+                    " message=" (buf-read-str bytes 9 (- (buf-len bytes) 9))))
+        (throw "NATIVE_SHOP_CART_USER_CLEAR_SHORT_SERVER_ERROR"))
+      nil)
+    (cond
+      (= stage "handshake") (clearcart-login bytes)
+      (= stage "login")
+        (do (clearcart-check (= first-byte 0) "NATIVE_SHOP_CART_USER_CLEAR_LOGIN_ACK")
+            (clearcart-command 3 (get clearcart-setup 0) "setup"))
+      (= stage "setup")
+        (do
+          (clearcart-check (= first-byte 0) "NATIVE_SHOP_CART_USER_CLEAR_SETUP_ACK")
+          (swap! clearcart-setup-index + 1)
+          (if (< (deref clearcart-setup-index) (count clearcart-setup))
+            (clearcart-command 3 (get clearcart-setup (deref clearcart-setup-index)) "setup")
+            (clearcart-prepare-current)))
+      (= stage "prepare")
+        (let [parameters (count (get (get clearcart-queries (deref clearcart-query-index)) "bind"))]
+          (clearcart-check (and (= first-byte 0) (>= (buf-len bytes) 12))
+                          "NATIVE_SHOP_CART_USER_CLEAR_PREPARE_ACK")
+          (clearcart-check (and (= (buf-read-u8 bytes 7) parameters)
+                               (= (buf-read-u8 bytes 8) 0))
+                          "NATIVE_SHOP_CART_USER_CLEAR_PARAMETER_COUNT")
+          (reset! clearcart-statement (clearcart-read-u32 bytes 1))
+          (let [bind (get (get clearcart-queries (deref clearcart-query-index)) "bind")
+                execute (atom (buf-concat [(buf-u8 23) (clearcart-u32 (deref clearcart-statement))
+                                           (buf-u8 0) (clearcart-u32 1)
+                                           (buf-u8 0) (buf-u8 1)]))]
+            ;; Up to four non-NULL INT32 binds: one null bitmap byte.
+            (doseq [value bind]
+              (reset! execute (buf-concat [(deref execute) (buf-u8 3) (buf-u8 0)])))
+            (doseq [value bind]
+              (reset! execute (buf-concat [(deref execute) (clearcart-u32 value)])))
+            (clearcart-send (deref execute) 0 "select" 1)))
+      (= stage "select")
+        (let [query (get clearcart-queries (deref clearcart-query-index))]
+          (if (= (get query "response") "ok")
+            (do
+              (clearcart-check (= first-byte 0) "NATIVE_SHOP_CART_USER_CLEAR_INSERT_OK")
+              (clearcart-finish-result))
+            (do
+              (clearcart-check (and (= (buf-len bytes) 1)
+                                   (= first-byte (if (= (get query "row-count") 0)
+                                                   1 (count (get query "columns")))))
+                              "NATIVE_SHOP_CART_USER_CLEAR_RESULT_HEADER")
+              (reset! clearcart-column-count first-byte)
+              (reset! clearcart-stage "columns"))))
+      (= stage "columns")
+        (do
+          (swap! clearcart-columns conj (clearcart-column-name bytes))
+          (if (= (count (deref clearcart-columns)) (deref clearcart-column-count))
+            (reset! clearcart-stage "columns-end") nil))
+      (= stage "columns-end")
+        (do
+          (clearcart-check (and (= first-byte 254) (= (buf-len bytes) 5))
+                          "NATIVE_SHOP_CART_USER_CLEAR_COLUMN_EOF")
+          ;; An empty result need not expose id metadata; ERR and rows remain strict.
+          (if (= (get (get clearcart-queries (deref clearcart-query-index)) "row-count") 0) nil
+            (clearcart-check (= (deref clearcart-columns)
+                               (get (get clearcart-queries (deref clearcart-query-index)) "columns"))
+                            "NATIVE_SHOP_CART_USER_CLEAR_RESULT_SCHEMA"))
+          (reset! clearcart-stage "rows"))
+      (= stage "rows")
+        (if (and (= first-byte 254) (= (buf-len bytes) 5))
+          (clearcart-finish-result)
+          (do
+            (clearcart-check (< (count (deref clearcart-rows))
+                               (get (get clearcart-queries (deref clearcart-query-index)) "row-count"))
+                            "NATIVE_SHOP_CART_USER_CLEAR_EXTRA_ROW")
+            (swap! clearcart-rows conj (clearcart-row-map bytes))))
+      :else (throw "NATIVE_SHOP_CART_USER_CLEAR_UNEXPECTED_STAGE"))))
+(defn clearcart-drain []
+  (if (>= (buf-len (deref clearcart-buffer)) 4)
+    (let [bytes (deref clearcart-buffer)
+          length (+ (buf-read-u8 bytes 0) (* 256 (buf-read-u8 bytes 1))
+                     (* 65536 (buf-read-u8 bytes 2)))]
+      (clearcart-check (<= length 65536) "NATIVE_SHOP_CART_USER_CLEAR_PACKET_LIMIT")
+      (if (>= (buf-len bytes) (+ 4 length))
+        (do
+          (reset! clearcart-buffer (buf-slice bytes (+ 4 length)
+                                         (- (buf-len bytes) (+ 4 length))))
+          (clearcart-frame (buf-slice bytes 4 length) (buf-read-u8 bytes 3))
+          (clearcart-drain))
+        nil))
+    nil))
+
+(defn native-shop-cart-user-clear-handler [event connection payload peer]
+  (try
+    (cond
+      (or (= event "connect") (= event "accept"))
+        (do (clearcart-check (nil? (deref clearcart-connection)) "NATIVE_SHOP_CART_USER_CLEAR_SINGLE_CONNECTION")
+            (reset! clearcart-connection connection))
+      (= event "data")
+        (do (reset! clearcart-buffer
+              (buf-concat [(deref clearcart-buffer) (buf-from-binary payload)]))
+            (clearcart-drain))
+      (= event "close")
+        (clearcart-check (deref clearcart-done) "NATIVE_SHOP_CART_USER_CLEAR_PREMATURE_CLOSE")
+      :else nil)
+    (catch [error]
+      (reset! clearcart-error (error_message error))
+      (reset! clearcart-done true))))
+
+(clearcart-check (not (nil? clearcart-control)) "NATIVE_SHOP_CART_USER_CLEAR_HOST_ENV_REQUIRED")
+(clearcart-check (not (file_exists (str clearcart-control "/ports.ready")))
+             "NATIVE_SHOP_CART_USER_CLEAR_CONTROL_NOT_FRESH")
+(let [bridge-port (tcp-client-free-port) daemon-port (tcp-client-free-port)]
+  (clearcart-check (and (number? bridge-port) (number? daemon-port)
+                    (not (= bridge-port daemon-port))) "NATIVE_SHOP_CART_USER_CLEAR_DISTINCT_PORTS")
+  (clearcart-check (= (tcp-server-raw bridge-port "native-shop-cart-user-clear-handler" "127.0.0.1") "ok")
+               "NATIVE_SHOP_CART_USER_CLEAR_LISTENER_START")
+  (try
+    (do
+      (file_write (str clearcart-control "/ports.json")
+                  (json_str {"bridge" bridge-port "daemon" daemon-port}))
+      (file_write (str clearcart-control "/ports.ready") "ready")
+      (let [deadline (+ (now-ms) 30000)]
+        (while (and (< (now-ms) deadline) (not (deref clearcart-done))) (fl-yield 10)))
+      (clearcart-check (deref clearcart-done) "NATIVE_SHOP_CART_USER_CLEAR_CONTRACT_TIMEOUT")
+      (if (nil? (deref clearcart-error)) nil (throw (deref clearcart-error)))
+      (clearcart-check (= (deref clearcart-stage) "done") "NATIVE_SHOP_CART_USER_CLEAR_CONTRACT_INCOMPLETE")
+      (clearcart-check (= (buf-len (deref clearcart-buffer)) 0) "NATIVE_SHOP_CART_USER_CLEAR_TRAILING_PACKET_BYTES"))
+    (finally (tcp-server-stop bridge-port))))
+(clearcart-check (= (count (deref clearcart-results)) 3) "NATIVE_SHOP_CART_USER_CLEAR_THREE_RESULTS")
+(println (str "NATIVE_SHOP_CART_USER_CLEAR_RESULT "
+  (json_str {"ok" true "target_user_id" 10 "retained_user_id" 20
+             "prepared_executions" 3 "prepared_delete_executions" 1
+             "prepared_select_executions" 2 "target_cart_rows" 0 "other_user_cart_rows" 1
+             "err_packets" 0 "results" (deref clearcart-results)})))
+(println "afj-db95 Native shop per-user cart clear other user retained PASS")
