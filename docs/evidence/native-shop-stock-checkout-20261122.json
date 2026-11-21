@@ -1,0 +1,455 @@
+{
+  "schema": "db95-native-shop-stock-checkout-v1",
+  "date_local": "2026-11-22 Asia/Seoul",
+  "status": "SCOPED_PASS",
+  "commercial": "HOLD",
+  "deployment": "NO",
+  "source": {
+    "baseHead": "5a2456a458cdc283494080904727bf443c50a921",
+    "implementationFilesChanged": [],
+    "newFixture": "tests/native-shop-stock-checkout.fls",
+    "fixtureSha256": "13a57555670da649af3647d4e12fac8aaa052fa175123753d5bb8b16160e05b9",
+    "daemonDependencySha256": {
+      "src/engine.fls": "6058a56b9ccd6d474692be1da502316991f21b5afae7e837a322a1d0133d8f0c",
+      "src/sql-core.fls": "156529064a95cb506b405a629be86cd1184718478c1051039038e357d6fc0981",
+      "src/mariadb-wire.fls": "ad22ba6ae03fa70388c6b3a0d1a930e574595b67e5cf58421ef3ea33b3c5c4ff",
+      "src/sha1.fls": "6fc4c3def2d56c4ff7eb76c7cd7917b6e268bdc070a75fe90959a49a08bf39cf",
+      "tests/native-mariadb-daemon.fls": "4aeb91c050734087a9b0e27bffd677cfe48f6bfb5068f39cbbce2efb4c01868d"
+    },
+    "allTrackedSourceNewFixtureSdkAndDaemonBytesUnchangedDuringTrial": true
+  },
+  "contract": {
+    "purpose": "six-statement Native sufficient-stock checkout DB contract",
+    "productSeed": {
+      "id": 1,
+      "sku": "SKU-1",
+      "name": "Demo Widget",
+      "price": 1500,
+      "stock": 10
+    },
+    "cartSeed": {
+      "id": 1,
+      "product_id": 1,
+      "qty": 2
+    },
+    "ordersTableInitiallyEmpty": true,
+    "preparedQueries": [
+      "INSERT INTO shop_orders (id, product_id, qty, total) VALUES (?, ?, ?, ?)",
+      "UPDATE shop_products SET stock=? WHERE id=?",
+      "DELETE FROM shop_cart WHERE id=?",
+      "SELECT id, stock FROM shop_products WHERE id=?",
+      "SELECT id, product_id, qty, total FROM shop_orders WHERE id=?",
+      "SELECT id FROM shop_cart WHERE id=?"
+    ],
+    "bindings": [
+      [
+        1,
+        1,
+        2,
+        3000
+      ],
+      [
+        8,
+        1
+      ],
+      [
+        1
+      ],
+      [
+        1
+      ],
+      [
+        1
+      ],
+      [
+        1
+      ]
+    ],
+    "expectedFinalStockRow": {
+      "id": "1",
+      "stock": "8"
+    },
+    "expectedOrderRow": {
+      "id": "1",
+      "product_id": "1",
+      "qty": "2",
+      "total": "3000"
+    },
+    "expectedCartRows": [],
+    "orderInsertExecutions": 1,
+    "stockUpdateExecutions": 1,
+    "cartDeleteExecutions": 1,
+    "preparedSelectExecutions": 3,
+    "emptyResultMetadataIdNotRequired": true,
+    "statementExecution": "sequential, one of each command"
+  },
+  "observation": {
+    "passed": 1,
+    "failed": 0,
+    "total": 1,
+    "attempts": 1,
+    "freshClientAotAndRuntimeSeconds": 5.752913949996582,
+    "runtimeHostSeconds": 0.6931365030031884,
+    "hostExit": 0,
+    "typedResult": {
+      "ok": true,
+      "initial_stock": 10,
+      "requested_qty": 2,
+      "prepared_executions": 6,
+      "order_insert_executions": 1,
+      "stock_update_executions": 1,
+      "cart_delete_executions": 1,
+      "err_packets": 0,
+      "results": [
+        {
+          "query": "INSERT INTO shop_orders (id, product_id, qty, total) VALUES (?, ?, ?, ?)",
+          "bind": [
+            1,
+            1,
+            2,
+            3000
+          ],
+          "response": "ok",
+          "rows": 0,
+          "columns": [],
+          "data": []
+        },
+        {
+          "query": "UPDATE shop_products SET stock=? WHERE id=?",
+          "bind": [
+            8,
+            1
+          ],
+          "response": "resultset",
+          "rows": 1,
+          "columns": [
+            "id",
+            "sku",
+            "name",
+            "price",
+            "stock"
+          ],
+          "data": [
+            {
+              "id": "1",
+              "sku": "SKU-1",
+              "name": "Demo Widget",
+              "price": "1500",
+              "stock": "8"
+            }
+          ]
+        },
+        {
+          "query": "DELETE FROM shop_cart WHERE id=?",
+          "bind": [
+            1
+          ],
+          "response": "resultset",
+          "rows": 0,
+          "columns": [
+            "result"
+          ],
+          "data": []
+        },
+        {
+          "query": "SELECT id, stock FROM shop_products WHERE id=?",
+          "bind": [
+            1
+          ],
+          "response": "resultset",
+          "rows": 1,
+          "columns": [
+            "id",
+            "stock"
+          ],
+          "data": [
+            {
+              "id": "1",
+              "stock": "8"
+            }
+          ]
+        },
+        {
+          "query": "SELECT id, product_id, qty, total FROM shop_orders WHERE id=?",
+          "bind": [
+            1
+          ],
+          "response": "resultset",
+          "rows": 1,
+          "columns": [
+            "id",
+            "product_id",
+            "qty",
+            "total"
+          ],
+          "data": [
+            {
+              "id": "1",
+              "product_id": "1",
+              "qty": "2",
+              "total": "3000"
+            }
+          ]
+        },
+        {
+          "query": "SELECT id FROM shop_cart WHERE id=?",
+          "bind": [
+            1
+          ],
+          "response": "resultset",
+          "rows": 0,
+          "columns": [
+            "result"
+          ],
+          "data": []
+        }
+      ]
+    },
+    "nativeFixtureExecutions": 1,
+    "verifiedCurrentDaemonExecutions": 1,
+    "nativeByteRelayExecutions": 1,
+    "daemonRebuilt": false,
+    "cachedDaemonAotExcluded": true,
+    "allOwnedChildrenReaped": true,
+    "childExits": {
+      "client": 0,
+      "daemon": -15,
+      "native-byte-relay": 0
+    },
+    "storageInitiallyEmpty": true
+  },
+  "validation": {
+    "status": "VERIFIED_FROM_EXISTING_SINGLE_NATIVE_STOCK_CHECKOUT_TRACE",
+    "commandBytes": [
+      3,
+      3,
+      3,
+      3,
+      3,
+      22,
+      23,
+      22,
+      23,
+      22,
+      23,
+      22,
+      23,
+      22,
+      23,
+      22,
+      23
+    ],
+    "setupSql": [
+      "CREATE TABLE shop_products (id INT PRIMARY KEY, sku TEXT, name TEXT, price INT, stock INT)",
+      "INSERT INTO shop_products (id, sku, name, price, stock) VALUES (1, 'SKU-1', 'Demo Widget', 1500, 10)",
+      "CREATE TABLE shop_cart (id INT PRIMARY KEY, product_id INT, qty INT)",
+      "INSERT INTO shop_cart (id, product_id, qty) VALUES (1, 1, 2)",
+      "CREATE TABLE shop_orders (id INT PRIMARY KEY, product_id INT, qty INT, total INT)"
+    ],
+    "allSetupAcknowledged": true,
+    "preparedQueries": [
+      "INSERT INTO shop_orders (id, product_id, qty, total) VALUES (?, ?, ?, ?)",
+      "UPDATE shop_products SET stock=? WHERE id=?",
+      "DELETE FROM shop_cart WHERE id=?",
+      "SELECT id, stock FROM shop_products WHERE id=?",
+      "SELECT id, product_id, qty, total FROM shop_orders WHERE id=?",
+      "SELECT id FROM shop_cart WHERE id=?"
+    ],
+    "preparedParameterCounts": [
+      4,
+      2,
+      1,
+      1,
+      1,
+      1
+    ],
+    "bindings": [
+      [
+        1,
+        1,
+        2,
+        3000
+      ],
+      [
+        8,
+        1
+      ],
+      [
+        1
+      ],
+      [
+        1
+      ],
+      [
+        1
+      ],
+      [
+        1
+      ]
+    ],
+    "statementIds": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6
+    ],
+    "executePayloadHex": [
+      "1701000000000100000000010300030003000300010000000100000002000000b80b0000",
+      "170200000000010000000001030003000800000001000000",
+      "170300000000010000000001030001000000",
+      "170400000000010000000001030001000000",
+      "170500000000010000000001030001000000",
+      "170600000000010000000001030001000000"
+    ],
+    "insertOkPayloadHex": [
+      "00000002000000"
+    ],
+    "preparedExecutions": 6,
+    "orderInsertExecutions": 1,
+    "stockUpdateExecutions": 1,
+    "cartDeleteExecutions": 1,
+    "preparedSelectExecutions": 3,
+    "responseColumns": [
+      [],
+      [
+        "id",
+        "sku",
+        "name",
+        "price",
+        "stock"
+      ],
+      [
+        "result"
+      ],
+      [
+        "id",
+        "stock"
+      ],
+      [
+        "id",
+        "product_id",
+        "qty",
+        "total"
+      ],
+      [
+        "result"
+      ]
+    ],
+    "responseRows": [
+      [],
+      [
+        {
+          "id": "1",
+          "sku": "SKU-1",
+          "name": "Demo Widget",
+          "price": "1500",
+          "stock": "8"
+        }
+      ],
+      [],
+      [
+        {
+          "id": "1",
+          "stock": "8"
+        }
+      ],
+      [
+        {
+          "id": "1",
+          "product_id": "1",
+          "qty": "2",
+          "total": "3000"
+        }
+      ],
+      []
+    ],
+    "finalStock": 8,
+    "exactOrderRow": {
+      "id": "1",
+      "product_id": "1",
+      "qty": "2",
+      "total": "3000"
+    },
+    "cartEmpty": true,
+    "errPackets": 0,
+    "clientPackets": 18,
+    "daemonPackets": 45,
+    "engineAndSqlCoreSourceUnchanged": true,
+    "newNativeRuns": 0,
+    "existingSumScopeRejectionsPassed": 6,
+    "existingOrderScopeRejectionsPassed": 4,
+    "existingGroupedCOUNTAndCOUNTStarEngineChecksPassed": true,
+    "existingSqlStartupAssertionsPassed": 36,
+    "existingQualifiedJoinScopeGuardsPassed": 4,
+    "existingMultiplyScopeGuardsPassed": 4,
+    "existingProjectionAndAggregateChecksPassed": true
+  },
+  "bounds": {
+    "addressSpaceBytesPerProcess": 2147483648,
+    "fixtureRuntimeMs": 30000,
+    "privateHostRuntimeSeconds": 90,
+    "freshClientAotAndRuntimeSeconds": 120,
+    "sharedFlock": "existing /tmp/fl-heavy.lock; one waiter, natural acquisition, no force release",
+    "automaticWholeTrialRetries": 0,
+    "nativeRelayIdleSeconds": 15,
+    "nativeRelayConnectSeconds": 3,
+    "nativeRelayConnectRetries": 30,
+    "nativeRelayConnectRetryIntervalSeconds": 0.1
+  },
+  "toolchain": {
+    "sdkManifestSha256": "c5c90ed5234dc8d5d321fe63950c6c20f87f9f12ac9e51bc4c2edc4ef0101233",
+    "compilerSha256": "f514e043d3f08115e273717462595a69ffd0522614aad5666dec576f04a46dac",
+    "runtimeArchiveSha256": "fe4308c19eba2142049100c17ac08979b5787c1698b6d5e0e9e082a1f6e691fe",
+    "verifiedDaemonElfSha256": "dda5ded9119fa5ba2c9b1eb0c18c298ae0f16471e4408b67a9bfed9944054e84",
+    "daemonProducerReceiptSha256": "44860ef3e647f6d4b6c267fb32f340a279c082aacadf373b40ff6aab9c1b74ac",
+    "freshFixtureGeneratedCSha256": "ef1c031ac02e6ec55b7d4f3a61509fe6e685f7d94a0a1cab72bb6f53491083ef",
+    "freshFixtureElfSha256": "1ee8d38bb0e97515f480b0fc4832600bbe797538b871c817ffd87c2a478a8ba9",
+    "nativeByteRelaySha256": "cd8741946c6e0008ea4f87129b7cf1c1e3fa5e8159a5ec98d4a7763447b53b4b",
+    "compilerAndGccFlagsUnchanged": true
+  },
+  "audit": {
+    "traceSha256": "044d6db9eed41e72ae56a6873fa693daabfe1225329eb00f71bc84a566e6a41a",
+    "decodedExecs": 17,
+    "resumedExecsJoined": 9,
+    "allTerminalExecStatusesParsed": true,
+    "successfulNodeFamilyExecs": 0,
+    "failedNodeFamilyAttempts": 0,
+    "successfulPythonExecs": 1,
+    "allowedPrivateControllerPythonExecs": 1,
+    "successfulBasenameCounts": {
+      "as": 1,
+      "bash": 1,
+      "bwrap": 1,
+      "cc1": 2,
+      "client-bin": 1,
+      "collect2": 1,
+      "daemon-bin": 1,
+      "flc": 2,
+      "gcc": 2,
+      "grep": 1,
+      "ld": 1,
+      "python3": 1,
+      "socat": 1,
+      "timeout": 1
+    },
+    "timedTraceSha256": "d10119f56329c724fce47e14719a25e92904047287e3d1cd2ef408f8b7c82af4",
+    "privateResultReceiptSha256": "ac6befe5a6a83066481f568bab2e1ee764080196721ed918ce83fc028fcae4ea",
+    "privateControllerSha256": "86414cc874d2b746d17fc439cd85a41cf871a674b64b1590e299a8e19b9b5347",
+    "privateProcessHostSha256": "12236a85b28a9af2615418576203a49dfc73e02968efc2975bc76fbfac1c23a4",
+    "wireProofSha256": "7e5576402ac21e11ee8b1dee9ca93f24d3a7b7ecc53d67c8a2d8f9d72a4f4a21",
+    "readOnlyOfflineProofSha256": "30b4f563b83920f6c66611e9ace7c90f1f777fb3eee5b0a7c3b5c2e1d7e48c4c",
+    "readOnlyOfflineHelperSha256": "3e9fe45d6277f09c6643d1a0f2b49974d5bbf3dbc23a630be1b6ef3b82801c18",
+    "privatePythonControllersOutsideProduct": 2
+  },
+  "scope": {
+    "claim": "the six agreed prepared SQL statements and exact server readbacks",
+    "atomicCheckoutOrExternalPaymentContractExercised": false,
+    "priorStockShortageCommit": "5a2456a458cdc283494080904727bf443c50a921",
+    "priorFailuresAndHistoricalWal349EvidencePreserved": true,
+    "fullRegressionOrOriginal71GateRerun": false,
+    "gateResultsPromoted": false,
+    "sqlCoreEngineParserCompilerDaemonTlsNodeAckOriginal25Changed": false
+  }
+}

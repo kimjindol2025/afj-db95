@@ -1,0 +1,277 @@
+;; Native sufficient-stock checkout DB fixture agreed in msg_feb183b6ce98.
+;; Prepared order INSERT, stock UPDATE, cart DELETE and three exact readbacks.
+(load "../src/sha1.fls")
+(define checkout-control (env-get "AFJ_NATIVE_SHOP_STOCK_CHECKOUT_CONTROL"))
+(define checkout-connection (atom nil))
+(define checkout-buffer (atom ""))
+(define checkout-stage (atom "handshake"))
+(define checkout-sequence (atom 0))
+(define checkout-columns (atom []))
+(define checkout-rows (atom []))
+(define checkout-error (atom nil))
+(define checkout-done (atom false))
+(define checkout-statement (atom nil))
+
+(defn checkout-check [condition message]
+  (if (= condition true) true (throw message)))
+
+(defn checkout-u32 [value]
+  (buf-concat [(buf-u8 (rem value 256))
+               (buf-u8 (rem (floor (/ value 256)) 256))
+               (buf-u8 (rem (floor (/ value 65536)) 256))
+               (buf-u8 (rem (floor (/ value 16777216)) 256))]))
+
+(defn checkout-read-u32 [bytes offset]
+  (+ (buf-read-u8 bytes offset)
+     (* 256 (buf-read-u8 bytes (+ offset 1)))
+     (* 65536 (buf-read-u8 bytes (+ offset 2)))
+     (* 16777216 (buf-read-u8 bytes (+ offset 3)))))
+
+(defn checkout-send [payload sequence next-stage response-sequence]
+  (let [length (buf-len payload)
+        frame (buf-concat [(buf-slice (checkout-u32 length) 0 3)
+                           (buf-u8 sequence) payload])]
+    (reset! checkout-stage next-stage)
+    (reset! checkout-sequence response-sequence)
+    (checkout-check (= (tcp-write (deref checkout-connection) (buf-to-binary frame)) "ok")
+                 "NATIVE_SHOP_STOCK_CHECKOUT_PACKET_WRITE")))
+
+(defn checkout-command [code text next-stage]
+  (checkout-send (buf-concat [(buf-u8 code) (buf-str text)])
+              0 next-stage 1))
+
+(defn checkout-text [bytes offset]
+  (checkout-check (< offset (buf-len bytes)) "NATIVE_SHOP_STOCK_CHECKOUT_TEXT_PREFIX")
+  (let [length (buf-read-u8 bytes offset) next (+ offset 1 length)]
+    (checkout-check (and (< length 251) (<= next (buf-len bytes)))
+                 "NATIVE_SHOP_STOCK_CHECKOUT_TEXT_LENGTH")
+    {"value" (buf-read-str bytes (+ offset 1) length)
+     "next" next}))
+
+(defn checkout-column-name [bytes]
+  (loop [index 0 offset 0]
+    (let [field (checkout-text bytes offset)]
+      (if (= index 4) (get field "value")
+        (recur (+ index 1) (get field "next"))))))
+
+(defn checkout-login [bytes]
+  (checkout-check (= (buf-read-u8 bytes 0) 10) "NATIVE_SHOP_STOCK_CHECKOUT_HANDSHAKE_VERSION")
+  (let [version-end
+          (loop [offset 1]
+            (do
+              (checkout-check (< offset (buf-len bytes)) "NATIVE_SHOP_STOCK_CHECKOUT_HANDSHAKE_LENGTH")
+              (if (= (buf-read-u8 bytes offset) 0) offset (recur (+ offset 1)))))
+        first-offset (+ version-end 5)
+        second-offset (+ first-offset 27)]
+    (checkout-check (<= (+ second-offset 12) (buf-len bytes))
+                 "NATIVE_SHOP_STOCK_CHECKOUT_SCRAMBLE_LENGTH")
+    (let [scramble (buf-concat [(buf-slice bytes first-offset 8)
+                                (buf-slice bytes second-offset 12)])
+          token (sha1-mysql-native-token "development-only" scramble)
+          login (buf-concat [(checkout-u32 172545) (checkout-u32 1048576)
+                             (buf-u8 33) (sha1-zero-bytes 23)
+                             (buf-str "root") (buf-u8 0)
+                             (buf-u8 20) token])]
+      (checkout-check (= (buf-len token) 20) "NATIVE_SHOP_STOCK_CHECKOUT_TOKEN_LENGTH")
+      (checkout-send login 1 "login" 2))))
+
+
+(define checkout-setup
+  ["CREATE TABLE shop_products (id INT PRIMARY KEY, sku TEXT, name TEXT, price INT, stock INT)"
+   "INSERT INTO shop_products (id, sku, name, price, stock) VALUES (1, 'SKU-1', 'Demo Widget', 1500, 10)"
+   "CREATE TABLE shop_cart (id INT PRIMARY KEY, product_id INT, qty INT)"
+   "INSERT INTO shop_cart (id, product_id, qty) VALUES (1, 1, 2)"
+   "CREATE TABLE shop_orders (id INT PRIMARY KEY, product_id INT, qty INT, total INT)"])
+(define checkout-queries
+  [{"sql" "INSERT INTO shop_orders (id, product_id, qty, total) VALUES (?, ?, ?, ?)"
+    "bind" [1 1 2 3000] "response" "ok" "columns" [] "row-count" 0}
+   {"sql" "UPDATE shop_products SET stock=? WHERE id=?"
+    "bind" [8 1] "response" "resultset" "columns" ["id" "sku" "name" "price" "stock"]
+    "row-count" 1 "expected-row" {"id" "1" "sku" "SKU-1" "name" "Demo Widget" "price" "1500" "stock" "8"}}
+   {"sql" "DELETE FROM shop_cart WHERE id=?"
+    "bind" [1] "response" "resultset" "columns" [] "row-count" 0}
+   {"sql" "SELECT id, stock FROM shop_products WHERE id=?"
+    "bind" [1] "response" "resultset" "columns" ["id" "stock"]
+    "row-count" 1 "expected-row" {"id" "1" "stock" "8"}}
+   {"sql" "SELECT id, product_id, qty, total FROM shop_orders WHERE id=?"
+    "bind" [1] "response" "resultset" "columns" ["id" "product_id" "qty" "total"]
+    "row-count" 1 "expected-row" {"id" "1" "product_id" "1" "qty" "2" "total" "3000"}}
+   {"sql" "SELECT id FROM shop_cart WHERE id=?"
+    "bind" [1] "response" "resultset" "columns" [] "row-count" 0}])
+(define checkout-setup-index (atom 0))
+(define checkout-query-index (atom 0))
+(define checkout-results (atom []))
+(define checkout-column-count (atom 0))
+
+(defn checkout-row-map [bytes]
+  (loop [index 0 offset 0 result {}]
+    (if (= index (deref checkout-column-count))
+      (do
+        (checkout-check (= offset (buf-len bytes)) "NATIVE_SHOP_STOCK_CHECKOUT_ROW_TRAILING_BYTES")
+        result)
+      (let [field (checkout-text bytes offset)]
+        (recur (+ index 1) (get field "next")
+               (assoc result (get (deref checkout-columns) index) (get field "value")))))))
+
+(defn checkout-prepare-current []
+  (reset! checkout-columns [])
+  (reset! checkout-rows [])
+  (checkout-command 22 (get (get checkout-queries (deref checkout-query-index)) "sql") "prepare"))
+
+(defn checkout-finish-result []
+  (let [index (deref checkout-query-index)
+        query (get checkout-queries index)
+        rows (deref checkout-rows)]
+    (checkout-check (= (count rows) (get query "row-count"))
+                    "NATIVE_SHOP_STOCK_CHECKOUT_EXACT_ROW_COUNT")
+    (if (= (get query "row-count") 1)
+      (doseq [column (get query "columns")]
+        (checkout-check (= (get (get rows 0) column)
+                           (get (get query "expected-row") column))
+                        "NATIVE_SHOP_STOCK_CHECKOUT_EXACT_ROW_VALUE"))
+      nil)
+    (swap! checkout-results conj
+           {"query" (get query "sql") "bind" (get query "bind")
+            "response" (get query "response") "rows" (count rows) "columns" (deref checkout-columns) "data" rows})
+    (if (< (+ index 1) (count checkout-queries))
+      (do (swap! checkout-query-index + 1) (checkout-prepare-current))
+      (do (reset! checkout-stage "done") (reset! checkout-done true)))))
+
+(defn checkout-frame [bytes sequence]
+  (checkout-check (> (buf-len bytes) 0) "NATIVE_SHOP_STOCK_CHECKOUT_EMPTY_PACKET")
+  (checkout-check (= sequence (deref checkout-sequence)) "NATIVE_SHOP_STOCK_CHECKOUT_PACKET_SEQUENCE")
+  (swap! checkout-sequence + 1)
+  (let [stage (deref checkout-stage) first-byte (buf-read-u8 bytes 0)]
+    (if (= first-byte 255)
+      (if (>= (buf-len bytes) 9)
+        (throw (str "NATIVE_SHOP_STOCK_CHECKOUT_SERVER_ERROR_" stage " code="
+                    (+ (buf-read-u8 bytes 1) (* 256 (buf-read-u8 bytes 2)))
+                    " message=" (buf-read-str bytes 9 (- (buf-len bytes) 9))))
+        (throw "NATIVE_SHOP_STOCK_CHECKOUT_SHORT_SERVER_ERROR"))
+      nil)
+    (cond
+      (= stage "handshake") (checkout-login bytes)
+      (= stage "login")
+        (do (checkout-check (= first-byte 0) "NATIVE_SHOP_STOCK_CHECKOUT_LOGIN_ACK")
+            (checkout-command 3 (get checkout-setup 0) "setup"))
+      (= stage "setup")
+        (do
+          (checkout-check (= first-byte 0) "NATIVE_SHOP_STOCK_CHECKOUT_SETUP_ACK")
+          (swap! checkout-setup-index + 1)
+          (if (< (deref checkout-setup-index) (count checkout-setup))
+            (checkout-command 3 (get checkout-setup (deref checkout-setup-index)) "setup")
+            (checkout-prepare-current)))
+      (= stage "prepare")
+        (let [parameters (count (get (get checkout-queries (deref checkout-query-index)) "bind"))]
+          (checkout-check (and (= first-byte 0) (>= (buf-len bytes) 12))
+                          "NATIVE_SHOP_STOCK_CHECKOUT_PREPARE_ACK")
+          (checkout-check (and (= (buf-read-u8 bytes 7) parameters)
+                               (= (buf-read-u8 bytes 8) 0))
+                          "NATIVE_SHOP_STOCK_CHECKOUT_PARAMETER_COUNT")
+          (reset! checkout-statement (checkout-read-u32 bytes 1))
+          (let [bind (get (get checkout-queries (deref checkout-query-index)) "bind")
+                execute (atom (buf-concat [(buf-u8 23) (checkout-u32 (deref checkout-statement))
+                                           (buf-u8 0) (checkout-u32 1)
+                                           (buf-u8 0) (buf-u8 1)]))]
+            ;; Up to four non-NULL INT32 binds: one null bitmap byte.
+            (doseq [value bind]
+              (reset! execute (buf-concat [(deref execute) (buf-u8 3) (buf-u8 0)])))
+            (doseq [value bind]
+              (reset! execute (buf-concat [(deref execute) (checkout-u32 value)])))
+            (checkout-send (deref execute) 0 "select" 1)))
+      (= stage "select")
+        (let [query (get checkout-queries (deref checkout-query-index))]
+          (if (= (get query "response") "ok")
+            (do
+              (checkout-check (= first-byte 0) "NATIVE_SHOP_STOCK_CHECKOUT_INSERT_OK")
+              (checkout-finish-result))
+            (do
+              (checkout-check (and (= (buf-len bytes) 1)
+                                   (= first-byte (if (= (get query "row-count") 0)
+                                                   1 (count (get query "columns")))))
+                              "NATIVE_SHOP_STOCK_CHECKOUT_RESULT_HEADER")
+              (reset! checkout-column-count first-byte)
+              (reset! checkout-stage "columns"))))
+      (= stage "columns")
+        (do
+          (swap! checkout-columns conj (checkout-column-name bytes))
+          (if (= (count (deref checkout-columns)) (deref checkout-column-count))
+            (reset! checkout-stage "columns-end") nil))
+      (= stage "columns-end")
+        (do
+          (checkout-check (and (= first-byte 254) (= (buf-len bytes) 5))
+                          "NATIVE_SHOP_STOCK_CHECKOUT_COLUMN_EOF")
+          ;; An empty result need not expose id metadata; ERR and rows remain strict.
+          (if (= (get (get checkout-queries (deref checkout-query-index)) "row-count") 0) nil
+            (checkout-check (= (deref checkout-columns)
+                               (get (get checkout-queries (deref checkout-query-index)) "columns"))
+                            "NATIVE_SHOP_STOCK_CHECKOUT_RESULT_SCHEMA"))
+          (reset! checkout-stage "rows"))
+      (= stage "rows")
+        (if (and (= first-byte 254) (= (buf-len bytes) 5))
+          (checkout-finish-result)
+          (do
+            (checkout-check (< (count (deref checkout-rows))
+                               (get (get checkout-queries (deref checkout-query-index)) "row-count"))
+                            "NATIVE_SHOP_STOCK_CHECKOUT_EXTRA_ROW")
+            (swap! checkout-rows conj (checkout-row-map bytes))))
+      :else (throw "NATIVE_SHOP_STOCK_CHECKOUT_UNEXPECTED_STAGE"))))
+(defn checkout-drain []
+  (if (>= (buf-len (deref checkout-buffer)) 4)
+    (let [bytes (deref checkout-buffer)
+          length (+ (buf-read-u8 bytes 0) (* 256 (buf-read-u8 bytes 1))
+                     (* 65536 (buf-read-u8 bytes 2)))]
+      (checkout-check (<= length 65536) "NATIVE_SHOP_STOCK_CHECKOUT_PACKET_LIMIT")
+      (if (>= (buf-len bytes) (+ 4 length))
+        (do
+          (reset! checkout-buffer (buf-slice bytes (+ 4 length)
+                                         (- (buf-len bytes) (+ 4 length))))
+          (checkout-frame (buf-slice bytes 4 length) (buf-read-u8 bytes 3))
+          (checkout-drain))
+        nil))
+    nil))
+
+(defn native-shop-stock-checkout-handler [event connection payload peer]
+  (try
+    (cond
+      (or (= event "connect") (= event "accept"))
+        (do (checkout-check (nil? (deref checkout-connection)) "NATIVE_SHOP_STOCK_CHECKOUT_SINGLE_CONNECTION")
+            (reset! checkout-connection connection))
+      (= event "data")
+        (do (reset! checkout-buffer
+              (buf-concat [(deref checkout-buffer) (buf-from-binary payload)]))
+            (checkout-drain))
+      (= event "close")
+        (checkout-check (deref checkout-done) "NATIVE_SHOP_STOCK_CHECKOUT_PREMATURE_CLOSE")
+      :else nil)
+    (catch [error]
+      (reset! checkout-error (error_message error))
+      (reset! checkout-done true))))
+
+(checkout-check (not (nil? checkout-control)) "NATIVE_SHOP_STOCK_CHECKOUT_HOST_ENV_REQUIRED")
+(checkout-check (not (file_exists (str checkout-control "/ports.ready")))
+             "NATIVE_SHOP_STOCK_CHECKOUT_CONTROL_NOT_FRESH")
+(let [bridge-port (tcp-client-free-port) daemon-port (tcp-client-free-port)]
+  (checkout-check (and (number? bridge-port) (number? daemon-port)
+                    (not (= bridge-port daemon-port))) "NATIVE_SHOP_STOCK_CHECKOUT_DISTINCT_PORTS")
+  (checkout-check (= (tcp-server-raw bridge-port "native-shop-stock-checkout-handler" "127.0.0.1") "ok")
+               "NATIVE_SHOP_STOCK_CHECKOUT_LISTENER_START")
+  (try
+    (do
+      (file_write (str checkout-control "/ports.json")
+                  (json_str {"bridge" bridge-port "daemon" daemon-port}))
+      (file_write (str checkout-control "/ports.ready") "ready")
+      (let [deadline (+ (now-ms) 30000)]
+        (while (and (< (now-ms) deadline) (not (deref checkout-done))) (fl-yield 10)))
+      (checkout-check (deref checkout-done) "NATIVE_SHOP_STOCK_CHECKOUT_CONTRACT_TIMEOUT")
+      (if (nil? (deref checkout-error)) nil (throw (deref checkout-error)))
+      (checkout-check (= (deref checkout-stage) "done") "NATIVE_SHOP_STOCK_CHECKOUT_CONTRACT_INCOMPLETE")
+      (checkout-check (= (buf-len (deref checkout-buffer)) 0) "NATIVE_SHOP_STOCK_CHECKOUT_TRAILING_PACKET_BYTES"))
+    (finally (tcp-server-stop bridge-port))))
+(checkout-check (= (count (deref checkout-results)) 6) "NATIVE_SHOP_STOCK_CHECKOUT_SIX_RESULTS")
+(println (str "NATIVE_SHOP_STOCK_CHECKOUT_RESULT "
+  (json_str {"ok" true "initial_stock" 10 "requested_qty" 2
+             "prepared_executions" 6 "order_insert_executions" 1
+             "stock_update_executions" 1 "cart_delete_executions" 1 "err_packets" 0
+             "results" (deref checkout-results)})))
+(println "afj-db95 Native shop stock checkout order stock cart prepared contract PASS")
