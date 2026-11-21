@@ -1,0 +1,266 @@
+{
+  "schema": "db95-native-shop-empty-cart-ifnull-sum-v1",
+  "date_local": "2026-11-22 Asia/Seoul",
+  "status": "SCOPED_PASS",
+  "commercial": "HOLD",
+  "deployment": "NO",
+  "source": {
+    "baseHead": "6cb3d19810a07c8abaaca6464979b911d7366123",
+    "implementationFilesChanged": [
+      "src/sql-core.fls",
+      "src/engine.fls"
+    ],
+    "onlyChangedEngineSite": "engine-aggregate-count SUM final value",
+    "newFixture": "tests/native-shop-cart-user-empty-total-ifnull.fls",
+    "fixtureSha256BeforeAndAfterFix": "f34a56e4bdcd33459bf816b93c4e37aee49d80c241f4b9972ef5971624178ac8",
+    "sqlCoreSha256Before": "d1eedf242b1053e2848d73bba4607dd5a024b79f7011c0398925e9a77cafa083",
+    "sqlCoreSha256After": "02b359c7f03c426acccdae1071daf7d74a891492f5d5f18f97be6339fac9e06b",
+    "engineSha256Before": "6058a56b9ccd6d474692be1da502316991f21b5afae7e837a322a1d0133d8f0c",
+    "engineSha256After": "c45ccc1e47eacda360176e7472dc73271982b9c00a284e824c65d064f01be48f",
+    "daemonDependencySha256": {
+      "src/engine.fls": "c45ccc1e47eacda360176e7472dc73271982b9c00a284e824c65d064f01be48f",
+      "src/sql-core.fls": "02b359c7f03c426acccdae1071daf7d74a891492f5d5f18f97be6339fac9e06b",
+      "src/mariadb-wire.fls": "ad22ba6ae03fa70388c6b3a0d1a930e574595b67e5cf58421ef3ea33b3c5c4ff",
+      "src/sha1.fls": "6fc4c3def2d56c4ff7eb76c7cd7917b6e268bdc070a75fe90959a49a08bf39cf",
+      "tests/native-mariadb-daemon.fls": "4aeb91c050734087a9b0e27bffd677cfe48f6bfb5068f39cbbce2efb4c01868d"
+    },
+    "allOtherEngineBytesIdentical": true,
+    "sameFixtureSqlBindingsAndExpected": true,
+    "allCandidateSourceAndSdkBytesUnchangedDuringTrial": true
+  },
+  "contract": {
+    "purpose": "explicit server IFNULL wraps empty user-cart SUM",
+    "productSeeds": [
+      {
+        "id": 1,
+        "sku": "SKU-1",
+        "name": "Demo Widget",
+        "price": 1500
+      },
+      {
+        "id": 2,
+        "sku": "SKU-2",
+        "name": "Demo Gadget",
+        "price": 2200
+      }
+    ],
+    "cartSeeds": [
+      {
+        "id": 2,
+        "user_id": 20,
+        "product_id": 2,
+        "qty": 1
+      }
+    ],
+    "user10CartEmpty": true,
+    "prepareSql": "SELECT IFNULL(SUM(shop_cart.qty * shop_products.price), 0) FROM shop_cart JOIN shop_products ON shop_cart.product_id = shop_products.id WHERE shop_cart.user_id=?",
+    "bind": [
+      10
+    ],
+    "expectedRows": 1,
+    "expectedServerTextValue": "0",
+    "requiredRowPayloadHex": "0130",
+    "nullRowPayloadForbidden": true,
+    "clientComputesZero": false
+  },
+  "fix": {
+    "sql": "IFNULL(SUM(qualified-column * qualified-column), 0) on the existing two-table INNER JOIN with one qualified left-table equality WHERE",
+    "aggregateAstExtension": {
+      "if-null": 0
+    },
+    "resultColumnLabel": "IFNULL(SUM(shop_cart.qty * shop_products.price), 0)",
+    "engine": "only SUM final result selection checks explicit if-null=0 AST and a nil sum; otherwise returns the original sum",
+    "plainSumNullPreservedByExplicitGuard": true,
+    "COUNTBodyByteIdentical": true,
+    "executeSelectAndEngineProjectRowChanged": false,
+    "newIfnullScopeRejections": [
+      "nonzero default",
+      "COUNT instead of SUM",
+      "nonmultiply SUM",
+      "SQL AS alias",
+      "missing WHERE",
+      "AND suffix"
+    ],
+    "existingSumAndSumWhereGuardBlocksUnchanged": true
+  },
+  "observation": {
+    "passed": 1,
+    "failed": 0,
+    "total": 1,
+    "attemptsInAcceptedCohort": 1,
+    "recordedIfnullNativeCohorts": 2,
+    "eachCohortSeparatelyAuthorized": true,
+    "freshBothAotAndRuntimeSeconds": 111.70711039900198,
+    "runtimeHostSeconds": 0.6011006579938112,
+    "hostExit": 0,
+    "typedResult": {
+      "ok": true,
+      "prepared_parameters": 1,
+      "query": "SELECT IFNULL(SUM(shop_cart.qty * shop_products.price), 0) FROM shop_cart JOIN shop_products ON shop_cart.product_id = shop_products.id WHERE shop_cart.user_id=?",
+      "bind": [
+        10
+      ],
+      "select_executions": 1,
+      "rows": 1,
+      "columns": [
+        "IFNULL(SUM(shop_cart.qty * shop_products.price), 0)"
+      ],
+      "data": [
+        "0"
+      ],
+      "exact_total": true,
+      "client_computes_total": false
+    },
+    "nativeFixtureExecutions": 1,
+    "freshDaemonExecutions": 1,
+    "nativeByteRelayExecutions": 1,
+    "freshBothAots": true,
+    "allOwnedChildrenReaped": true,
+    "childExits": {
+      "client": 0,
+      "daemon": -15,
+      "native-byte-relay": 0
+    },
+    "storageInitiallyEmpty": true,
+    "priorIfnullFailure": {
+      "passed": 0,
+      "failed": 1,
+      "total": 1,
+      "errorCode": 1064,
+      "sqlState": "HY000",
+      "message": "unsupported SELECT form",
+      "sameFixtureSha256": "f34a56e4bdcd33459bf816b93c4e37aee49d80c241f4b9972ef5971624178ac8",
+      "receiptSha256": "7d80d11ebb240f7070fc9a7958605672840c07db842ca1231b4a5299c3ccb267",
+      "wireErrorReceiptSha256": "0e4be86ff9164d727e7fa1d99648699db61f87bd3dc362760517e8d10233d9d3",
+      "preserved": true,
+      "committed": false
+    },
+    "plainSumBaseline": {
+      "rows": 1,
+      "value": null,
+      "rowPayloadHex": "fb",
+      "responseReceiptSha256": "c7fd58664736e30083f17a6251e943f48f7f3da53956be79dbc8b23cb363ab3e",
+      "fixtureSha256": "d74fac55870084900dff197efb537b81582d0e5cfa5253bced5802e172bdcc9c",
+      "zeroExpectationFailurePreserved": true,
+      "committed": false,
+      "nativeRerunOnThisCandidate": false
+    }
+  },
+  "validation": {
+    "status": "VERIFIED_FROM_EXISTING_SINGLE_NATIVE_EMPTY_CART_IFNULL_TRACE",
+    "setupSql": [
+      "CREATE TABLE shop_products (id INT PRIMARY KEY, sku TEXT, name TEXT, price INT)",
+      "INSERT INTO shop_products (id, sku, name, price) VALUES (1, 'SKU-1', 'Demo Widget', 1500)",
+      "INSERT INTO shop_products (id, sku, name, price) VALUES (2, 'SKU-2', 'Demo Gadget', 2200)",
+      "CREATE TABLE shop_cart (id INT PRIMARY KEY, user_id INT, product_id INT, qty INT)",
+      "INSERT INTO shop_cart (id, user_id, product_id, qty) VALUES (2, 20, 2, 1)"
+    ],
+    "allSetupAcknowledged": true,
+    "onlyUser20CartSeeded": true,
+    "prepareSql": "SELECT IFNULL(SUM(shop_cart.qty * shop_products.price), 0) FROM shop_cart JOIN shop_products ON shop_cart.product_id = shop_products.id WHERE shop_cart.user_id=?",
+    "bind": [
+      10
+    ],
+    "preparedParameterCount": 1,
+    "parameterTypes": [
+      3
+    ],
+    "statementId": 1,
+    "executePayloadHex": "17010000000001000000000103000a000000",
+    "preparedSelectExecutions": 1,
+    "responseColumns": [
+      "IFNULL(SUM(shop_cart.qty * shop_products.price), 0)"
+    ],
+    "exactRows": 1,
+    "serverTextValues": [
+      "0"
+    ],
+    "rowPayloadHex": "0130",
+    "nullRowPayloadAbsent": true,
+    "clientComputesZero": false,
+    "errPackets": 0,
+    "clientPackets": 8,
+    "daemonPackets": 13,
+    "newNativeRuns": 0,
+    "fixtureUnchanged": true,
+    "onlyEngineChangedSite": "engine-aggregate-count SUM final value",
+    "allOtherEngineBytesIdentical": true,
+    "plainSumNullPreservedByExplicitAstGuard": true,
+    "COUNTBodyByteIdentical": true,
+    "existingSumScopeRejectionsPassed": 6,
+    "existingSumWhereScopeRejectionsPassed": 4,
+    "newIfnullScopeRejectionsPassed": 6,
+    "existingOrderScopeRejectionsPassed": 4,
+    "existingGroupedCOUNTAndCOUNTStarEngineChecksPassed": true,
+    "existingSqlStartupAssertionsPassed": 36,
+    "existingQualifiedJoinScopeGuardsPassed": 4,
+    "existingMultiplyScopeGuardsPassed": 4,
+    "existingProjectionAndAggregateChecksPassed": true
+  },
+  "bounds": {
+    "addressSpaceBytesPerProcess": 2147483648,
+    "fixtureRuntimeMs": 30000,
+    "privateHostRuntimeSeconds": 90,
+    "freshBothAotsAndRuntimeSeconds": 120,
+    "sharedFlock": "existing /tmp/fl-heavy.lock; one acquisition, no force release",
+    "automaticWholeTrialRetries": 0,
+    "nativeRelayIdleSeconds": 15,
+    "nativeRelayConnectSeconds": 3,
+    "nativeRelayConnectRetries": 30,
+    "nativeRelayConnectRetryIntervalSeconds": 0.1
+  },
+  "toolchain": {
+    "sdkManifestSha256": "c5c90ed5234dc8d5d321fe63950c6c20f87f9f12ac9e51bc4c2edc4ef0101233",
+    "compilerSha256": "f514e043d3f08115e273717462595a69ffd0522614aad5666dec576f04a46dac",
+    "runtimeArchiveSha256": "fe4308c19eba2142049100c17ac08979b5787c1698b6d5e0e9e082a1f6e691fe",
+    "freshDaemonGeneratedCSha256": "9ff2eb5b8c21c9682a91c56084812c854ac26202e5b451b06e36963cfac1e320",
+    "freshDaemonElfSha256": "5c87aba9032e9077b07d88cd22987475bc0a2794e0cdb4eca83a27c99a32d626",
+    "freshFixtureGeneratedCSha256": "b1f7a5db8153b1e24ef3fabb6c46fb06ec9914c67cf5e7a40a4facee8bc537f8",
+    "freshFixtureElfSha256": "a1dda9bba67c60638a7c176c4721854dc0c5b483e67f6b304c3f5c6bc79fd654",
+    "nativeByteRelaySha256": "cd8741946c6e0008ea4f87129b7cf1c1e3fa5e8159a5ec98d4a7763447b53b4b",
+    "freshBothAots": true,
+    "compilerAndGccFlagsUnchanged": true
+  },
+  "audit": {
+    "traceSha256": "d92bd7f0375bb4f29b6dd7ebf7a9fdd8f0bc3a47005e49705094279bfadcbb84",
+    "decodedExecs": 27,
+    "resumedExecsJoined": 13,
+    "allTerminalExecStatusesParsed": true,
+    "successfulNodeFamilyExecs": 0,
+    "failedNodeFamilyAttempts": 0,
+    "successfulPythonExecs": 1,
+    "allowedPrivateControllerPythonExecs": 1,
+    "successfulBasenameCounts": {
+      "as": 2,
+      "bash": 1,
+      "bwrap": 1,
+      "cc1": 4,
+      "client-bin": 1,
+      "collect2": 2,
+      "daemon-bin": 1,
+      "flc": 4,
+      "gcc": 4,
+      "grep": 2,
+      "ld": 2,
+      "python3": 1,
+      "socat": 1,
+      "timeout": 1
+    },
+    "timedTraceSha256": "7a9b9e82c3b0c27536ca508ee873183bdd5dfce863a9e79857ba09aa28051003",
+    "privateResultReceiptSha256": "2c27075fcd36540c3f2a8a5a4ce5339c2220fb2aa78f710a198cbfde43627dad",
+    "privateControllerSha256": "27b6b93be582d461eb9d5f1c2ce230c81e09ca6d325ce6fa471b8cf9a208186a",
+    "privateProcessHostSha256": "c7a8dfab628c7932856e96fdfc3a4c4ae45b18197949a5b4198232e3f470f86d",
+    "wireProofSha256": "16c54983d5fc9868c44189e352f777aef1449161584e9b9c6c3de7dd0685a9fd",
+    "readOnlyOfflineProofSha256": "a9e5d0acef20b3181f2c3a4b1dacef2c4a678924d62b1624c4db38540f34249e",
+    "readOnlyOfflineHelperSha256": "3e9fe45d6277f09c6643d1a0f2b49974d5bbf3dbc23a630be1b6ef3b82801c18",
+    "privatePythonControllersOutsideProduct": 2
+  },
+  "scope": {
+    "claim": "exact empty user-cart IFNULL SUM SQL returns server text0 while ordinary SUM keeps its NULL path",
+    "priorVisibleProductsCommit": "6cb3d19810a07c8abaaca6464979b911d7366123",
+    "priorFailuresAndHistoricalWal349EvidencePreserved": true,
+    "fullRegressionOrOriginal71GateRerun": false,
+    "gateResultsPromoted": false,
+    "freeLangParserCompilerDaemonProtocolTlsNodeAckOriginal25Changed": false
+  }
+}

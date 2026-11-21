@@ -831,7 +831,12 @@
             (reset! total (if (nil? (deref total))
                             value
                             (+ (deref total) value))))))
-      [(assoc {} output-column (deref total))])
+      [(assoc {} output-column
+              (if (and (has-key? aggregate "if-null")
+                       (= (get aggregate "if-null") 0)
+                       (nil? (deref total)))
+                0
+                (deref total)))])
   (let [groups (atom {})
         count-column (get aggregate "column")]
     (doseq [row rows]

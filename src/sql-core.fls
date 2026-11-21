@@ -364,6 +364,17 @@
         (throw "unsupported SELECT form")))
     nil))
 
+(defn sql-join-ifnull-sum-aggregate [projection where-suffix]
+  (if (regex_match_i projection "^IFNULL\\(")
+    (if (and where-suffix
+             (regex_match_i projection "^IFNULL\\(SUM\\([^()]+\\),\\s*0\\)$"))
+      (let [inside (get (regex_split projection "[()]") 2)
+            aggregate (sql-join-sum-aggregate (str "SUM(" inside ")"))]
+        (assoc (assoc aggregate "if-null" 0)
+               "alias" (str "IFNULL(" (get aggregate "alias") ", 0)")))
+      (throw "unsupported SELECT form"))
+    nil))
+
 (defn sql-join-projection-valid? [columns left-table right-table]
   (loop [index 0 names []]
     (if (= index (count columns))
@@ -399,7 +410,10 @@
             where-suffix (and (= (count tail) 10)
                               (keyword? (get tail 8) "WHERE")
                               (= (count (regex_split (get tail 9) "=")) 2))
-            sum-aggregate (sql-join-sum-aggregate projection)
+            ifnull-aggregate (sql-join-ifnull-sum-aggregate projection where-suffix)
+            sum-aggregate (if (nil? ifnull-aggregate)
+                            (sql-join-sum-aggregate projection)
+                            ifnull-aggregate)
             sum-suffix (and (or (= (count tail) 8) where-suffix)
                             (not (nil? sum-aggregate)))
             order-suffix (and (= (count tail) 11)
@@ -907,6 +921,21 @@
     (if (= rejected true) true
       (throw "qualified SUM WHERE scope guard failure"))))
 (println "afj-db95 qualified SUM WHERE scope guards PASS")
+
+(doseq [query
+        ["SELECT IFNULL(SUM(shop_cart.qty * shop_products.price), 1) FROM shop_cart JOIN shop_products ON shop_cart.product_id = shop_products.id WHERE shop_cart.user_id=10"
+         "SELECT IFNULL(COUNT(shop_cart.qty * shop_products.price), 0) FROM shop_cart JOIN shop_products ON shop_cart.product_id = shop_products.id WHERE shop_cart.user_id=10"
+         "SELECT IFNULL(SUM(shop_cart.qty), 0) FROM shop_cart JOIN shop_products ON shop_cart.product_id = shop_products.id WHERE shop_cart.user_id=10"
+         "SELECT IFNULL(SUM(shop_cart.qty * shop_products.price), 0) AS total FROM shop_cart JOIN shop_products ON shop_cart.product_id = shop_products.id WHERE shop_cart.user_id=10"
+         "SELECT IFNULL(SUM(shop_cart.qty * shop_products.price), 0) FROM shop_cart JOIN shop_products ON shop_cart.product_id = shop_products.id"
+         "SELECT IFNULL(SUM(shop_cart.qty * shop_products.price), 0) FROM shop_cart JOIN shop_products ON shop_cart.product_id = shop_products.id WHERE shop_cart.user_id=10 AND shop_cart.id=1"]]
+  (let [rejected (try
+                   (do (parse-sql query) false)
+                   (catch [error]
+                     (str-includes (error_message error) "unsupported SELECT form")))]
+    (if (= rejected true) true
+      (throw "qualified IFNULL SUM WHERE scope guard failure"))))
+(println "afj-db95 qualified IFNULL SUM WHERE scope guards PASS")
 
 (doseq [query
         ["SELECT shop_cart.qty * shop_products.price FROM shop_cart JOIN shop_products ON shop_cart.product_id = shop_products.id ORDER BY other.id"
