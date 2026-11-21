@@ -409,6 +409,26 @@
           nil))
       nil)))
 
+(defn parse-select-equality-like-contains [raw-tokens]
+  (let [tokens (sql-select-projection-tokens raw-tokens)]
+    (if (and (= (count tokens) 10)
+             (keyword? (token-at tokens 4) "WHERE")
+             (= (count (regex_split (token-at tokens 5) "=")) 2)
+             (regex_match (first (regex_split (token-at tokens 5) "="))
+                          "^[A-Za-z_][A-Za-z0-9_]*$")
+             (regex_match (last (regex_split (token-at tokens 5) "=")) "^-?[0-9]+$")
+             (keyword? (token-at tokens 6) "AND"))
+      (let [contains (parse-select-like-contains
+                       (concat (take 4 tokens) (concat ["WHERE"] (drop 7 tokens))))]
+        (if (nil? contains)
+          nil
+          (let [equality (sql-assignment (token-at tokens 5))]
+            (assoc contains "where"
+                   {"and" [{"column" (get equality "column")
+                             "equals" (get equality "value")}
+                            (get contains "where")]}))))
+      nil)))
+
 (defn parse-select-standard [raw-tokens]
   (let [tokens (sql-select-projection-tokens raw-tokens)]
   (if (and (= (count tokens) 6)
@@ -646,11 +666,14 @@
                     (if (nil? interval)
                       (let [combined (parse-select-equality-numeric-bound tokens)]
                         (if (nil? combined)
-                          (let [contains (parse-select-like-contains tokens)]
-                            (if (nil? contains)
-                              (let [joined (parse-select-qualified-inner-join tokens)]
-                                (if (nil? joined) (parse-select-standard tokens) joined))
-                              contains))
+                          (let [combined-like (parse-select-equality-like-contains tokens)]
+                            (if (nil? combined-like)
+                              (let [contains (parse-select-like-contains tokens)]
+                                (if (nil? contains)
+                                  (let [joined (parse-select-qualified-inner-join tokens)]
+                                    (if (nil? joined) (parse-select-standard tokens) joined))
+                                  contains))
+                              combined-like))
                           combined))
                       interval))
                   ranged))
@@ -1216,6 +1239,22 @@
     (if (= rejected true) true
       (throw "projected equality numeric bound scope guard failure"))))
 (println "afj-db95 projected equality numeric bound scope guards PASS")
+
+(doseq [query
+        ["SELECT sku, name, price FROM shop_products WHERE visible=1 OR name LIKE '%Widget%'"
+         "SELECT sku, name, price FROM shop_products WHERE visible=1 AND name LIKE 'Widget%'"
+         "SELECT sku, name, price FROM shop_products WHERE visible=1 AND name LIKE '%Widget'"
+         "SELECT sku, name, price FROM shop_products WHERE visible=1 AND name LIKE '%Wid_et%'"
+         "SELECT sku, name, price FROM shop_products WHERE visible=1 AND name LIKE '%Wid%get%'"
+         "SELECT sku, name, price FROM shop_products WHERE visible=1 AND name LIKE '%Widget%' ESCAPE '!'"
+         "SELECT sku AS item, name, price FROM shop_products WHERE visible=1 AND name LIKE '%Widget%'"]]
+  (let [rejected (try
+                   (do (parse-sql query) false)
+                   (catch [error]
+                     (str-includes (error_message error) "unsupported SELECT form")))]
+    (if (= rejected true) true
+      (throw "projected equality LIKE scope guard failure"))))
+(println "afj-db95 projected equality LIKE scope guards PASS")
 
 (doseq [query
         ["SELECT shop_cart.qty * shop_products.price FROM shop_cart JOIN shop_products ON shop_cart.product_id = shop_products.id ORDER BY other.id"
