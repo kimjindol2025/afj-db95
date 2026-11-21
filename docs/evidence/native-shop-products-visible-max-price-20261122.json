@@ -1,0 +1,343 @@
+{
+  "schema": "db95-native-shop-products-visible-maximum-price-v1",
+  "date_local": "2026-11-22 Asia/Seoul",
+  "status": "SCOPED_PASS",
+  "commercial": "HOLD",
+  "deployment": "NO",
+  "source": {
+    "baseHead": "8b2e5ec999c7199242462f41693c0024f9a355c4",
+    "implementationFilesChanged": [
+      "src/sql-core.fls"
+    ],
+    "newFixture": "tests/native-shop-products-visible-max-price.fls",
+    "fixtureSha256BeforeAndAfterFix": "cc7878e1d017d7d66dcbd3b3d67121190051ced3a276a0d0610925947c154e84",
+    "dependencySha256": {
+      "src/sql-core.fls": "4a1e82b4479f131d4e10dfe039b5e563a3b14ebe1008f0c90aefc1a34a5924ab",
+      "src/engine.fls": "1914b1c941ff19552c0047677d6209a0b72b797c0554668c743636dd0874c90c",
+      "src/mariadb-wire.fls": "ad22ba6ae03fa70388c6b3a0d1a930e574595b67e5cf58421ef3ea33b3c5c4ff",
+      "src/sha1.fls": "6fc4c3def2d56c4ff7eb76c7cd7917b6e268bdc070a75fe90959a49a08bf39cf",
+      "tests/native-mariadb-daemon.fls": "4aeb91c050734087a9b0e27bffd677cfe48f6bfb5068f39cbbce2efb4c01868d"
+    },
+    "sqlCoreBeforeSha256": "b82c90983bf6b1120c77e929e9eee4560f00faaa38e46cbaa28698876d595047",
+    "engineBeforeSha256": "1914b1c941ff19552c0047677d6209a0b72b797c0554668c743636dd0874c90c",
+    "engineOnlyChange": "none; whole file byte-identical",
+    "engineAggregateAndProjectionFunctionsUnchanged": true,
+    "legacyStandardParserByteIdentical": true,
+    "sameFixtureSqlBindingsExpected": true,
+    "allTrackedCandidateSourcesSdkAndElfUnchangedDuringBothCohorts": true,
+    "engineUnchanged": true,
+    "legacyStandardLimitOffsetLikeParsersByteIdentical": true,
+    "legacyStandardLimitOffsetOrderLikeParsersByteIdentical": true,
+    "greaterOrEqualAstPathSourcePreserved": true,
+    "existingSingleBoundParserByteIdentical": true,
+    "existingSingleBoundAndIntervalParsersByteIdentical": true,
+    "equalityGreaterOrEqualAstPathSourcePreserved": true
+  },
+  "contract": {
+    "purpose": "Native equality visibility predicate conjoined with an inclusive price upper bound",
+    "productSeeds": [
+      {
+        "id": 1,
+        "sku": "SKU-1",
+        "name": "Demo Widget",
+        "price": 1500,
+        "visible": 1
+      },
+      {
+        "id": 2,
+        "sku": "SKU-2",
+        "name": "Demo Gadget",
+        "price": 2200,
+        "visible": 1
+      }
+    ],
+    "cartSeeds": [
+      {
+        "id": 2,
+        "user_id": 20,
+        "product_id": 2,
+        "qty": 1
+      }
+    ],
+    "prepareSql": "SELECT sku, name, price FROM shop_products WHERE visible=? AND price <= ?",
+    "bind": [
+      1,
+      1500
+    ],
+    "expectedRows": 1,
+    "clientFilteringTruncationOrFabrication": false,
+    "expectedData": [
+      {
+        "sku": "SKU-1",
+        "name": "Demo Widget",
+        "price": "1500"
+      }
+    ],
+    "clientSortsRows": false,
+    "sku2Absent": true,
+    "boundaryPriceIncluded": true
+  },
+  "fix": {
+    "parser": "existing equality+numeric-bound helper now permits only >= and <= after AND, emitting the actual operator token",
+    "ast": "existing where.and vector: equals predicate, then inclusive numeric-bound predicate",
+    "equalityGreaterOrEqualPath": "prior validation/value/AST retained when the operator is >=; source equivalence checked",
+    "engineUnchanged": true,
+    "priorStandardLimitOffsetOrderLikeStandaloneAndIntervalFunctionsUnchanged": true,
+    "updatedScopeRejectionsPassed": 4,
+    "updatedScopeRejections": [
+      "OR",
+      "mixed <",
+      "mixed >",
+      "projection alias"
+    ],
+    "sameInputSqlWhitespace": true,
+    "noClientRowConstructionOrFiltering": true,
+    "newlyValidMixedLessOrEqualRejectionReplacedByStrictLessRejection": true
+  },
+  "observation": {
+    "nativeStatus": "PASS",
+    "passed": 1,
+    "failed": 0,
+    "total": 1,
+    "attempts": 1,
+    "nativeGateClientAotAndRuntimeSeconds": 5.940603582988842,
+    "processHostSeconds": 1.0051997940026922,
+    "daemonPreparationSecondsOutsideGate": 188.62562665800215,
+    "daemonAotRerunsDuringNativeGate": 0,
+    "sameAuthorizationNativeRuns": 1,
+    "allOwnedChildrenReaped": true,
+    "responseColumns": [
+      "sku",
+      "name",
+      "price"
+    ],
+    "responseRows": [
+      {
+        "sku": "SKU-1",
+        "name": "Demo Widget",
+        "price": "1500"
+      }
+    ],
+    "naturalSharedLockAcquisitionOnly": true,
+    "forcedReleaseOrDuplicateRuns": 0,
+    "original1064FailurePreserved": {
+      "status": "FAIL",
+      "passed": 0,
+      "total": 1,
+      "seconds": 6.3462506950018,
+      "errorCode": 1064,
+      "sqlState": "HY000",
+      "message": "unsupported SELECT form",
+      "payloadHex": "ff2804234859303030756e737570706f727465642053454c45435420666f726d",
+      "executePayloadHex": "1701000000000100000000010300030001000000dc050000",
+      "fixtureSha256": "cc7878e1d017d7d66dcbd3b3d67121190051ced3a276a0d0610925947c154e84"
+    }
+  },
+  "bounds": {
+    "nativeGateSeconds": 120,
+    "nativeGateAddressSpaceBytes": 2147483648,
+    "nativeGateIncludes": "client parse/generate/syntax/link plus one PREPARE/EXECUTE; uses separately prepared verified daemon",
+    "daemonPreparationOutsideNativeGate": true,
+    "separateDaemonPreparationBoundSeconds": 240,
+    "separateDaemonPreparationAddressSpaceBytes": 2147483648,
+    "nativeGateExtended": false,
+    "freshBothDaemonAotInside120": false,
+    "sharedLock": "natural flock /tmp/fl-heavy.lock; no force release or duplicate",
+    "nativeNetwork": "private loopback namespace",
+    "storage": "new empty private storage",
+    "separatePreparationBoundReason": "Previous separate AOT179.159s; preparation only uses240s outside fixed120s clientNative gate"
+  },
+  "toolchain": {
+    "sdkManifestSha256": "c5c90ed5234dc8d5d321fe63950c6c20f87f9f12ac9e51bc4c2edc4ef0101233",
+    "compilerSha256": "f514e043d3f08115e273717462595a69ffd0522614aad5666dec576f04a46dac",
+    "runtimeArchiveSha256": "fe4308c19eba2142049100c17ac08979b5787c1698b6d5e0e9e082a1f6e691fe",
+    "sdkFileCount": 125,
+    "daemonElfSha256": "5efc81a39b3abe227e09ba74ec17a907ae1cbc4da7d4e9cdbed5673cfeedc4f7",
+    "gccFlagsUnchanged": true,
+    "daemonAotNativeClientExecutions": 0,
+    "daemonAotNativeDaemonExecutions": 0
+  },
+  "audit": {
+    "wire": {
+      "status": "VERIFIED_FROM_SINGLE_NATIVE_VISIBLE_PRODUCT_MAX_PRICE_TRACE",
+      "setupSql": [
+        "CREATE TABLE shop_products (id INT PRIMARY KEY, sku TEXT, name TEXT, price INT, visible INT)",
+        "INSERT INTO shop_products (id, sku, name, price, visible) VALUES (1, 'SKU-1', 'Demo Widget', 1500, 1)",
+        "INSERT INTO shop_products (id, sku, name, price, visible) VALUES (2, 'SKU-2', 'Demo Gadget', 2200, 1)",
+        "CREATE TABLE shop_cart (id INT PRIMARY KEY, user_id INT, product_id INT, qty INT)",
+        "INSERT INTO shop_cart (id, user_id, product_id, qty) VALUES (2, 20, 2, 1)"
+      ],
+      "bothProductsVisible": true,
+      "allSetupAcknowledged": true,
+      "prepareSql": "SELECT sku, name, price FROM shop_products WHERE visible=? AND price <= ?",
+      "bind": [
+        1,
+        1500
+      ],
+      "preparedParameterCount": 2,
+      "parameterTypes": [
+        3,
+        3
+      ],
+      "statementId": 1,
+      "executePayloadHex": "1701000000000100000000010300030001000000dc050000",
+      "preparedSelectExecutions": 1,
+      "responseColumns": [
+        "sku",
+        "name",
+        "price"
+      ],
+      "responseRows": [
+        {
+          "sku": "SKU-1",
+          "name": "Demo Widget",
+          "price": "1500"
+        }
+      ],
+      "exactRows": 1,
+      "secondProductSku2Absent": true,
+      "serverAppliedEqualityAndLessOrEqualIncludingBoundary": true,
+      "clientFiltersOrTruncatesRows": false,
+      "errPackets": 0,
+      "clientPackets": 8,
+      "daemonPackets": 15,
+      "newNativeRuns": 0,
+      "daemonPreparedOutsideNativeGate": true,
+      "daemonPreparationSeconds": 188.62562665800215,
+      "daemonAotRerunsDuringGate": 0,
+      "engineUnchanged": true,
+      "fixtureUnchanged": true,
+      "legacyStandardParserByteIdentical": true,
+      "updatedEqualityNumericBoundScopeRejectionsPassed": 4,
+      "existingNumericBoundScopeRejectionsPassed": 4,
+      "existingNumericIntervalScopeRejectionsPassed": 4,
+      "existingOrderedLimitScopeRejectionsPassed": 4,
+      "existingOffsetScopeRejectionsPassed": 4,
+      "existingLikeScopeRejectionsPassed": 6,
+      "existingWhereOrderScopeRejectionsPassed": 4,
+      "existingCountWhereScopeRejectionsPassed": 4,
+      "existingIfnullScopeRejectionsPassed": 6,
+      "existingSumWhereScopeRejectionsPassed": 4,
+      "existingSumScopeRejectionsPassed": 6,
+      "existingOrderScopeRejectionsPassed": 4,
+      "existingGroupedCOUNTAndCOUNTStarEngineChecksPassed": true,
+      "existingSqlStartupAssertionsPassed": 36,
+      "existingQualifiedJoinScopeGuardsPassed": 4,
+      "existingMultiplyScopeGuardsPassed": 4,
+      "existingProjectionAndAggregateChecksPassed": true
+    },
+    "nativeSuccessfulExecCounts": {
+      "as": 1,
+      "bash": 1,
+      "bwrap": 1,
+      "cc1": 2,
+      "client-bin": 1,
+      "collect2": 1,
+      "daemon-bin": 1,
+      "flc": 2,
+      "gcc": 2,
+      "grep": 1,
+      "ld": 1,
+      "python3": 1,
+      "socat": 1,
+      "timeout": 1
+    },
+    "nativeNodeAttempts": 0,
+    "nativeNodeExecutions": 0,
+    "aotSuccessfulExecCounts": {
+      "as": 1,
+      "bash": 1,
+      "bwrap": 1,
+      "cc1": 2,
+      "collect2": 1,
+      "flc": 2,
+      "gcc": 2,
+      "grep": 1,
+      "ld": 1,
+      "timeout": 1
+    },
+    "aotNodeAttempts": 0,
+    "aotNodeExecutions": 0,
+    "privatePythonControllersOutsideProduct": {
+      "nativeQualifierAndOwnedProcessHost": 2,
+      "daemonPreparationQualifier": 1
+    },
+    "allProtocolAuthenticationBindingsAndAssertions": "FreeLang",
+    "relay": "installed native socat opaque byte relay",
+    "additionalNativeRunsForOfflineAudit": 0
+  },
+  "preserved": {
+    "originalLimit1064Fail": true,
+    "originalOffset1064Fail": true,
+    "originalCountFreshBoth120TimeoutFail": true,
+    "plainEmptySumNullRecord": true,
+    "walCommit": "1e55d063fe11b3905d79b2ca203f5eb384a7e317",
+    "historicalRegression": "349/349 retained; not rerun/promoted on this candidate",
+    "original71Gate": "not rerun or promoted",
+    "original25": "TIMEOUT FAIL and unstaged fixture retained",
+    "noChanges": [
+      "FreeLang parser/compiler",
+      "daemon/protocol",
+      "TLS",
+      "ACK",
+      "JS ports",
+      "gate mapping"
+    ],
+    "commercialHOLD": true,
+    "originalOffset2Failure": true,
+    "priorOffset1NativePass": "8fe0419b9e6a2ff671fbec9cf561f8c1b9025a48; historical Native1/1 retained, not rerun here",
+    "originalPriceOrder1064Fail": true,
+    "priorLikeProofs": [
+      "2827806b",
+      "dbc376f2"
+    ],
+    "originalMinimumPrice1064Fail": true,
+    "priorAscendingPriceProof": "43e0f96f",
+    "priorDescendingPriceProof": "e1e585d2",
+    "originalMaximumPrice1064Fail": true,
+    "priorMinimumPriceProof": "ec8a4e92; historical Native1/1 retained, not freshly rerun",
+    "originalPriceInterval1064Fail": true,
+    "priorSingleBoundProofs": [
+      "ec8a4e92",
+      "e6eaaea9"
+    ],
+    "originalVisibleMinimumPrice1064Fail": true,
+    "priorPriceIntervalProofs": [
+      "4e294936",
+      "8b3611e6"
+    ],
+    "originalVisibleMaximumPrice1064Fail": true,
+    "priorVisibleMinimumPriceProofs": [
+      "05d836e4",
+      "8b2e5ec9"
+    ]
+  },
+  "authorization": {
+    "initialFixtureOneTrial": "msg_33338cad774d",
+    "sqlOnlyFixAndSingleTrial": "msg_a49381e1a2c2"
+  },
+  "artifactSha256": {
+    "native/inputs.private.json": "f5d948780dd327434c924136d9cc2f9ec07d0c1153b46ec7ab3140d0af05963e",
+    "native/results.private.json": "2dce9ea1276b5cb3750be59f76f28606d2dd487ecbbe89083802088fe4547788",
+    "native/trial.trace": "4680c73420db7eebb7f732750c616f8e9f1c113eb973ff46e2afc6bc4c9ae61a",
+    "native/exec-audit.private.json": "b59133b03bf78bae1d00dbd64049d070920993b8b5350e7c26d2ad5ecd40cbce",
+    "native/run.py": "a777c8f0452088914c59063d0f6675a051fac60a2bf6df56707280068e3254db",
+    "native/process-host.private.py": "b4ca4d39ffbb86cc2f54499f72719f05ac25e960ac1a8812facdc5afe7ea2703",
+    "native/offline-proof.private.py": "49411df0348d7ab4d0613915ab32c639854295c69c8353ed723050131737925f",
+    "native/wire-proof.private.json": "c2b120876635031e53baa4468db0c6bd07fd1acfce9c61c4970568d7d156e0b0",
+    "native/client.c": "00da11a2ebd09fcd6c2ef9f5f1452b8c6bb9cc0157f031f1bbb9cf065ae4d37d",
+    "native/client-bin": "b3bf477fe46be31cc6c7bb56c9225370c25432f759478691c450ff8276e8ea87",
+    "native/daemon-bin": "5efc81a39b3abe227e09ba74ec17a907ae1cbc4da7d4e9cdbed5673cfeedc4f7",
+    "native/launch.private.json": "b1700444bd498eb47797f92dab8324bef30dc08761f8be8868365bfb56bdeb9c",
+    "aot/inputs.private.json": "667a4b088b0f99458077ea25b7f7898af949c97ad736434f5f851f6faaafc729",
+    "aot/results.private.json": "093de55d8bb92c441db33ead0570abb3709a93af257396e8b54a3a6e9de41429",
+    "aot/trial.trace": "81a478f316a0e79529f8a39f218535b06da68a883ae98ffe68dc23e9c46b71d0",
+    "aot/exec-audit.private.json": "e45c3418679f46815feccfc246e9acec3a4ed475b6260ba76760180917ffce30",
+    "aot/run.py": "c65572eed300dc90f740e8917aabbcc6793f57dde580f7da11666894815444ce",
+    "aot/daemon.c": "d64de69056e9ca3c2dd713ebbc2ee579f1d7f5fcacaf6b4ed46485b2c5e951b9",
+    "priorFail/results.private.json": "710ca8ccddbab0061b332b429710eff850572eec231a54ccecf1e43eef5693d8",
+    "priorFail/trial.trace": "d4f2feb720a0530cd9f16f83856acf6ce63efc101f1dd2bdd1e9271bbc46af3d",
+    "priorFail/server-error-response.private.json": "64581145b69029a758ed4d6b3bac41f6cc9545de9934b3918ca9ffab19eb03bc",
+    "priorFail/failed-fixture.fls": "cc7878e1d017d7d66dcbd3b3d67121190051ced3a276a0d0610925947c154e84"
+  }
+}

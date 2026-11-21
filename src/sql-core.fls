@@ -356,7 +356,7 @@
                         "value" (sql-value (token-at tokens 11))}]}}
       nil)))
 
-(defn parse-select-equality-lower-bound [raw-tokens]
+(defn parse-select-equality-numeric-bound [raw-tokens]
   (let [tokens (sql-select-projection-tokens raw-tokens)]
     (if (and (= (count tokens) 10)
              (regex_match (token-at tokens 1) "^[A-Za-z_][A-Za-z0-9_]*(,[A-Za-z_][A-Za-z0-9_]*)*$")
@@ -369,14 +369,15 @@
              (regex_match (last (regex_split (token-at tokens 5) "=")) "^-?[0-9]+$")
              (keyword? (token-at tokens 6) "AND")
              (regex_match (token-at tokens 7) "^[A-Za-z_][A-Za-z0-9_]*$")
-             (= (token-at tokens 8) ">=")
+             (or (= (token-at tokens 8) ">=")
+                 (= (token-at tokens 8) "<="))
              (regex_match (token-at tokens 9) "^-?[0-9]+$"))
       (let [equality (sql-assignment (token-at tokens 5))]
         {"type" "select" "table" (token-at tokens 3)
          "columns" (regex_split (token-at tokens 1) ",")
          "where" {"and" [{"column" (get equality "column")
                           "equals" (get equality "value")}
-                         {"column" (token-at tokens 7) "operator" ">="
+                         {"column" (token-at tokens 7) "operator" (token-at tokens 8)
                           "value" (sql-value (token-at tokens 9))}]}})
       nil)))
 
@@ -643,7 +644,7 @@
                 (if (nil? ranged)
                   (let [interval (parse-select-numeric-interval tokens)]
                     (if (nil? interval)
-                      (let [combined (parse-select-equality-lower-bound tokens)]
+                      (let [combined (parse-select-equality-numeric-bound tokens)]
                         (if (nil? combined)
                           (let [contains (parse-select-like-contains tokens)]
                             (if (nil? contains)
@@ -1205,7 +1206,7 @@
 
 (doseq [query
         ["SELECT sku, name, price FROM shop_products WHERE visible=1 OR price >= 2000"
-         "SELECT sku, name, price FROM shop_products WHERE visible=1 AND price <= 2000"
+         "SELECT sku, name, price FROM shop_products WHERE visible=1 AND price < 2000"
          "SELECT sku, name, price FROM shop_products WHERE visible=1 AND price > 2000"
          "SELECT sku AS item, name, price FROM shop_products WHERE visible=1 AND price >= 2000"]]
   (let [rejected (try
@@ -1213,8 +1214,8 @@
                    (catch [error]
                      (str-includes (error_message error) "unsupported SELECT form")))]
     (if (= rejected true) true
-      (throw "projected equality lower bound scope guard failure"))))
-(println "afj-db95 projected equality lower bound scope guards PASS")
+      (throw "projected equality numeric bound scope guard failure"))))
+(println "afj-db95 projected equality numeric bound scope guards PASS")
 
 (doseq [query
         ["SELECT shop_cart.qty * shop_products.price FROM shop_cart JOIN shop_products ON shop_cart.product_id = shop_products.id ORDER BY other.id"
