@@ -1,0 +1,122 @@
+;; Independent Native MariaDB wrong-password rejection, outside original69.
+;; The fixed host starts the existing daemon and a Native socat byte relay.
+;; Challenge-response construction and rejection assertions are FreeLang.
+(load "../src/sha1.fls")
+(define reject-control (env-get "AFJ_NATIVE_MARIADB_REJECT_CONTROL"))
+(define reject-connection (atom nil))
+(define reject-buffer (atom ""))
+(define reject-stage (atom "handshake"))
+(define reject-sequence (atom 0))
+(define reject-result (atom nil))
+(define reject-error (atom nil))
+(define reject-done (atom false))
+
+(defn reject-check [condition message]
+  (if (= condition true) true (throw message)))
+
+(defn reject-u32 [value]
+  (buf-concat [(buf-u8 (rem value 256))
+               (buf-u8 (rem (floor (/ value 256)) 256))
+               (buf-u8 (rem (floor (/ value 65536)) 256))
+               (buf-u8 (rem (floor (/ value 16777216)) 256))]))
+
+(defn reject-login [bytes]
+  (reject-check (= (buf-read-u8 bytes 0) 10) "NATIVE_REJECT_HANDSHAKE_VERSION")
+  (let [version-end
+          (loop [offset 1]
+            (do
+              (reject-check (< offset (buf-len bytes)) "NATIVE_REJECT_HANDSHAKE_LENGTH")
+              (if (= (buf-read-u8 bytes offset) 0) offset (recur (+ offset 1)))))
+        first-offset (+ version-end 5)
+        second-offset (+ first-offset 27)]
+    (reject-check (<= (+ second-offset 12) (buf-len bytes))
+                  "NATIVE_REJECT_SCRAMBLE_LENGTH")
+    (let [scramble (buf-concat [(buf-slice bytes first-offset 8)
+                                (buf-slice bytes second-offset 12)])
+          token (sha1-mysql-native-token "invalid-native-fixture-password" scramble)
+          correct-token (sha1-mysql-native-token "development-only" scramble)
+          payload (buf-concat [(reject-u32 172545) (reject-u32 1048576)
+                               (buf-u8 33) (sha1-zero-bytes 23)
+                               (buf-str "root") (buf-u8 0) (buf-u8 20) token])
+          frame (buf-concat [(buf-slice (reject-u32 (buf-len payload)) 0 3)
+                             (buf-u8 1) payload])]
+      (reject-check (and (= (buf-len token) 20) (not (= token correct-token)))
+                    "NATIVE_REJECT_DISTINCT_WRONG_TOKEN")
+      (reset! reject-stage "rejection")
+      (reset! reject-sequence 2)
+      (reject-check (= (tcp-write (deref reject-connection) (buf-to-binary frame)) "ok")
+                    "NATIVE_REJECT_PACKET_WRITE"))))
+
+(defn reject-frame [bytes sequence]
+  (reject-check (> (buf-len bytes) 0) "NATIVE_REJECT_EMPTY_PACKET")
+  (reject-check (= sequence (deref reject-sequence)) "NATIVE_REJECT_PACKET_SEQUENCE")
+  (if (= (deref reject-stage) "handshake")
+    (reject-login bytes)
+    (do
+      (reject-check (= (deref reject-stage) "rejection") "NATIVE_REJECT_UNEXPECTED_PACKET")
+      (reject-check (and (>= (buf-len bytes) 9) (= (buf-read-u8 bytes 0) 255))
+                    "NATIVE_REJECT_EXPECTED_ERR_PACKET")
+      (let [code (+ (buf-read-u8 bytes 1) (* 256 (buf-read-u8 bytes 2)))
+            message (buf-read-str bytes 9 (- (buf-len bytes) 9))]
+        (reject-check (= code 1045) "NATIVE_REJECT_EXPECTED_AUTH_ERROR_1045")
+        (reject-check (= message "ACCESS_DENIED") "NATIVE_REJECT_EXPECTED_ACCESS_DENIED")
+        (reset! reject-result {"ok" true "wrong_auth_rejected" true
+                               "error_code" code "error" message
+                               "auth_response_bytes" 20 "login_ok" false})
+        (reset! reject-stage "done")
+        (reset! reject-done true)))))
+
+(defn reject-drain []
+  (if (>= (buf-len (deref reject-buffer)) 4)
+    (let [bytes (deref reject-buffer)
+          length (+ (buf-read-u8 bytes 0) (* 256 (buf-read-u8 bytes 1))
+                     (* 65536 (buf-read-u8 bytes 2)))]
+      (reject-check (<= length 65536) "NATIVE_REJECT_PACKET_LIMIT")
+      (if (>= (buf-len bytes) (+ 4 length))
+        (do
+          (reset! reject-buffer (buf-slice bytes (+ 4 length)
+                                          (- (buf-len bytes) (+ 4 length))))
+          (reject-frame (buf-slice bytes 4 length) (buf-read-u8 bytes 3))
+          (reject-drain))
+        nil))
+    nil))
+
+(defn native-reject-handler [event connection payload peer]
+  (try
+    (cond
+      (or (= event "connect") (= event "accept"))
+        (do (reject-check (nil? (deref reject-connection)) "NATIVE_REJECT_SINGLE_CONNECTION")
+            (reset! reject-connection connection))
+      (= event "data")
+        (do (reset! reject-buffer
+              (buf-concat [(deref reject-buffer) (buf-from-binary payload)]))
+            (reject-drain))
+      (= event "close")
+        (reject-check (deref reject-done) "NATIVE_REJECT_PREMATURE_CLOSE")
+      :else nil)
+    (catch [error]
+      (reset! reject-error (error_message error))
+      (reset! reject-done true))))
+
+(reject-check (not (nil? reject-control)) "NATIVE_REJECT_HOST_ENV_REQUIRED")
+(reject-check (not (file_exists (str reject-control "/ports.ready")))
+              "NATIVE_REJECT_CONTROL_NOT_FRESH")
+(let [bridge-port (tcp-client-free-port) daemon-port (tcp-client-free-port)]
+  (reject-check (and (number? bridge-port) (number? daemon-port)
+                     (not (= bridge-port daemon-port))) "NATIVE_REJECT_DISTINCT_PORTS")
+  (reject-check (= (tcp-server-raw bridge-port "native-reject-handler" "127.0.0.1") "ok")
+                "NATIVE_REJECT_LISTENER_START")
+  (try
+    (do
+      (file_write (str reject-control "/ports.json")
+                  (json_str {"bridge" bridge-port "daemon" daemon-port}))
+      (file_write (str reject-control "/ports.ready") "ready")
+      (let [deadline (+ (now-ms) 30000)]
+        (while (and (< (now-ms) deadline) (not (deref reject-done))) (fl-yield 10)))
+      (reject-check (deref reject-done) "NATIVE_REJECT_CONTRACT_TIMEOUT")
+      (if (nil? (deref reject-error)) nil (throw (deref reject-error)))
+      (reject-check (not (nil? (deref reject-result))) "NATIVE_REJECT_RESULT_MISSING")
+      (reject-check (= (buf-len (deref reject-buffer)) 0) "NATIVE_REJECT_TRAILING_PACKET_BYTES"))
+    (finally (tcp-server-stop bridge-port))))
+(println (str "NATIVE_MARIADB_REJECT_RESULT " (json_str (deref reject-result))))
+(println "afj-db95 Native MariaDB wrong authentication rejection PASS")
