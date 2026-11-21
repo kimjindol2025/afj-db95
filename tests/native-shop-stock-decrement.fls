@@ -1,0 +1,262 @@
+;; Native shop stock fixture agreed in msg_4845d53c28cf.
+;; Seed stock=10; prepared UPDATE binds 8,1 then prepared SELECT verifies stock=8.
+;; Reuses accepted Native transport; SQL core and protocol remain untouched.
+(load "../src/sha1.fls")
+(define stock-control (env-get "AFJ_NATIVE_SHOP_STOCK_DECREMENT_CONTROL"))
+(define stock-connection (atom nil))
+(define stock-buffer (atom ""))
+(define stock-stage (atom "handshake"))
+(define stock-sequence (atom 0))
+(define stock-columns (atom []))
+(define stock-row (atom nil))
+(define stock-error (atom nil))
+(define stock-done (atom false))
+(define stock-statement (atom nil))
+(define stock-result-kind (atom "update"))
+(define stock-update-received (atom false))
+
+(defn stock-check [condition message]
+  (if (= condition true) true (throw message)))
+
+(defn stock-u32 [value]
+  (buf-concat [(buf-u8 (rem value 256))
+               (buf-u8 (rem (floor (/ value 256)) 256))
+               (buf-u8 (rem (floor (/ value 65536)) 256))
+               (buf-u8 (rem (floor (/ value 16777216)) 256))]))
+
+(defn stock-read-u32 [bytes offset]
+  (+ (buf-read-u8 bytes offset)
+     (* 256 (buf-read-u8 bytes (+ offset 1)))
+     (* 65536 (buf-read-u8 bytes (+ offset 2)))
+     (* 16777216 (buf-read-u8 bytes (+ offset 3)))))
+
+(defn stock-send [payload sequence next-stage response-sequence]
+  (let [length (buf-len payload)
+        frame (buf-concat [(buf-slice (stock-u32 length) 0 3)
+                           (buf-u8 sequence) payload])]
+    (reset! stock-stage next-stage)
+    (reset! stock-sequence response-sequence)
+    (stock-check (= (tcp-write (deref stock-connection) (buf-to-binary frame)) "ok")
+                 "NATIVE_SHOP_STOCK_DECREMENT_PACKET_WRITE")))
+
+(defn stock-command [code text next-stage]
+  (stock-send (buf-concat [(buf-u8 code) (buf-str text)])
+              0 next-stage 1))
+
+(defn stock-text [bytes offset]
+  (stock-check (< offset (buf-len bytes)) "NATIVE_SHOP_STOCK_DECREMENT_TEXT_PREFIX")
+  (let [length (buf-read-u8 bytes offset) next (+ offset 1 length)]
+    (stock-check (and (< length 251) (<= next (buf-len bytes)))
+                 "NATIVE_SHOP_STOCK_DECREMENT_TEXT_LENGTH")
+    {"value" (buf-read-str bytes (+ offset 1) length)
+     "next" next}))
+
+(defn stock-column-name [bytes]
+  (loop [index 0 offset 0]
+    (let [field (stock-text bytes offset)]
+      (if (= index 4) (get field "value")
+        (recur (+ index 1) (get field "next"))))))
+
+(defn stock-row-map [bytes]
+  (loop [index 0 offset 0 result {}]
+    (if (= index (if (= (deref stock-result-kind) "update") 5 2))
+      (do
+        (stock-check (= offset (buf-len bytes)) "NATIVE_SHOP_STOCK_DECREMENT_ROW_TRAILING_BYTES")
+        result)
+      (let [field (stock-text bytes offset)]
+        (recur (+ index 1) (get field "next")
+               (assoc result (get (deref stock-columns) index)
+                             (get field "value")))))))
+
+(defn stock-login [bytes]
+  (stock-check (= (buf-read-u8 bytes 0) 10) "NATIVE_SHOP_STOCK_DECREMENT_HANDSHAKE_VERSION")
+  (let [version-end
+          (loop [offset 1]
+            (do
+              (stock-check (< offset (buf-len bytes)) "NATIVE_SHOP_STOCK_DECREMENT_HANDSHAKE_LENGTH")
+              (if (= (buf-read-u8 bytes offset) 0) offset (recur (+ offset 1)))))
+        first-offset (+ version-end 5)
+        second-offset (+ first-offset 27)]
+    (stock-check (<= (+ second-offset 12) (buf-len bytes))
+                 "NATIVE_SHOP_STOCK_DECREMENT_SCRAMBLE_LENGTH")
+    (let [scramble (buf-concat [(buf-slice bytes first-offset 8)
+                                (buf-slice bytes second-offset 12)])
+          token (sha1-mysql-native-token "development-only" scramble)
+          login (buf-concat [(stock-u32 172545) (stock-u32 1048576)
+                             (buf-u8 33) (sha1-zero-bytes 23)
+                             (buf-str "root") (buf-u8 0)
+                             (buf-u8 20) token])]
+      (stock-check (= (buf-len token) 20) "NATIVE_SHOP_STOCK_DECREMENT_TOKEN_LENGTH")
+      (stock-send login 1 "login" 2))))
+
+(defn stock-frame [bytes sequence]
+  (stock-check (> (buf-len bytes) 0) "NATIVE_SHOP_STOCK_DECREMENT_EMPTY_PACKET")
+  (stock-check (= sequence (deref stock-sequence)) "NATIVE_SHOP_STOCK_DECREMENT_PACKET_SEQUENCE")
+  (swap! stock-sequence + 1)
+  (let [stage (deref stock-stage) first-byte (buf-read-u8 bytes 0)]
+    (if (= first-byte 255)
+      (if (>= (buf-len bytes) 9)
+        (throw (str "NATIVE_SHOP_STOCK_DECREMENT_SERVER_ERROR_" stage " code="
+                    (+ (buf-read-u8 bytes 1) (* 256 (buf-read-u8 bytes 2)))
+                    " message=" (buf-read-str bytes 9 (- (buf-len bytes) 9))))
+        (throw (str "NATIVE_SHOP_STOCK_DECREMENT_SHORT_SERVER_ERROR_" stage)))
+      nil)
+    (cond
+      (= stage "handshake") (stock-login bytes)
+      (= stage "login")
+        (do
+          (stock-check (= first-byte 0) "NATIVE_SHOP_STOCK_DECREMENT_LOGIN_ACK")
+          (stock-command 3 "CREATE TABLE shop_products (id INT PRIMARY KEY, sku TEXT, name TEXT, price INT, stock INT)"
+                           "products-create"))
+      (= stage "products-create")
+        (do
+          (stock-check (= first-byte 0) "NATIVE_SHOP_STOCK_DECREMENT_PRODUCTS_CREATE_ACK")
+          (stock-command 3 "INSERT INTO shop_products (id, sku, name, price, stock) VALUES (1, 'SKU-1', 'Demo Widget', 1500, 10)"
+                           "products-seed"))
+      (= stage "products-seed")
+        (do
+          (stock-check (= first-byte 0) "NATIVE_SHOP_STOCK_DECREMENT_PRODUCTS_SEED_ACK")
+          (stock-command 22 "UPDATE shop_products SET stock=? WHERE id=?" "update-prepare"))
+      (= stage "update-prepare")
+        (do
+          (stock-check (and (= first-byte 0) (>= (buf-len bytes) 12))
+                          "NATIVE_SHOP_STOCK_DECREMENT_UPDATE_PREPARE_ACK")
+          (stock-check (and (= (buf-read-u8 bytes 7) 2)
+                              (= (buf-read-u8 bytes 8) 0))
+                          "NATIVE_SHOP_STOCK_DECREMENT_UPDATE_TWO_PARAMETERS")
+          (reset! stock-statement (stock-read-u32 bytes 1))
+          (let [execute (buf-concat [(buf-u8 23) (stock-u32 (deref stock-statement))
+                                    (buf-u8 0) (stock-u32 1)
+                                    (buf-u8 0) (buf-u8 1)
+                                    (buf-u8 3) (buf-u8 0) (buf-u8 3) (buf-u8 0)
+                                    (stock-u32 8) (stock-u32 1)])]
+            (stock-send execute 0 "select" 1)))
+      (= stage "select-prepare")
+        (do
+          (stock-check (and (= first-byte 0) (>= (buf-len bytes) 12))
+                       "NATIVE_SHOP_STOCK_DECREMENT_SELECT_PREPARE_ACK")
+          (stock-check (and (= (buf-read-u8 bytes 7) 1)
+                            (= (buf-read-u8 bytes 8) 0))
+                       "NATIVE_SHOP_STOCK_DECREMENT_SELECT_ONE_PARAMETER")
+          (reset! stock-statement (stock-read-u32 bytes 1))
+          (let [execute (buf-concat [(buf-u8 23) (stock-u32 (deref stock-statement))
+                                     (buf-u8 0) (stock-u32 1)
+                                     (buf-u8 0) (buf-u8 1)
+                                     (buf-u8 3) (buf-u8 0) (stock-u32 1)])]
+            (stock-send execute 0 "select" 1)))
+      (= stage "select")
+        (do
+          (stock-check (and (= first-byte (if (= (deref stock-result-kind) "update") 5 2))
+                            (= (buf-len bytes) 1))
+                       "NATIVE_SHOP_STOCK_DECREMENT_RESULT_COLUMN_COUNT")
+          (reset! stock-stage "columns"))
+      (= stage "columns")
+        (do
+          (swap! stock-columns conj (stock-column-name bytes))
+          (if (= (count (deref stock-columns))
+                 (if (= (deref stock-result-kind) "update") 5 2))
+            (reset! stock-stage "columns-end") nil))
+      (= stage "columns-end")
+        (do
+          (stock-check (and (= first-byte 254) (= (buf-len bytes) 5))
+                       "NATIVE_SHOP_STOCK_DECREMENT_COLUMN_EOF")
+          (stock-check
+            (if (= (deref stock-result-kind) "update")
+              (and (= (get (deref stock-columns) 0) "id")
+                   (= (get (deref stock-columns) 1) "sku")
+                   (= (get (deref stock-columns) 2) "name")
+                   (= (get (deref stock-columns) 3) "price")
+                   (= (get (deref stock-columns) 4) "stock"))
+              (and (= (get (deref stock-columns) 0) "id")
+                   (= (get (deref stock-columns) 1) "stock")))
+            "NATIVE_SHOP_STOCK_DECREMENT_RESULT_SCHEMA")
+          (reset! stock-stage "row"))
+      (= stage "row")
+        (do (reset! stock-row (stock-row-map bytes))
+            (reset! stock-stage "row-end"))
+      (= stage "row-end")
+        (do
+          (stock-check (and (= first-byte 254) (= (buf-len bytes) 5))
+                       "NATIVE_SHOP_STOCK_DECREMENT_EXACTLY_ONE_ROW")
+          (stock-check
+            (and (= (count (keys (deref stock-row)))
+                    (if (= (deref stock-result-kind) "update") 5 2))
+                 (= (get (deref stock-row) "id") "1")
+                 (= (get (deref stock-row) "stock") "8"))
+            "NATIVE_SHOP_STOCK_DECREMENT_EXACT_STOCK_ROW")
+          (if (= (deref stock-result-kind) "update")
+            (do
+              (reset! stock-update-received true)
+              (reset! stock-result-kind "select")
+              (reset! stock-columns [])
+              (reset! stock-row nil)
+              (stock-command 22 "SELECT id, stock FROM shop_products WHERE id=?"
+                                  "select-prepare"))
+            (do
+              (reset! stock-stage "done")
+              (reset! stock-done true))))
+      :else (throw "NATIVE_SHOP_STOCK_DECREMENT_UNEXPECTED_STAGE"))))
+
+(defn stock-drain []
+  (if (>= (buf-len (deref stock-buffer)) 4)
+    (let [bytes (deref stock-buffer)
+          length (+ (buf-read-u8 bytes 0) (* 256 (buf-read-u8 bytes 1))
+                     (* 65536 (buf-read-u8 bytes 2)))]
+      (stock-check (<= length 65536) "NATIVE_SHOP_STOCK_DECREMENT_PACKET_LIMIT")
+      (if (>= (buf-len bytes) (+ 4 length))
+        (do
+          (reset! stock-buffer (buf-slice bytes (+ 4 length)
+                                         (- (buf-len bytes) (+ 4 length))))
+          (stock-frame (buf-slice bytes 4 length) (buf-read-u8 bytes 3))
+          (stock-drain))
+        nil))
+    nil))
+
+(defn native-shop-stock-decrement-handler [event connection payload peer]
+  (try
+    (cond
+      (or (= event "connect") (= event "accept"))
+        (do (stock-check (nil? (deref stock-connection)) "NATIVE_SHOP_STOCK_DECREMENT_SINGLE_CONNECTION")
+            (reset! stock-connection connection))
+      (= event "data")
+        (do (reset! stock-buffer
+              (buf-concat [(deref stock-buffer) (buf-from-binary payload)]))
+            (stock-drain))
+      (= event "close")
+        (stock-check (deref stock-done) "NATIVE_SHOP_STOCK_DECREMENT_PREMATURE_CLOSE")
+      :else nil)
+    (catch [error]
+      (reset! stock-error (error_message error))
+      (reset! stock-done true))))
+
+(stock-check (not (nil? stock-control)) "NATIVE_SHOP_STOCK_DECREMENT_HOST_ENV_REQUIRED")
+(stock-check (not (file_exists (str stock-control "/ports.ready")))
+             "NATIVE_SHOP_STOCK_DECREMENT_CONTROL_NOT_FRESH")
+(let [bridge-port (tcp-client-free-port) daemon-port (tcp-client-free-port)]
+  (stock-check (and (number? bridge-port) (number? daemon-port)
+                    (not (= bridge-port daemon-port))) "NATIVE_SHOP_STOCK_DECREMENT_DISTINCT_PORTS")
+  (stock-check (= (tcp-server-raw bridge-port "native-shop-stock-decrement-handler" "127.0.0.1") "ok")
+               "NATIVE_SHOP_STOCK_DECREMENT_LISTENER_START")
+  (try
+    (do
+      (file_write (str stock-control "/ports.json")
+                  (json_str {"bridge" bridge-port "daemon" daemon-port}))
+      (file_write (str stock-control "/ports.ready") "ready")
+      (let [deadline (+ (now-ms) 30000)]
+        (while (and (< (now-ms) deadline) (not (deref stock-done))) (fl-yield 10)))
+      (stock-check (deref stock-done) "NATIVE_SHOP_STOCK_DECREMENT_CONTRACT_TIMEOUT")
+      (if (nil? (deref stock-error)) nil (throw (deref stock-error)))
+      (stock-check (= (deref stock-stage) "done") "NATIVE_SHOP_STOCK_DECREMENT_CONTRACT_INCOMPLETE")
+      (stock-check (deref stock-update-received) "NATIVE_SHOP_STOCK_DECREMENT_UPDATE_RESULT_MISSING")
+      (stock-check (= (buf-len (deref stock-buffer)) 0) "NATIVE_SHOP_STOCK_DECREMENT_TRAILING_PACKET_BYTES"))
+    (finally (tcp-server-stop bridge-port))))
+(println (str "NATIVE_SHOP_STOCK_DECREMENT_RESULT "
+  (json_str {"ok" true "table" "shop_products" "initial_stock" 10
+             "update_sql" "UPDATE shop_products SET stock=? WHERE id=?"
+             "update_bind" [8 1] "prepared_update_executions" 1
+             "update_result_received" (deref stock-update-received)
+             "select_sql" "SELECT id, stock FROM shop_products WHERE id=?"
+             "select_bind" [1] "prepared_select_executions" 1
+             "rows" 1 "columns" (deref stock-columns) "row" (deref stock-row)
+             "exact_select" true})))
+(println "afj-db95 Native shop stock prepared UPDATE SELECT PASS")
