@@ -1,0 +1,112 @@
+{
+  "schema": "db95-native-existing-mariadb-packet-codec-unit-v1",
+  "status": "SCOPED_PASS",
+  "date_local": "2026-11-21 Asia/Seoul",
+  "commercial": "HOLD",
+  "deployment": "NO",
+  "source": {
+    "baseHead": "b1b5c36cbfec94803cf97d0845bddda7bb67c832",
+    "existingFlTest": "tests/mariadb-wire-codec.fls",
+    "existingFlSourceSha256": {
+      "tests/mariadb-wire-codec.fls": "7c70a4c7dd355d3c69d6a693ca4892d28f9f6227188e4666a5ac706b8a31842d",
+      "src/mariadb-wire.fls": "ad22ba6ae03fa70388c6b3a0d1a930e574595b67e5cf58421ef3ea33b3c5c4ff",
+      "src/sha1.fls": "6fc4c3def2d56c4ff7eb76c7cd7917b6e268bdc070a75fe90959a49a08bf39cf"
+    },
+    "trackedSourceFilesFrozen": 427,
+    "sourceOrTestChanges": 0,
+    "allTrackedSourcesAndSdkUnchangedDuringTrial": true
+  },
+  "toolchain": {
+    "sdkManifestSha256": "c5c90ed5234dc8d5d321fe63950c6c20f87f9f12ac9e51bc4c2edc4ef0101233",
+    "compilerSha256": "f514e043d3f08115e273717462595a69ffd0522614aad5666dec576f04a46dac",
+    "runtimeArchiveSha256": "fe4308c19eba2142049100c17ac08979b5787c1698b6d5e0e9e082a1f6e691fe",
+    "freshGeneratedCSha256": "c8b6bb0fc48efe476abf9524258bc4fdc78dbccec6e97137a5ee98b4f06b7bff",
+    "freshElfSha256": "b41f272c4b28ba89ee16ddca0b32dd41a93abcdae8bfd61d1ddffbda73e7a254",
+    "freshAot": true,
+    "compilerRuntimeAndGccFlagsChanged": false
+  },
+  "contract": {
+    "scope": "existing FL packet-codec unit only",
+    "assertions": [
+      {
+        "check": "packet completeness",
+        "expected": true
+      },
+      {
+        "check": "packet sequence",
+        "expected": 7
+      },
+      {
+        "check": "UTF-8 decoded payload",
+        "expected": "SELECT 1"
+      },
+      {
+        "check": "Kim length-encoded buffer length",
+        "expected": 4
+      }
+    ],
+    "assertionsPassed": 4,
+    "assertionsTotal": 4,
+    "passMarker": "afj-db95 MariaDB packet codec PASS",
+    "noNewTestOrJsPort": true,
+    "original64JsScope": "JavaScript adapter/proxy integration with synthetic upstream, greeting and standard client SELECT 1 -> 1 TAB Kim LF",
+    "original64ProxyIntegrationCoveredByThisUnit": false
+  },
+  "observation": {
+    "passed": 1,
+    "total": 1,
+    "attempts": 1,
+    "hostExit": 0,
+    "wholeTrialSecondsIncludingFreshAot": 6.090041349998501,
+    "nativeUnitElfExecutions": 1,
+    "wholeStdoutSha256": "4fd6b52a5f247a547a7219ee409d4be1ed2106b340717a9bba1344fe5a66d1b2"
+  },
+  "bounds": {
+    "freshAotAndRuntimeSeconds": 120,
+    "addressSpaceBytes": 2147483648,
+    "sharedFlock": "existing /tmp/fl-heavy.lock; no force release",
+    "automaticRetries": 0
+  },
+  "audit": {
+    "traceSha256": "dcec5617046deba77223f3fc07b3108e1614305b490b753e1aeb7095050b966d",
+    "decodedExecs": 14,
+    "resumedExecsJoined": 6,
+    "allTerminalExecStatusesParsed": true,
+    "successfulNodeFamilyExecs": 0,
+    "failedNodeFamilyAttempts": 0,
+    "successfulPythonExecs": 0,
+    "allowedPrivateControllerPythonExecs": 0,
+    "successfulBasenameCounts": {
+      "as": 1,
+      "bash": 1,
+      "bwrap": 1,
+      "case-bin": 1,
+      "cc1": 2,
+      "collect2": 1,
+      "flc": 2,
+      "gcc": 2,
+      "grep": 1,
+      "ld": 1,
+      "timeout": 1
+    },
+    "timedTraceSha256": "b8e8e44685b45c43b6bbca49db71762601f011a711e6ecba2c7dd007e8268354",
+    "privatePythonQualifierOutsideProductTrace": 1,
+    "privateControllerSha256": "0046ff01ed50b29c3eaa9b259fbce4934b481d6b823a30f59321b33fe0391811",
+    "privateReceiptSha256": "8e06ea64b249935741268b83289917834512b200649e1742681f1191412e7ce5"
+  },
+  "preserved": {
+    "original64Input": "tests/mariadb-wire-unit.js",
+    "original64InputSha256": "a202967079f8e1b1e539634493aedf52441a4632ed14bfd8d60b03b6abe4d598",
+    "original64NativeGate": "FAIL retained; JS proxy integration not run or promoted",
+    "originalReleaseGateSha256": "e464a355883b76a7780707f5acb2a19f187a21961f6eaa2653abe828aa583f99",
+    "nativeReleaseGateSha256": "662e50036dbc8ec5abd7fafe6e3179f1a91427dc32fe3d1cfe4b36190888c250",
+    "case66Opened": false,
+    "existingNativeWireCommit": "b1b5c36cbfec94803cf97d0845bddda7bb67c832",
+    "existingAuthRejectionCommit": "aeacd97c4f1dd21c7f3e1e35d2717b7e5ce625e5",
+    "existingPreparedCommit": "28d41e38efe6b5d3eb0e6f4dda952bfa57860e6c",
+    "walCommit": "1e55d063fe11b3905d79b2ca203f5eb384a7e317",
+    "existing349RegressionChecks": "retained; not rerun for an evidence-only archive",
+    "original25": "TIMEOUT FAIL retained; unrelated local one-byte fixture change remains uncommitted",
+    "whole71GateRerun": false
+  }
+}
