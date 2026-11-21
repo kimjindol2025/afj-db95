@@ -1,0 +1,201 @@
+{
+  "schema": "db95-native-mariadb-bound-prepare-execute-select-v1",
+  "status": "SCOPED_PASS",
+  "date_local": "2026-11-21 Asia/Seoul",
+  "commercial": "HOLD",
+  "deployment": "NO",
+  "source": {
+    "baseHead": "018a80ad419b4ddfc720f0545e684a203a7adc20",
+    "newFixture": "tests/native-mariadb-bound-execute.fls",
+    "fixtureSha256": "76d33e64e3576560b814f7ba716273859cbbec81ea718417ec8079ea70177625",
+    "clientDependency": {
+      "src/sha1.fls": "6fc4c3def2d56c4ff7eb76c7cd7917b6e268bdc070a75fe90959a49a08bf39cf"
+    },
+    "existingDaemonDependencySha256": {
+      "src/engine.fls": "691b86022ee95fe21736bab6f7025235d62b403d83c954d4f316c6451ad1fc19",
+      "src/sql-core.fls": "e676a211efac76e1c46f001159de5d4a2efc4f9fe942889f820f4bc41d2780ae",
+      "src/mariadb-wire.fls": "ad22ba6ae03fa70388c6b3a0d1a930e574595b67e5cf58421ef3ea33b3c5c4ff",
+      "src/sha1.fls": "6fc4c3def2d56c4ff7eb76c7cd7917b6e268bdc070a75fe90959a49a08bf39cf",
+      "tests/native-mariadb-daemon.fls": "4aeb91c050734087a9b0e27bffd677cfe48f6bfb5068f39cbbce2efb4c01868d"
+    },
+    "trackedSourceFilesFrozen": 419,
+    "allTrackedSourcesNewFixtureAndSdkUnchangedDuringTrial": true,
+    "parserCompilerRuntimeOrDaemonChanges": 0
+  },
+  "toolchain": {
+    "sdkManifestSha256": "c5c90ed5234dc8d5d321fe63950c6c20f87f9f12ac9e51bc4c2edc4ef0101233",
+    "compilerSha256": "f514e043d3f08115e273717462595a69ffd0522614aad5666dec576f04a46dac",
+    "runtimeArchiveSha256": "fe4308c19eba2142049100c17ac08979b5787c1698b6d5e0e9e082a1f6e691fe",
+    "freshFixtureGeneratedCSha256": "5f222cf68b95867da761c16ea9bf1cf3514d4311e41516c5c7fbfc34fbcd51b8",
+    "freshFixtureElfSha256": "0e97788177340c4c986d1ffd206ff468a5f6e7c53b96a669d2cfc163702fdae2",
+    "existingDaemonGeneratedCSha256": "d7e407d297e13634d0ddc87fd1c3ef0cb7206d3c13922d5e1f05e03d79e741f9",
+    "existingDaemonElfSha256": "2aecd62cb5962238013489cebc81bc10b917006334235a5d9f41fe93c9b37e38",
+    "daemonBuild": "verified current-source completed Native AOT reused; not rebuilt in this observation",
+    "nativeByteRelay": "installed socat ELF; generic opaque full-duplex TCP relay",
+    "nativeByteRelaySha256": "cd8741946c6e0008ea4f87129b7cf1c1e3fa5e8159a5ec98d4a7763447b53b4b"
+  },
+  "contract": {
+    "transport": "Native FL raw TCP callback and installed Native socat byte relay over two isolated loopback sockets",
+    "protocolFramingAuthenticationBindingsAndAssertions": "FreeLang fixture",
+    "processHost": "fixed owned-process/file lifetimes only; no socket requests or protocol implementation",
+    "commands": [
+      {
+        "code": 3,
+        "statement": "CREATE TABLE native_bound_products (id INT PRIMARY KEY, sku TEXT)"
+      },
+      {
+        "code": 22,
+        "statement": "INSERT INTO native_bound_products (id,sku) VALUES (?,?)",
+        "preparedParameters": 2
+      },
+      {
+        "code": 23,
+        "parameterTypes": [
+          3,
+          253
+        ],
+        "bindings": [
+          1042,
+          "native-bound"
+        ]
+      },
+      {
+        "code": 3,
+        "statement": "SELECT * FROM native_bound_products WHERE id=1042",
+        "expectedRows": 1,
+        "expectedRow": {
+          "id": "1042",
+          "sku": "native-bound"
+        }
+      }
+    ],
+    "packetSequencesChecked": true,
+    "columnNamesDecoded": true,
+    "exactRowAndRowCountChecked": true,
+    "testIsIndependentOfOriginalJs71": true
+  },
+  "observation": {
+    "passed": 1,
+    "total": 1,
+    "attemptsInAcceptedCohort": 1,
+    "wholeTrialSecondsIncludingFixtureAot": 4.569999844999984,
+    "runtimeSeconds": 0.3378895450005075,
+    "hostExit": 0,
+    "typedResult": {
+      "ok": true,
+      "prepared_parameters": 2,
+      "execute_bindings": [
+        1042,
+        "native-bound"
+      ],
+      "rows": 1,
+      "row": {
+        "id": "1042",
+        "sku": "native-bound"
+      },
+      "exact_select": true
+    },
+    "childExits": {
+      "client": 0,
+      "daemon": -15,
+      "native-byte-relay": 0
+    },
+    "nativeFixtureExecutions": 1,
+    "existingDaemonExecutions": 1,
+    "nativeByteRelayExecutions": 1,
+    "allOwnedChildrenReaped": true,
+    "storageInitiallyEmpty": true,
+    "totalRecordedCohorts": 3,
+    "priorFailedCohorts": [
+      {
+        "status": "FAIL retained",
+        "passed": 0,
+        "total": 1,
+        "testSha256": "586088c22941003fc70f73864640becd905bb215e70121e1a5fbead60b5e23b1",
+        "firstError": "Uncaught error (line 206): [bound-frame] [bound-login] [utf8-encode] Function not found: utf8-encode",
+        "privateReceiptSha256": "0a06a3f327af185fec9db03f8b46fbbe9ca8e7b03ccabb8853fa883a946c33f6",
+        "approvedFixtureCorrection": "four UTF-8 helper call sites"
+      },
+      {
+        "status": "FAIL retained",
+        "passed": 0,
+        "total": 1,
+        "testSha256": "f14c0dbfd433c6711342212c473c76c0fcf8831073a2871e066bc94ee89b755c",
+        "firstError": "Uncaught error (line 206): [bound-frame] [bound-login] [bound-send] [bound-check] NATIVE_BOUND_PACKET_WRITE",
+        "privateReceiptSha256": "cf0fd3bbbdabc824899a7d72b880091e718b9165444122141856d9bfcdf763c5",
+        "approvedFixtureCorrection": "one connect/accept event condition"
+      }
+    ]
+  },
+  "bounds": {
+    "wholeTrialSecondsIncludingFixtureAot": 120,
+    "addressSpaceBytesPerProcess": 2147483648,
+    "fixtureRuntimeMs": 30000,
+    "privateHostRuntimeSeconds": 90,
+    "nativeRelayIdleSeconds": 15,
+    "nativeRelayConnectSeconds": 3,
+    "nativeRelayConnectRetries": 30,
+    "nativeRelayConnectRetryIntervalSeconds": 0.1,
+    "sharedFlock": "existing /tmp/fl-heavy.lock; no force release",
+    "automaticWholeTrialRetries": 0
+  },
+  "audit": {
+    "traceSha256": "d6c21af2b2f7960d769c2c03a43443c11b9c8e90a3520e28e7f27399e0e2f821",
+    "decodedExecs": 17,
+    "resumedExecsJoined": 9,
+    "allTerminalExecStatusesParsed": true,
+    "successfulNodeFamilyExecs": 0,
+    "failedNodeFamilyAttempts": 0,
+    "successfulPythonExecs": 1,
+    "allowedPrivateControllerPythonExecs": 1,
+    "successfulBasenameCounts": {
+      "as": 1,
+      "bash": 1,
+      "bwrap": 1,
+      "cc1": 2,
+      "client-bin": 1,
+      "collect2": 1,
+      "daemon-bin": 1,
+      "flc": 2,
+      "gcc": 2,
+      "grep": 1,
+      "ld": 1,
+      "python3": 1,
+      "socat": 1,
+      "timeout": 1
+    },
+    "timedTraceSha256": "36ef33b4e664f2eba58fb4a313523178bfb1be7c856703cc4d3447a5c4b708de",
+    "privatePythonControllersOutsideProduct": 2,
+    "privateProcessHostPythonExecsInsideTrace": 1,
+    "privateProcessHostSha256": "e0ac26ab39ce32ee38db3e96f0d3cef82cd737463515e183a96fb6ee8bb354f0",
+    "privateControllerSha256": "4f3821397d43db4c9d62ad0ae7c64098052a035a5e615fb9025a1925323d4073",
+    "privateResultReceiptSha256": "4a08dcae499d0f9de2c328938751ab3ff7d671da354158aa71f1cc776a171643",
+    "wireTraceAuditSha256": "6fe93ff9d826c89abef441574866989f31ed5319fc68d9339bb512b89b0b3acb",
+    "wireCommandsDecodedFromTrace": [
+      3,
+      22,
+      23,
+      3
+    ],
+    "binaryExecuteBindingsDecodedFromTrace": [
+      1042,
+      "native-bound"
+    ],
+    "newRunForWireAudit": false
+  },
+  "preserved": {
+    "original71Input": "tests/native-mariadb-prepared.js",
+    "original71InputSha256": "c0b35c7d8c8c76455541efe9217d395af9b2b837022f82ce42be041ef6061f1b",
+    "original71NativeGate": "FAIL retained; no JS port, mapping change or promotion",
+    "originalReleaseGateSha256": "e464a355883b76a7780707f5acb2a19f187a21961f6eaa2653abe828aa583f99",
+    "nativeReleaseGateSha256": "662e50036dbc8ec5abd7fafe6e3179f1a91427dc32fe3d1cfe4b36190888c250",
+    "cases66_68_69Opened": false,
+    "existingStandardClientEvidenceCommit": "018a80ad419b4ddfc720f0545e684a203a7adc20",
+    "existingPeerBudgetCommit": "8f82b8f8ce96244f3ae856679316d5feacf426a9",
+    "existingKillReloginCommit": "be7e54ede53dbfe493612479cca33a3afe3bae39",
+    "walCommit": "1e55d063fe11b3905d79b2ca203f5eb384a7e317",
+    "existing349RegressionChecks": "retained; not rerun for a new independent test",
+    "original25": "TIMEOUT FAIL retained; unrelated local one-byte fixture change remains uncommitted",
+    "whole71GateRerun": false
+  }
+}

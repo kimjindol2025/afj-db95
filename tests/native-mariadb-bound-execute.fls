@@ -1,0 +1,213 @@
+;; Independent Native MariaDB prepared contract; outside original71 mapping.
+;; The fixed host starts the existing daemon and an installed Native socat
+;; byte relay between two loopback ports. Protocol and assertions stay here.
+(load "../src/sha1.fls")
+(define bound-control (env-get "AFJ_NATIVE_PREPARED_CONTROL"))
+(define bound-connection (atom nil))
+(define bound-buffer (atom ""))
+(define bound-stage (atom "handshake"))
+(define bound-sequence (atom 0))
+(define bound-columns (atom []))
+(define bound-row (atom nil))
+(define bound-error (atom nil))
+(define bound-done (atom false))
+(define bound-statement (atom nil))
+
+(defn bound-check [condition message]
+  (if (= condition true) true (throw message)))
+
+(defn bound-u32 [value]
+  (buf-concat [(buf-u8 (rem value 256))
+               (buf-u8 (rem (floor (/ value 256)) 256))
+               (buf-u8 (rem (floor (/ value 65536)) 256))
+               (buf-u8 (rem (floor (/ value 16777216)) 256))]))
+
+(defn bound-read-u32 [bytes offset]
+  (+ (buf-read-u8 bytes offset)
+     (* 256 (buf-read-u8 bytes (+ offset 1)))
+     (* 65536 (buf-read-u8 bytes (+ offset 2)))
+     (* 16777216 (buf-read-u8 bytes (+ offset 3)))))
+
+(defn bound-send [payload sequence next-stage response-sequence]
+  (let [length (buf-len payload)
+        frame (buf-concat [(buf-slice (bound-u32 length) 0 3)
+                           (buf-u8 sequence) payload])]
+    (reset! bound-stage next-stage)
+    (reset! bound-sequence response-sequence)
+    (bound-check (= (tcp-write (deref bound-connection) (buf-to-binary frame)) "ok")
+                 "NATIVE_BOUND_PACKET_WRITE")))
+
+(defn bound-command [code text next-stage]
+  (bound-send (buf-concat [(buf-u8 code) (buf-str text)])
+              0 next-stage 1))
+
+(defn bound-text [bytes offset]
+  (bound-check (< offset (buf-len bytes)) "NATIVE_BOUND_TEXT_PREFIX")
+  (let [length (buf-read-u8 bytes offset) next (+ offset 1 length)]
+    (bound-check (and (< length 251) (<= next (buf-len bytes)))
+                 "NATIVE_BOUND_TEXT_LENGTH")
+    {"value" (buf-read-str bytes (+ offset 1) length)
+     "next" next}))
+
+(defn bound-column-name [bytes]
+  (loop [index 0 offset 0]
+    (let [field (bound-text bytes offset)]
+      (if (= index 4) (get field "value")
+        (recur (+ index 1) (get field "next"))))))
+
+(defn bound-row-map [bytes]
+  (loop [index 0 offset 0 result {}]
+    (if (= index 2)
+      (do
+        (bound-check (= offset (buf-len bytes)) "NATIVE_BOUND_ROW_TRAILING_BYTES")
+        result)
+      (let [field (bound-text bytes offset)]
+        (recur (+ index 1) (get field "next")
+               (assoc result (get (deref bound-columns) index)
+                             (get field "value")))))))
+
+(defn bound-login [bytes]
+  (bound-check (= (buf-read-u8 bytes 0) 10) "NATIVE_BOUND_HANDSHAKE_VERSION")
+  (let [version-end
+          (loop [offset 1]
+            (do
+              (bound-check (< offset (buf-len bytes)) "NATIVE_BOUND_HANDSHAKE_LENGTH")
+              (if (= (buf-read-u8 bytes offset) 0) offset (recur (+ offset 1)))))
+        first-offset (+ version-end 5)
+        second-offset (+ first-offset 27)]
+    (bound-check (<= (+ second-offset 12) (buf-len bytes))
+                 "NATIVE_BOUND_SCRAMBLE_LENGTH")
+    (let [scramble (buf-concat [(buf-slice bytes first-offset 8)
+                                (buf-slice bytes second-offset 12)])
+          token (sha1-mysql-native-token "development-only" scramble)
+          login (buf-concat [(bound-u32 172545) (bound-u32 1048576)
+                             (buf-u8 33) (sha1-zero-bytes 23)
+                             (buf-str "root") (buf-u8 0)
+                             (buf-u8 20) token])]
+      (bound-check (= (buf-len token) 20) "NATIVE_BOUND_TOKEN_LENGTH")
+      (bound-send login 1 "login" 2))))
+
+(defn bound-frame [bytes sequence]
+  (bound-check (> (buf-len bytes) 0) "NATIVE_BOUND_EMPTY_PACKET")
+  (bound-check (= sequence (deref bound-sequence)) "NATIVE_BOUND_PACKET_SEQUENCE")
+  (swap! bound-sequence + 1)
+  (let [stage (deref bound-stage) first-byte (buf-read-u8 bytes 0)]
+    (bound-check (not (= first-byte 255)) (str "NATIVE_BOUND_SERVER_ERROR_" stage))
+    (cond
+      (= stage "handshake") (bound-login bytes)
+      (= stage "login")
+        (do
+          (bound-check (= first-byte 0) "NATIVE_BOUND_LOGIN_ACK")
+          (bound-command 3 "CREATE TABLE native_bound_products (id INT PRIMARY KEY, sku TEXT)"
+                           "create"))
+      (= stage "create")
+        (do
+          (bound-check (= first-byte 0) "NATIVE_BOUND_CREATE_ACK")
+          (bound-command 22 "INSERT INTO native_bound_products (id,sku) VALUES (?,?)"
+                            "prepare"))
+      (= stage "prepare")
+        (do
+          (bound-check (and (= first-byte 0) (>= (buf-len bytes) 12))
+                       "NATIVE_BOUND_PREPARE_ACK")
+          (bound-check (and (= (buf-read-u8 bytes 7) 2)
+                            (= (buf-read-u8 bytes 8) 0))
+                       "NATIVE_BOUND_PREPARE_TWO_PARAMETERS")
+          (reset! bound-statement (bound-read-u32 bytes 1))
+          (let [sku (buf-str "native-bound")
+                execute (buf-concat [(buf-u8 23) (bound-u32 (deref bound-statement))
+                                      (buf-u8 0) (bound-u32 1)
+                                      (buf-u8 0) (buf-u8 1)
+                                      (buf-u8 3) (buf-u8 0)
+                                      (buf-u8 253) (buf-u8 0)
+                                      (bound-u32 1042) (buf-u8 (buf-len sku)) sku])]
+            (bound-send execute 0 "execute" 1)))
+      (= stage "execute")
+        (do
+          (bound-check (= first-byte 0) "NATIVE_BOUND_EXECUTE_ACK")
+          (bound-command 3 "SELECT * FROM native_bound_products WHERE id=1042" "select"))
+      (= stage "select")
+        (do
+          (bound-check (and (= first-byte 2) (= (buf-len bytes) 1))
+                       "NATIVE_BOUND_SELECT_TWO_COLUMNS")
+          (reset! bound-stage "columns"))
+      (= stage "columns")
+        (do
+          (swap! bound-columns conj (bound-column-name bytes))
+          (if (= (count (deref bound-columns)) 2)
+            (reset! bound-stage "columns-end") nil))
+      (= stage "columns-end")
+        (do
+          (bound-check (and (= first-byte 254) (= (buf-len bytes) 5))
+                       "NATIVE_BOUND_COLUMN_EOF")
+          (reset! bound-stage "row"))
+      (= stage "row")
+        (do (reset! bound-row (bound-row-map bytes))
+            (reset! bound-stage "row-end"))
+      (= stage "row-end")
+        (do
+          (bound-check (and (= first-byte 254) (= (buf-len bytes) 5))
+                       "NATIVE_BOUND_EXACTLY_ONE_ROW")
+          (bound-check (and (= (count (keys (deref bound-row))) 2)
+                            (= (get (deref bound-row) "id") "1042")
+                            (= (get (deref bound-row) "sku") "native-bound"))
+                       "NATIVE_BOUND_EXACT_SELECT")
+          (reset! bound-stage "done")
+          (reset! bound-done true))
+      :else (throw "NATIVE_BOUND_UNEXPECTED_STAGE"))))
+
+(defn bound-drain []
+  (if (>= (buf-len (deref bound-buffer)) 4)
+    (let [bytes (deref bound-buffer)
+          length (+ (buf-read-u8 bytes 0) (* 256 (buf-read-u8 bytes 1))
+                     (* 65536 (buf-read-u8 bytes 2)))]
+      (bound-check (<= length 65536) "NATIVE_BOUND_PACKET_LIMIT")
+      (if (>= (buf-len bytes) (+ 4 length))
+        (do
+          (reset! bound-buffer (buf-slice bytes (+ 4 length)
+                                         (- (buf-len bytes) (+ 4 length))))
+          (bound-frame (buf-slice bytes 4 length) (buf-read-u8 bytes 3))
+          (bound-drain))
+        nil))
+    nil))
+
+(defn native-bound-handler [event connection payload peer]
+  (try
+    (cond
+      (or (= event "connect") (= event "accept"))
+        (do (bound-check (nil? (deref bound-connection)) "NATIVE_BOUND_SINGLE_CONNECTION")
+            (reset! bound-connection connection))
+      (= event "data")
+        (do (reset! bound-buffer
+              (buf-concat [(deref bound-buffer) (buf-from-binary payload)]))
+            (bound-drain))
+      (= event "close")
+        (bound-check (deref bound-done) "NATIVE_BOUND_PREMATURE_CLOSE")
+      :else nil)
+    (catch [error]
+      (reset! bound-error (error_message error))
+      (reset! bound-done true))))
+
+(bound-check (not (nil? bound-control)) "NATIVE_BOUND_HOST_ENV_REQUIRED")
+(bound-check (not (file_exists (str bound-control "/ports.ready")))
+             "NATIVE_BOUND_CONTROL_NOT_FRESH")
+(let [bridge-port (tcp-client-free-port) daemon-port (tcp-client-free-port)]
+  (bound-check (and (number? bridge-port) (number? daemon-port)
+                    (not (= bridge-port daemon-port))) "NATIVE_BOUND_DISTINCT_PORTS")
+  (bound-check (= (tcp-server-raw bridge-port "native-bound-handler" "127.0.0.1") "ok")
+               "NATIVE_BOUND_LISTENER_START")
+  (try
+    (do
+      (file_write (str bound-control "/ports.json")
+                  (json_str {"bridge" bridge-port "daemon" daemon-port}))
+      (file_write (str bound-control "/ports.ready") "ready")
+      (let [deadline (+ (now-ms) 30000)]
+        (while (and (< (now-ms) deadline) (not (deref bound-done))) (fl-yield 10)))
+      (bound-check (deref bound-done) "NATIVE_BOUND_CONTRACT_TIMEOUT")
+      (if (nil? (deref bound-error)) nil (throw (deref bound-error)))
+      (bound-check (= (deref bound-stage) "done") "NATIVE_BOUND_CONTRACT_INCOMPLETE")
+      (bound-check (= (buf-len (deref bound-buffer)) 0) "NATIVE_BOUND_TRAILING_PACKET_BYTES"))
+    (finally (tcp-server-stop bridge-port))))
+(println (str "NATIVE_MARIADB_BOUND_RESULT "
+  (json_str {"ok" true "prepared_parameters" 2 "execute_bindings" [1042 "native-bound"]
+             "rows" 1 "row" (deref bound-row) "exact_select" true})))
+(println "afj-db95 Native MariaDB bound PREPARE EXECUTE SELECT PASS")
