@@ -442,7 +442,10 @@
                  "foreign-keys" foreign-keys
                  "checks" checks}})))
 
-(defn parse-insert [tokens]
+(defn parse-insert [raw-tokens]
+  ;; The existing splitter keeps quoted text and parenthesized groups intact.
+  (let [tokens (filter (fn [token] (not (= (str-trim token) "")))
+                       (sql-split-delimited (str_join raw-tokens " ") " "))]
     (if (and (>= (count tokens) 5)
            (keyword? (token-at tokens 1) "INTO")
            (keyword? (token-at tokens 3) "VALUES"))
@@ -466,7 +469,7 @@
            (keyword? (token-at tokens 1) "INTO"))
       (let [table (token-at tokens 2)]
         {"type" "insert" "table" table})
-      (throw "unsupported INSERT form")))))
+      (throw "unsupported INSERT form"))))))
 
 (defn parse-update [tokens]
   (if (and (= (count tokens) 6)
@@ -651,6 +654,12 @@
 (assert-sql "INSERT INTO users (id,name) VALUES (1,'Kim Lee')"
             {"type" "insert" "table" "users"
              "rows" [{"id" "1" "name" "Kim Lee"}]})
+(assert-sql "INSERT INTO shop_cart (id, product_id, qty) VALUES (1, 1, 2)"
+            {"type" "insert" "table" "shop_cart"
+             "rows" [{"id" "1" "product_id" "1" "qty" "2"}]})
+(assert-sql "INSERT INTO cart_quote_probe (id, name) VALUES (1, 'Demo, Widget')"
+            {"type" "insert" "table" "cart_quote_probe"
+             "rows" [{"id" "1" "name" "Demo, Widget"}]})
 (assert-sql "INSERT INTO users (id,name) VALUES (1,'Kim -- Lee')"
             {"type" "insert" "table" "users"
              "rows" [{"id" "1" "name" "Kim -- Lee"}]})
