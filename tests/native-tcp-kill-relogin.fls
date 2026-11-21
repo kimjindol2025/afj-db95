@@ -1,0 +1,114 @@
+;; Independent Native service contract; not a port or replacement of case35.
+;; A fixed process host supplies fresh control/storage directories and the
+;; existing tcp-soak-daemon ELF. This fixture chooses the port and performs
+;; every protocol request and row assertion. The host starts the daemon after
+;; port.ready, SIGKILLs it after kill.ready, waits for exit, restarts the same
+;; ELF/WAL/port, then atomically publishes restarted.json with its exit status.
+(define kill-control (env-get "AFJ_NATIVE_KILL_CONTROL"))
+(define kill-wal (env-get "AFJ_DB_WAL"))
+(define kill-first-fd (atom nil))
+(define kill-second-fd (atom nil))
+(define kill-result (atom nil))
+
+(defn kill-check [condition message]
+  (if (= condition true) true (throw message)))
+
+(defn kill-connect [port]
+  (let [deadline (+ (now-ms) 30000)
+        connected (atom nil)]
+    (while (and (< (now-ms) deadline) (nil? (deref connected)))
+      (let [fd (tcp-client-open "127.0.0.1" port 200)]
+        (if (nil? fd) (sleep_ms 25) (reset! connected fd))))
+    (kill-check (not (nil? (deref connected))) "NATIVE_KILL_TCP_READY_TIMEOUT")
+    (deref connected)))
+
+(defn kill-request [fd body]
+  (kill-check (= (tcp-client-write fd (str (json_str body) "\n")) "ok")
+              "NATIVE_KILL_SOCKET_WRITE")
+  (let [line (tcp-client-read-line fd 3000)]
+    (kill-check (not (nil? line)) "NATIVE_KILL_RESPONSE_TIMEOUT")
+    (json-parse line)))
+
+(defn kill-query [fd token statement]
+  (let [response (kill-request fd {"type" "query" "token" token
+                                  "statement" statement})]
+    (kill-check (= (get response "ok") true) "NATIVE_KILL_QUERY_NOT_OK")
+    response))
+
+(defn kill-close [holder]
+  (let [fd (deref holder)]
+    (if (nil? fd) nil
+      (do
+        (tcp-client-close fd)
+        (reset! holder nil)))))
+
+(kill-check (and (not (nil? kill-control)) (not (nil? kill-wal)))
+            "NATIVE_KILL_HOST_ENV_REQUIRED")
+(kill-check (not (file_exists (str kill-control "/port.ready")))
+            "NATIVE_KILL_CONTROL_NOT_FRESH")
+(let [port (tcp-client-free-port)]
+  (kill-check (number? port) "NATIVE_KILL_PORT_UNAVAILABLE")
+  (file_write (str kill-control "/port.txt") (str port))
+  (file_write (str kill-control "/port.ready") "ready")
+  (try
+    (do
+      (reset! kill-first-fd (kill-connect port))
+      (let [fd (deref kill-first-fd)
+            login (kill-request fd {"type" "login" "user" "root"
+                                    "password" "development-only"})
+            token (get login "token")]
+        (kill-check (= (get login "ok") true) "NATIVE_KILL_FIRST_LOGIN")
+        (kill-check (not (nil? token)) "NATIVE_KILL_FIRST_TOKEN")
+        (kill-query fd token
+          "CREATE TABLE native_kill_items (id INT PRIMARY KEY, name TEXT)")
+        (kill-query fd token
+          "INSERT INTO native_kill_items (id,name) VALUES (101,'durable')")
+        (let [begun (kill-request fd {"type" "tx" "token" token "op" "BEGIN"})]
+          (kill-check (= (get begun "ok") true) "NATIVE_KILL_BEGIN"))
+        (kill-query fd token
+          "INSERT INTO native_kill_items (id,name) VALUES (202,'pending')")
+        (let [selected (kill-query fd token
+                         "SELECT * FROM native_kill_items ORDER BY id")
+              rows (get (get selected "result") "rows")]
+          (kill-check (= (count rows) 2) "NATIVE_KILL_PREKILL_ROW_COUNT")
+          (kill-check (and (= (get (get rows 0) "id") "101")
+                           (= (get (get rows 0) "name") "durable")
+                           (= (get (get rows 1) "id") "202")
+                           (= (get (get rows 1) "name") "pending"))
+                      "NATIVE_KILL_PREKILL_ROWS")))
+      ;; Keep the first connection open: no disconnect rollback precedes kill.
+      (file_write (str kill-control "/kill.ready") "pending transaction verified")
+      (let [ack-path (str kill-control "/restarted.json")
+            deadline (+ (now-ms) 30000)]
+        (while (and (< (now-ms) deadline) (not (file_exists ack-path)))
+          (sleep_ms 25))
+        (kill-check (file_exists ack-path) "NATIVE_KILL_RESTART_ACK_TIMEOUT")
+        (let [ack (json-parse (file_read ack-path))]
+          (kill-check (and (= (get ack "signal") 9) (= (get ack "old_exit") -9))
+                      "NATIVE_KILL_SIGKILL_NOT_CONFIRMED")
+          (kill-close kill-first-fd)
+          (reset! kill-second-fd (kill-connect port))
+          (let [fd (deref kill-second-fd)
+                login (kill-request fd {"type" "login" "user" "root"
+                                        "password" "development-only"})
+                token (get login "token")]
+            (kill-check (= (get login "ok") true) "NATIVE_KILL_RELOGIN")
+            (kill-check (not (nil? token)) "NATIVE_KILL_RELOGIN_TOKEN")
+            (let [selected (kill-query fd token
+                             "SELECT * FROM native_kill_items ORDER BY id")
+                  rows (get (get selected "result") "rows")]
+              (kill-check (= (count rows) 1) "NATIVE_KILL_RECOVERED_ROW_COUNT")
+              (kill-check (and (= (get (first rows) "id") "101")
+                               (= (get (first rows) "name") "durable"))
+                          "NATIVE_KILL_RECOVERED_ROWS")
+              (reset! kill-result
+                {"ok" true "before_rows" 2 "after_rows" 1 "relogin_ok" true
+                 "committed_id" "101" "excluded_pending_id" "202"
+                 "signal" (get ack "signal") "old_exit" (get ack "old_exit")
+                 "old_pid" (get ack "old_pid") "new_pid" (get ack "new_pid")}))))))
+    (finally
+      (kill-close kill-first-fd)
+      (kill-close kill-second-fd))))
+(kill-check (not (nil? (deref kill-result))) "NATIVE_KILL_RESULT_MISSING")
+(println (str "NATIVE_TCP_KILL_RELOGIN_RESULT " (json_str (deref kill-result))))
+(println "afj-db95 Native TCP SIGKILL/relogin uncommitted exclusion PASS")
