@@ -1,0 +1,212 @@
+;; Native missing SKU fixture agreed in msg_17c905c018f5.
+;; Two product seeds; bind SKU-MISSING and require an ERR-free empty result.
+;; Reuses case71 Native transport; fixed host supplies owned process lifetimes.
+(load "../src/sha1.fls")
+(define sku-control (env-get "AFJ_NATIVE_SHOP_PRODUCTS_MISSING_SKU_CONTROL"))
+(define sku-connection (atom nil))
+(define sku-buffer (atom ""))
+(define sku-stage (atom "handshake"))
+(define sku-sequence (atom 0))
+(define sku-columns (atom []))
+(define sku-column-count (atom 0))
+(define sku-empty (atom false))
+(define sku-error (atom nil))
+(define sku-done (atom false))
+(define sku-statement (atom nil))
+
+(defn sku-check [condition message]
+  (if (= condition true) true (throw message)))
+
+(defn sku-u32 [value]
+  (buf-concat [(buf-u8 (rem value 256))
+               (buf-u8 (rem (floor (/ value 256)) 256))
+               (buf-u8 (rem (floor (/ value 65536)) 256))
+               (buf-u8 (rem (floor (/ value 16777216)) 256))]))
+
+(defn sku-read-u32 [bytes offset]
+  (+ (buf-read-u8 bytes offset)
+     (* 256 (buf-read-u8 bytes (+ offset 1)))
+     (* 65536 (buf-read-u8 bytes (+ offset 2)))
+     (* 16777216 (buf-read-u8 bytes (+ offset 3)))))
+
+(defn sku-send [payload sequence next-stage response-sequence]
+  (let [length (buf-len payload)
+        frame (buf-concat [(buf-slice (sku-u32 length) 0 3)
+                           (buf-u8 sequence) payload])]
+    (reset! sku-stage next-stage)
+    (reset! sku-sequence response-sequence)
+    (sku-check (= (tcp-write (deref sku-connection) (buf-to-binary frame)) "ok")
+                 "NATIVE_SHOP_PRODUCTS_MISSING_SKU_PACKET_WRITE")))
+
+(defn sku-command [code text next-stage]
+  (sku-send (buf-concat [(buf-u8 code) (buf-str text)])
+              0 next-stage 1))
+
+(defn sku-text [bytes offset]
+  (sku-check (< offset (buf-len bytes)) "NATIVE_SHOP_PRODUCTS_MISSING_SKU_TEXT_PREFIX")
+  (let [length (buf-read-u8 bytes offset) next (+ offset 1 length)]
+    (sku-check (and (< length 251) (<= next (buf-len bytes)))
+                 "NATIVE_SHOP_PRODUCTS_MISSING_SKU_TEXT_LENGTH")
+    {"value" (buf-read-str bytes (+ offset 1) length)
+     "next" next}))
+
+(defn sku-column-name [bytes]
+  (loop [index 0 offset 0]
+    (let [field (sku-text bytes offset)]
+      (if (= index 4) (get field "value")
+        (recur (+ index 1) (get field "next"))))))
+
+(defn sku-login [bytes]
+  (sku-check (= (buf-read-u8 bytes 0) 10) "NATIVE_SHOP_PRODUCTS_MISSING_SKU_HANDSHAKE_VERSION")
+  (let [version-end
+          (loop [offset 1]
+            (do
+              (sku-check (< offset (buf-len bytes)) "NATIVE_SHOP_PRODUCTS_MISSING_SKU_HANDSHAKE_LENGTH")
+              (if (= (buf-read-u8 bytes offset) 0) offset (recur (+ offset 1)))))
+        first-offset (+ version-end 5)
+        second-offset (+ first-offset 27)]
+    (sku-check (<= (+ second-offset 12) (buf-len bytes))
+                 "NATIVE_SHOP_PRODUCTS_MISSING_SKU_SCRAMBLE_LENGTH")
+    (let [scramble (buf-concat [(buf-slice bytes first-offset 8)
+                                (buf-slice bytes second-offset 12)])
+          token (sha1-mysql-native-token "development-only" scramble)
+          login (buf-concat [(sku-u32 172545) (sku-u32 1048576)
+                             (buf-u8 33) (sha1-zero-bytes 23)
+                             (buf-str "root") (buf-u8 0)
+                             (buf-u8 20) token])]
+      (sku-check (= (buf-len token) 20) "NATIVE_SHOP_PRODUCTS_MISSING_SKU_TOKEN_LENGTH")
+      (sku-send login 1 "login" 2))))
+
+(defn sku-frame [bytes sequence]
+  (sku-check (> (buf-len bytes) 0) "NATIVE_SHOP_PRODUCTS_MISSING_SKU_EMPTY_PACKET")
+  (sku-check (= sequence (deref sku-sequence)) "NATIVE_SHOP_PRODUCTS_MISSING_SKU_PACKET_SEQUENCE")
+  (swap! sku-sequence + 1)
+  (let [stage (deref sku-stage) first-byte (buf-read-u8 bytes 0)]
+    (if (= first-byte 255)
+      (if (>= (buf-len bytes) 9)
+        (throw (str "NATIVE_SHOP_PRODUCTS_MISSING_SKU_SERVER_ERROR_" stage " code="
+                    (+ (buf-read-u8 bytes 1) (* 256 (buf-read-u8 bytes 2)))
+                    " message=" (buf-read-str bytes 9 (- (buf-len bytes) 9))))
+        (throw (str "NATIVE_SHOP_PRODUCTS_MISSING_SKU_SHORT_SERVER_ERROR_" stage)))
+      nil)
+    (cond
+      (= stage "handshake") (sku-login bytes)
+      (= stage "login")
+        (do
+          (sku-check (= first-byte 0) "NATIVE_SHOP_PRODUCTS_MISSING_SKU_LOGIN_ACK")
+          (sku-command 3 "CREATE TABLE shop_products (id INT PRIMARY KEY, sku TEXT, name TEXT, price INT)"
+                           "create"))
+      (= stage "create")
+        (do
+          (sku-check (= first-byte 0) "NATIVE_SHOP_PRODUCTS_MISSING_SKU_CREATE_ACK")
+          (sku-command 3 "INSERT INTO shop_products (id, sku, name, price) VALUES (1, 'SKU-1', 'Demo Widget', 1500)"
+                           "seed"))
+      (= stage "seed")
+        (do
+          (sku-check (= first-byte 0) "NATIVE_SHOP_PRODUCTS_MISSING_SKU_FIRST_SEED_ACK")
+          (sku-command 3 "INSERT INTO shop_products (id, sku, name, price) VALUES (2, 'SKU-2', 'Demo Gadget', 2200)"
+                        "second-seed"))
+      (= stage "second-seed")
+        (do
+          (sku-check (= first-byte 0) "NATIVE_SHOP_PRODUCTS_MISSING_SKU_SECOND_SEED_ACK")
+          (sku-command 22 "SELECT id, sku, name, price FROM shop_products WHERE sku=?" "prepare"))
+      (= stage "prepare")
+        (do
+          (sku-check (and (= first-byte 0) (>= (buf-len bytes) 12))
+                       "NATIVE_SHOP_PRODUCTS_MISSING_SKU_PREPARE_ACK")
+          (sku-check (and (= (buf-read-u8 bytes 7) 1)
+                            (= (buf-read-u8 bytes 8) 0))
+                       "NATIVE_SHOP_PRODUCTS_MISSING_SKU_PREPARE_ONE_PARAMETER")
+          (reset! sku-statement (sku-read-u32 bytes 1))
+          (let [parameter (buf-str "SKU-MISSING")
+                execute (buf-concat [(buf-u8 23) (sku-u32 (deref sku-statement))
+                                     (buf-u8 0) (sku-u32 1)
+                                     (buf-u8 0) (buf-u8 1)
+                                     (buf-u8 253) (buf-u8 0)
+                                     (buf-u8 (buf-len parameter)) parameter])]
+            (sku-send execute 0 "select" 1)))
+      (= stage "select")
+        (do
+          (sku-check (and (= (buf-len bytes) 1) (> first-byte 0) (< first-byte 251))
+                       "NATIVE_SHOP_PRODUCTS_MISSING_SKU_SELECT_RESULT_HEADER")
+          (reset! sku-column-count first-byte)
+          (reset! sku-stage "columns"))
+      (= stage "columns")
+        (do
+          (swap! sku-columns conj (sku-column-name bytes))
+          (if (= (count (deref sku-columns)) (deref sku-column-count))
+            (reset! sku-stage "columns-end") nil))
+      (= stage "columns-end")
+        (do
+          (sku-check (and (= first-byte 254) (= (buf-len bytes) 5))
+                       "NATIVE_SHOP_PRODUCTS_MISSING_SKU_COLUMN_EOF")
+          (reset! sku-stage "rows-empty"))
+      (= stage "rows-empty")
+        (do
+          (sku-check (and (= first-byte 254) (= (buf-len bytes) 5))
+                     "NATIVE_SHOP_PRODUCTS_MISSING_SKU_EXPECTED_ZERO_ROWS")
+          (reset! sku-empty true)
+          (reset! sku-stage "done")
+          (reset! sku-done true))
+      :else (throw "NATIVE_SHOP_PRODUCTS_MISSING_SKU_UNEXPECTED_STAGE"))))
+
+(defn sku-drain []
+  (if (>= (buf-len (deref sku-buffer)) 4)
+    (let [bytes (deref sku-buffer)
+          length (+ (buf-read-u8 bytes 0) (* 256 (buf-read-u8 bytes 1))
+                     (* 65536 (buf-read-u8 bytes 2)))]
+      (sku-check (<= length 65536) "NATIVE_SHOP_PRODUCTS_MISSING_SKU_PACKET_LIMIT")
+      (if (>= (buf-len bytes) (+ 4 length))
+        (do
+          (reset! sku-buffer (buf-slice bytes (+ 4 length)
+                                         (- (buf-len bytes) (+ 4 length))))
+          (sku-frame (buf-slice bytes 4 length) (buf-read-u8 bytes 3))
+          (sku-drain))
+        nil))
+    nil))
+
+(defn native-shop-products-missing-sku-handler [event connection payload peer]
+  (try
+    (cond
+      (or (= event "connect") (= event "accept"))
+        (do (sku-check (nil? (deref sku-connection)) "NATIVE_SHOP_PRODUCTS_MISSING_SKU_SINGLE_CONNECTION")
+            (reset! sku-connection connection))
+      (= event "data")
+        (do (reset! sku-buffer
+              (buf-concat [(deref sku-buffer) (buf-from-binary payload)]))
+            (sku-drain))
+      (= event "close")
+        (sku-check (deref sku-done) "NATIVE_SHOP_PRODUCTS_MISSING_SKU_PREMATURE_CLOSE")
+      :else nil)
+    (catch [error]
+      (reset! sku-error (error_message error))
+      (reset! sku-done true))))
+
+(sku-check (not (nil? sku-control)) "NATIVE_SHOP_PRODUCTS_MISSING_SKU_HOST_ENV_REQUIRED")
+(sku-check (not (file_exists (str sku-control "/ports.ready")))
+             "NATIVE_SHOP_PRODUCTS_MISSING_SKU_CONTROL_NOT_FRESH")
+(let [bridge-port (tcp-client-free-port) daemon-port (tcp-client-free-port)]
+  (sku-check (and (number? bridge-port) (number? daemon-port)
+                    (not (= bridge-port daemon-port))) "NATIVE_SHOP_PRODUCTS_MISSING_SKU_DISTINCT_PORTS")
+  (sku-check (= (tcp-server-raw bridge-port "native-shop-products-missing-sku-handler" "127.0.0.1") "ok")
+               "NATIVE_SHOP_PRODUCTS_MISSING_SKU_LISTENER_START")
+  (try
+    (do
+      (file_write (str sku-control "/ports.json")
+                  (json_str {"bridge" bridge-port "daemon" daemon-port}))
+      (file_write (str sku-control "/ports.ready") "ready")
+      (let [deadline (+ (now-ms) 30000)]
+        (while (and (< (now-ms) deadline) (not (deref sku-done))) (fl-yield 10)))
+      (sku-check (deref sku-done) "NATIVE_SHOP_PRODUCTS_MISSING_SKU_CONTRACT_TIMEOUT")
+      (if (nil? (deref sku-error)) nil (throw (deref sku-error)))
+      (sku-check (= (deref sku-stage) "done") "NATIVE_SHOP_PRODUCTS_MISSING_SKU_CONTRACT_INCOMPLETE")
+      (sku-check (deref sku-empty) "NATIVE_SHOP_PRODUCTS_MISSING_SKU_EMPTY_RESULT_MISSING")
+      (sku-check (= (buf-len (deref sku-buffer)) 0) "NATIVE_SHOP_PRODUCTS_MISSING_SKU_TRAILING_PACKET_BYTES"))
+    (finally (tcp-server-stop bridge-port))))
+(println (str "NATIVE_SHOP_PRODUCTS_MISSING_SKU_RESULT "
+  (json_str {"ok" true "table" "shop_products" "prepared_parameters" 1
+             "query" "SELECT id, sku, name, price FROM shop_products WHERE sku=?"
+             "bind" ["SKU-MISSING"] "select_executions" 1 "rows" 0
+             "columns" (deref sku-columns) "data" []
+             "empty_result" (deref sku-empty) "err_packets" 0})))
+(println "afj-db95 Native shop missing SKU prepared SELECT PASS")
