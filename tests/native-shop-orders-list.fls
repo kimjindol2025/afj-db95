@@ -1,0 +1,239 @@
+;; Native shop order list fixture agreed in msg_01d31bb51cc9.
+;; Fresh two-order seed and exact four-column ordered prepared SELECT.
+;; Reuses case71 Native transport; fixed host supplies owned process lifetimes.
+(load "../src/sha1.fls")
+(define listing-control (env-get "AFJ_NATIVE_SHOP_ORDERS_LIST_CONTROL"))
+(define listing-connection (atom nil))
+(define listing-buffer (atom ""))
+(define listing-stage (atom "handshake"))
+(define listing-sequence (atom 0))
+(define listing-columns (atom []))
+(define listing-rows (atom []))
+(define listing-error (atom nil))
+(define listing-done (atom false))
+(define listing-statement (atom nil))
+
+(defn listing-check [condition message]
+  (if (= condition true) true (throw message)))
+
+(defn listing-u32 [value]
+  (buf-concat [(buf-u8 (rem value 256))
+               (buf-u8 (rem (floor (/ value 256)) 256))
+               (buf-u8 (rem (floor (/ value 65536)) 256))
+               (buf-u8 (rem (floor (/ value 16777216)) 256))]))
+
+(defn listing-read-u32 [bytes offset]
+  (+ (buf-read-u8 bytes offset)
+     (* 256 (buf-read-u8 bytes (+ offset 1)))
+     (* 65536 (buf-read-u8 bytes (+ offset 2)))
+     (* 16777216 (buf-read-u8 bytes (+ offset 3)))))
+
+(defn listing-send [payload sequence next-stage response-sequence]
+  (let [length (buf-len payload)
+        frame (buf-concat [(buf-slice (listing-u32 length) 0 3)
+                           (buf-u8 sequence) payload])]
+    (reset! listing-stage next-stage)
+    (reset! listing-sequence response-sequence)
+    (listing-check (= (tcp-write (deref listing-connection) (buf-to-binary frame)) "ok")
+                 "NATIVE_SHOP_ORDERS_LIST_PACKET_WRITE")))
+
+(defn listing-command [code text next-stage]
+  (listing-send (buf-concat [(buf-u8 code) (buf-str text)])
+              0 next-stage 1))
+
+(defn listing-text [bytes offset]
+  (listing-check (< offset (buf-len bytes)) "NATIVE_SHOP_ORDERS_LIST_TEXT_PREFIX")
+  (let [length (buf-read-u8 bytes offset) next (+ offset 1 length)]
+    (listing-check (and (< length 251) (<= next (buf-len bytes)))
+                 "NATIVE_SHOP_ORDERS_LIST_TEXT_LENGTH")
+    {"value" (buf-read-str bytes (+ offset 1) length)
+     "next" next}))
+
+(defn listing-column-name [bytes]
+  (loop [index 0 offset 0]
+    (let [field (listing-text bytes offset)]
+      (if (= index 4) (get field "value")
+        (recur (+ index 1) (get field "next"))))))
+
+(defn listing-row-map [bytes]
+  (loop [index 0 offset 0 result {}]
+    (if (= index 4)
+      (do
+        (listing-check (= offset (buf-len bytes)) "NATIVE_SHOP_ORDERS_LIST_ROW_TRAILING_BYTES")
+        result)
+      (let [field (listing-text bytes offset)]
+        (recur (+ index 1) (get field "next")
+               (assoc result (get (deref listing-columns) index)
+                             (get field "value")))))))
+
+(defn listing-login [bytes]
+  (listing-check (= (buf-read-u8 bytes 0) 10) "NATIVE_SHOP_ORDERS_LIST_HANDSHAKE_VERSION")
+  (let [version-end
+          (loop [offset 1]
+            (do
+              (listing-check (< offset (buf-len bytes)) "NATIVE_SHOP_ORDERS_LIST_HANDSHAKE_LENGTH")
+              (if (= (buf-read-u8 bytes offset) 0) offset (recur (+ offset 1)))))
+        first-offset (+ version-end 5)
+        second-offset (+ first-offset 27)]
+    (listing-check (<= (+ second-offset 12) (buf-len bytes))
+                 "NATIVE_SHOP_ORDERS_LIST_SCRAMBLE_LENGTH")
+    (let [scramble (buf-concat [(buf-slice bytes first-offset 8)
+                                (buf-slice bytes second-offset 12)])
+          token (sha1-mysql-native-token "development-only" scramble)
+          login (buf-concat [(listing-u32 172545) (listing-u32 1048576)
+                             (buf-u8 33) (sha1-zero-bytes 23)
+                             (buf-str "root") (buf-u8 0)
+                             (buf-u8 20) token])]
+      (listing-check (= (buf-len token) 20) "NATIVE_SHOP_ORDERS_LIST_TOKEN_LENGTH")
+      (listing-send login 1 "login" 2))))
+
+(defn listing-frame [bytes sequence]
+  (listing-check (> (buf-len bytes) 0) "NATIVE_SHOP_ORDERS_LIST_EMPTY_PACKET")
+  (listing-check (= sequence (deref listing-sequence)) "NATIVE_SHOP_ORDERS_LIST_PACKET_SEQUENCE")
+  (swap! listing-sequence + 1)
+  (let [stage (deref listing-stage) first-byte (buf-read-u8 bytes 0)]
+    (if (= first-byte 255)
+      (if (>= (buf-len bytes) 9)
+        (throw (str "NATIVE_SHOP_ORDERS_LIST_SERVER_ERROR_" stage " code="
+                    (+ (buf-read-u8 bytes 1) (* 256 (buf-read-u8 bytes 2)))
+                    " message=" (buf-read-str bytes 9 (- (buf-len bytes) 9))))
+        (throw (str "NATIVE_SHOP_ORDERS_LIST_SHORT_SERVER_ERROR_" stage)))
+      nil)
+    (cond
+      (= stage "handshake") (listing-login bytes)
+      (= stage "login")
+        (do
+          (listing-check (= first-byte 0) "NATIVE_SHOP_ORDERS_LIST_LOGIN_ACK")
+          (listing-command 3 "CREATE TABLE shop_orders (id INT PRIMARY KEY, product_id INT, qty INT, total INT)"
+                           "create"))
+      (= stage "create")
+        (do
+          (listing-check (= first-byte 0) "NATIVE_SHOP_ORDERS_LIST_CREATE_ACK")
+          (listing-command 3 "INSERT INTO shop_orders (id, product_id, qty, total) VALUES (1, 1, 2, 3000)"
+                           "seed"))
+      (= stage "seed")
+        (do
+          (listing-check (= first-byte 0) "NATIVE_SHOP_ORDERS_LIST_FIRST_SEED_ACK")
+          (listing-command 3 "INSERT INTO shop_orders (id, product_id, qty, total) VALUES (2, 2, 1, 2200)"
+                            "second-seed"))
+      (= stage "second-seed")
+        (do
+          (listing-check (= first-byte 0) "NATIVE_SHOP_ORDERS_LIST_SECOND_SEED_ACK")
+          (listing-command 22 "SELECT id, product_id, qty, total FROM shop_orders ORDER BY id"
+                            "prepare"))
+      (= stage "prepare")
+        (do
+          (listing-check (and (= first-byte 0) (>= (buf-len bytes) 12))
+                       "NATIVE_SHOP_ORDERS_LIST_PREPARE_ACK")
+          (listing-check (and (= (buf-read-u8 bytes 7) 0)
+                            (= (buf-read-u8 bytes 8) 0))
+                       "NATIVE_SHOP_ORDERS_LIST_PREPARE_ZERO_PARAMETERS")
+          (reset! listing-statement (listing-read-u32 bytes 1))
+          (let [execute (buf-concat [(buf-u8 23) (listing-u32 (deref listing-statement))
+                                     (buf-u8 0) (listing-u32 1)])]
+            (listing-send execute 0 "select" 1)))
+      (= stage "select")
+        (do
+          (listing-check (and (= first-byte 4) (= (buf-len bytes) 1))
+                       "NATIVE_SHOP_ORDERS_LIST_SELECT_FOUR_COLUMNS")
+          (reset! listing-stage "columns"))
+      (= stage "columns")
+        (do
+          (swap! listing-columns conj (listing-column-name bytes))
+          (if (= (count (deref listing-columns)) 4)
+            (reset! listing-stage "columns-end") nil))
+      (= stage "columns-end")
+        (do
+          (listing-check (and (= first-byte 254) (= (buf-len bytes) 5))
+                       "NATIVE_SHOP_ORDERS_LIST_COLUMN_EOF")
+          (listing-check (and (= (get (deref listing-columns) 0) "id")
+                            (= (get (deref listing-columns) 1) "product_id")
+                            (= (get (deref listing-columns) 2) "qty")
+                            (= (get (deref listing-columns) 3) "total"))
+                       "NATIVE_SHOP_ORDERS_LIST_ORDER_SCHEMA")
+          (reset! listing-stage "rows"))
+      (= stage "rows")
+        (if (and (= first-byte 254) (= (buf-len bytes) 5))
+          (do
+            (listing-check (= (count (deref listing-rows)) 2)
+                           "NATIVE_SHOP_ORDERS_LIST_EXACTLY_TWO_ROWS")
+            (let [first-row (get (deref listing-rows) 0)
+                  second-row (get (deref listing-rows) 1)]
+              (listing-check (and (= (count (keys first-row)) 4)
+                                  (= (get first-row "id") "1")
+                                  (= (get first-row "product_id") "1")
+                                  (= (get first-row "qty") "2")
+                                  (= (get first-row "total") "3000")
+                                  (= (count (keys second-row)) 4)
+                                  (= (get second-row "id") "2")
+                                  (= (get second-row "product_id") "2")
+                                  (= (get second-row "qty") "1")
+                                  (= (get second-row "total") "2200"))
+                             "NATIVE_SHOP_ORDERS_LIST_EXACT_ORDERED_ORDERS"))
+            (reset! listing-stage "done")
+            (reset! listing-done true))
+          (do
+            (listing-check (< (count (deref listing-rows)) 2)
+                           "NATIVE_SHOP_ORDERS_LIST_EXTRA_ROW")
+            (swap! listing-rows conj (listing-row-map bytes))))
+      :else (throw "NATIVE_SHOP_ORDERS_LIST_UNEXPECTED_STAGE"))))
+
+(defn listing-drain []
+  (if (>= (buf-len (deref listing-buffer)) 4)
+    (let [bytes (deref listing-buffer)
+          length (+ (buf-read-u8 bytes 0) (* 256 (buf-read-u8 bytes 1))
+                     (* 65536 (buf-read-u8 bytes 2)))]
+      (listing-check (<= length 65536) "NATIVE_SHOP_ORDERS_LIST_PACKET_LIMIT")
+      (if (>= (buf-len bytes) (+ 4 length))
+        (do
+          (reset! listing-buffer (buf-slice bytes (+ 4 length)
+                                         (- (buf-len bytes) (+ 4 length))))
+          (listing-frame (buf-slice bytes 4 length) (buf-read-u8 bytes 3))
+          (listing-drain))
+        nil))
+    nil))
+
+(defn native-shop-orders-list-handler [event connection payload peer]
+  (try
+    (cond
+      (or (= event "connect") (= event "accept"))
+        (do (listing-check (nil? (deref listing-connection)) "NATIVE_SHOP_ORDERS_LIST_SINGLE_CONNECTION")
+            (reset! listing-connection connection))
+      (= event "data")
+        (do (reset! listing-buffer
+              (buf-concat [(deref listing-buffer) (buf-from-binary payload)]))
+            (listing-drain))
+      (= event "close")
+        (listing-check (deref listing-done) "NATIVE_SHOP_ORDERS_LIST_PREMATURE_CLOSE")
+      :else nil)
+    (catch [error]
+      (reset! listing-error (error_message error))
+      (reset! listing-done true))))
+
+(listing-check (not (nil? listing-control)) "NATIVE_SHOP_ORDERS_LIST_HOST_ENV_REQUIRED")
+(listing-check (not (file_exists (str listing-control "/ports.ready")))
+             "NATIVE_SHOP_ORDERS_LIST_CONTROL_NOT_FRESH")
+(let [bridge-port (tcp-client-free-port) daemon-port (tcp-client-free-port)]
+  (listing-check (and (number? bridge-port) (number? daemon-port)
+                    (not (= bridge-port daemon-port))) "NATIVE_SHOP_ORDERS_LIST_DISTINCT_PORTS")
+  (listing-check (= (tcp-server-raw bridge-port "native-shop-orders-list-handler" "127.0.0.1") "ok")
+               "NATIVE_SHOP_ORDERS_LIST_LISTENER_START")
+  (try
+    (do
+      (file_write (str listing-control "/ports.json")
+                  (json_str {"bridge" bridge-port "daemon" daemon-port}))
+      (file_write (str listing-control "/ports.ready") "ready")
+      (let [deadline (+ (now-ms) 30000)]
+        (while (and (< (now-ms) deadline) (not (deref listing-done))) (fl-yield 10)))
+      (listing-check (deref listing-done) "NATIVE_SHOP_ORDERS_LIST_CONTRACT_TIMEOUT")
+      (if (nil? (deref listing-error)) nil (throw (deref listing-error)))
+      (listing-check (= (deref listing-stage) "done") "NATIVE_SHOP_ORDERS_LIST_CONTRACT_INCOMPLETE")
+      (listing-check (= (buf-len (deref listing-buffer)) 0) "NATIVE_SHOP_ORDERS_LIST_TRAILING_PACKET_BYTES"))
+    (finally (tcp-server-stop bridge-port))))
+(println (str "NATIVE_SHOP_ORDERS_LIST_RESULT "
+  (json_str {"ok" true "table" "shop_orders" "prepared_parameters" 0
+             "query" "SELECT id, product_id, qty, total FROM shop_orders ORDER BY id"
+             "bind" [] "select_executions" 1 "rows" 2
+             "columns" (deref listing-columns) "data" (deref listing-rows)
+             "exact_ordered_select" true})))
+(println "afj-db95 Native shop orders ordered prepared SELECT PASS")
