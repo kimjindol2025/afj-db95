@@ -1,0 +1,265 @@
+;; Native product-name lookup fixture agreed in msg_079f130c035b.
+;; Prepared name bind Demo Widget must return its exact row from two seeded products.
+(load "../src/sha1.fls")
+(define productname-control (env-get "AFJ_NATIVE_SHOP_PRODUCTS_NAME_CONTROL"))
+(define productname-connection (atom nil))
+(define productname-buffer (atom ""))
+(define productname-stage (atom "handshake"))
+(define productname-sequence (atom 0))
+(define productname-columns (atom []))
+(define productname-rows (atom []))
+(define productname-error (atom nil))
+(define productname-done (atom false))
+(define productname-statement (atom nil))
+
+(defn productname-check [condition message]
+  (if (= condition true) true (throw message)))
+
+(defn productname-u32 [value]
+  (buf-concat [(buf-u8 (rem value 256))
+               (buf-u8 (rem (floor (/ value 256)) 256))
+               (buf-u8 (rem (floor (/ value 65536)) 256))
+               (buf-u8 (rem (floor (/ value 16777216)) 256))]))
+
+(defn productname-read-u32 [bytes offset]
+  (+ (buf-read-u8 bytes offset)
+     (* 256 (buf-read-u8 bytes (+ offset 1)))
+     (* 65536 (buf-read-u8 bytes (+ offset 2)))
+     (* 16777216 (buf-read-u8 bytes (+ offset 3)))))
+
+(defn productname-send [payload sequence next-stage response-sequence]
+  (let [length (buf-len payload)
+        frame (buf-concat [(buf-slice (productname-u32 length) 0 3)
+                           (buf-u8 sequence) payload])]
+    (reset! productname-stage next-stage)
+    (reset! productname-sequence response-sequence)
+    (productname-check (= (tcp-write (deref productname-connection) (buf-to-binary frame)) "ok")
+                 "NATIVE_SHOP_PRODUCTS_NAME_PACKET_WRITE")))
+
+(defn productname-command [code text next-stage]
+  (productname-send (buf-concat [(buf-u8 code) (buf-str text)])
+              0 next-stage 1))
+
+(defn productname-text [bytes offset]
+  (productname-check (< offset (buf-len bytes)) "NATIVE_SHOP_PRODUCTS_NAME_TEXT_PREFIX")
+  (let [length (buf-read-u8 bytes offset) next (+ offset 1 length)]
+    (productname-check (and (< length 251) (<= next (buf-len bytes)))
+                 "NATIVE_SHOP_PRODUCTS_NAME_TEXT_LENGTH")
+    {"value" (buf-read-str bytes (+ offset 1) length)
+     "next" next}))
+
+(defn productname-column-name [bytes]
+  (loop [index 0 offset 0]
+    (let [field (productname-text bytes offset)]
+      (if (= index 4) (get field "value")
+        (recur (+ index 1) (get field "next"))))))
+
+(defn productname-login [bytes]
+  (productname-check (= (buf-read-u8 bytes 0) 10) "NATIVE_SHOP_PRODUCTS_NAME_HANDSHAKE_VERSION")
+  (let [version-end
+          (loop [offset 1]
+            (do
+              (productname-check (< offset (buf-len bytes)) "NATIVE_SHOP_PRODUCTS_NAME_HANDSHAKE_LENGTH")
+              (if (= (buf-read-u8 bytes offset) 0) offset (recur (+ offset 1)))))
+        first-offset (+ version-end 5)
+        second-offset (+ first-offset 27)]
+    (productname-check (<= (+ second-offset 12) (buf-len bytes))
+                 "NATIVE_SHOP_PRODUCTS_NAME_SCRAMBLE_LENGTH")
+    (let [scramble (buf-concat [(buf-slice bytes first-offset 8)
+                                (buf-slice bytes second-offset 12)])
+          token (sha1-mysql-native-token "development-only" scramble)
+          login (buf-concat [(productname-u32 172545) (productname-u32 1048576)
+                             (buf-u8 33) (sha1-zero-bytes 23)
+                             (buf-str "root") (buf-u8 0)
+                             (buf-u8 20) token])]
+      (productname-check (= (buf-len token) 20) "NATIVE_SHOP_PRODUCTS_NAME_TOKEN_LENGTH")
+      (productname-send login 1 "login" 2))))
+
+
+(define productname-setup
+  ["CREATE TABLE shop_products (id INT PRIMARY KEY, sku TEXT, name TEXT, price INT)"
+   "INSERT INTO shop_products (id, sku, name, price) VALUES (1, 'SKU-1', 'Demo Widget', 1500)"
+   "INSERT INTO shop_products (id, sku, name, price) VALUES (2, 'SKU-2', 'Demo Gadget', 2200)"])
+(define productname-queries
+  [{"sql" "SELECT id, sku, name, price FROM shop_products WHERE name=?"
+    "bind" ["Demo Widget"] "response" "resultset" "columns" ["id" "sku" "name" "price"]
+    "row-count" 1 "expected-row" {"id" "1" "sku" "SKU-1" "name" "Demo Widget" "price" "1500"}}])
+(define productname-setup-index (atom 0))
+(define productname-query-index (atom 0))
+(define productname-results (atom []))
+(define productname-column-count (atom 0))
+
+(defn productname-row-map [bytes]
+  (loop [index 0 offset 0 result {}]
+    (if (= index (deref productname-column-count))
+      (do
+        (productname-check (= offset (buf-len bytes)) "NATIVE_SHOP_PRODUCTS_NAME_ROW_TRAILING_BYTES")
+        result)
+      (let [field (productname-text bytes offset)]
+        (recur (+ index 1) (get field "next")
+               (assoc result (get (deref productname-columns) index) (get field "value")))))))
+
+(defn productname-prepare-current []
+  (reset! productname-columns [])
+  (reset! productname-rows [])
+  (productname-command 22 (get (get productname-queries (deref productname-query-index)) "sql") "prepare"))
+
+(defn productname-finish-result []
+  (let [index (deref productname-query-index)
+        query (get productname-queries index)
+        rows (deref productname-rows)]
+    (productname-check (= (count rows) (get query "row-count"))
+                    "NATIVE_SHOP_PRODUCTS_NAME_EXACT_ROW_COUNT")
+    (if (= (get query "row-count") 1)
+      (doseq [column (get query "columns")]
+        (productname-check (= (get (get rows 0) column)
+                           (get (get query "expected-row") column))
+                        "NATIVE_SHOP_PRODUCTS_NAME_EXACT_ROW_VALUE"))
+      nil)
+    (swap! productname-results conj
+           {"query" (get query "sql") "bind" (get query "bind")
+            "response" (get query "response") "rows" (count rows) "columns" (deref productname-columns) "data" rows})
+    (if (< (+ index 1) (count productname-queries))
+      (do (swap! productname-query-index + 1) (productname-prepare-current))
+      (do (reset! productname-stage "done") (reset! productname-done true)))))
+
+(defn productname-frame [bytes sequence]
+  (productname-check (> (buf-len bytes) 0) "NATIVE_SHOP_PRODUCTS_NAME_EMPTY_PACKET")
+  (productname-check (= sequence (deref productname-sequence)) "NATIVE_SHOP_PRODUCTS_NAME_PACKET_SEQUENCE")
+  (swap! productname-sequence + 1)
+  (let [stage (deref productname-stage) first-byte (buf-read-u8 bytes 0)]
+    (if (= first-byte 255)
+      (if (>= (buf-len bytes) 9)
+        (throw (str "NATIVE_SHOP_PRODUCTS_NAME_SERVER_ERROR_" stage " code="
+                    (+ (buf-read-u8 bytes 1) (* 256 (buf-read-u8 bytes 2)))
+                    " message=" (buf-read-str bytes 9 (- (buf-len bytes) 9))))
+        (throw "NATIVE_SHOP_PRODUCTS_NAME_SHORT_SERVER_ERROR"))
+      nil)
+    (cond
+      (= stage "handshake") (productname-login bytes)
+      (= stage "login")
+        (do (productname-check (= first-byte 0) "NATIVE_SHOP_PRODUCTS_NAME_LOGIN_ACK")
+            (productname-command 3 (get productname-setup 0) "setup"))
+      (= stage "setup")
+        (do
+          (productname-check (= first-byte 0) "NATIVE_SHOP_PRODUCTS_NAME_SETUP_ACK")
+          (swap! productname-setup-index + 1)
+          (if (< (deref productname-setup-index) (count productname-setup))
+            (productname-command 3 (get productname-setup (deref productname-setup-index)) "setup")
+            (productname-prepare-current)))
+      (= stage "prepare")
+        (let [parameters (count (get (get productname-queries (deref productname-query-index)) "bind"))]
+          (productname-check (and (= first-byte 0) (>= (buf-len bytes) 12))
+                          "NATIVE_SHOP_PRODUCTS_NAME_PREPARE_ACK")
+          (productname-check (and (= (buf-read-u8 bytes 7) parameters)
+                               (= (buf-read-u8 bytes 8) 0))
+                          "NATIVE_SHOP_PRODUCTS_NAME_PARAMETER_COUNT")
+          (reset! productname-statement (productname-read-u32 bytes 1))
+          (let [bind (get (get productname-queries (deref productname-query-index)) "bind")
+                execute (atom (buf-concat [(buf-u8 23) (productname-u32 (deref productname-statement))
+                                           (buf-u8 0) (productname-u32 1)
+                                           (buf-u8 0) (buf-u8 1)]))]
+            ;; Existing Native INT32 and VAR_STRING parameter types.
+            (doseq [value bind]
+              (productname-check (or (number? value) (string? value))
+                            "NATIVE_SHOP_PRODUCTS_NAME_BIND_TYPE")
+              (reset! execute (buf-concat [(deref execute)
+                                           (buf-u8 (if (number? value) 3 253)) (buf-u8 0)])))
+            (doseq [value bind]
+              (let [encoded (if (number? value)
+                              (productname-u32 value)
+                              (let [text (buf-str value)]
+                                (productname-check (< (buf-len text) 251)
+                                              "NATIVE_SHOP_PRODUCTS_NAME_SHORT_TEXT_BIND")
+                                (buf-concat [(buf-u8 (buf-len text)) text])))]
+                (reset! execute (buf-concat [(deref execute) encoded]))))
+            (productname-send (deref execute) 0 "select" 1)))
+      (= stage "select")
+        (let [query (get productname-queries (deref productname-query-index))]
+          (productname-check (and (= (buf-len bytes) 1)
+                             (= first-byte (count (get query "columns"))))
+                        "NATIVE_SHOP_PRODUCTS_NAME_RESULT_HEADER")
+          (reset! productname-column-count first-byte)
+          (reset! productname-stage "columns"))
+      (= stage "columns")
+        (do
+          (swap! productname-columns conj (productname-column-name bytes))
+          (if (= (count (deref productname-columns)) (deref productname-column-count))
+            (reset! productname-stage "columns-end") nil))
+      (= stage "columns-end")
+        (do
+          (productname-check (and (= first-byte 254) (= (buf-len bytes) 5))
+                          "NATIVE_SHOP_PRODUCTS_NAME_COLUMN_EOF")
+          ;; An empty result need not expose id metadata; ERR and rows remain strict.
+          (if (= (get (get productname-queries (deref productname-query-index)) "row-count") 0) nil
+            (productname-check (= (deref productname-columns)
+                               (get (get productname-queries (deref productname-query-index)) "columns"))
+                            "NATIVE_SHOP_PRODUCTS_NAME_RESULT_SCHEMA"))
+          (reset! productname-stage "rows"))
+      (= stage "rows")
+        (if (and (= first-byte 254) (= (buf-len bytes) 5))
+          (productname-finish-result)
+          (do
+            (productname-check (< (count (deref productname-rows))
+                               (get (get productname-queries (deref productname-query-index)) "row-count"))
+                            "NATIVE_SHOP_PRODUCTS_NAME_EXTRA_ROW")
+            (swap! productname-rows conj (productname-row-map bytes))))
+      :else (throw "NATIVE_SHOP_PRODUCTS_NAME_UNEXPECTED_STAGE"))))
+(defn productname-drain []
+  (if (>= (buf-len (deref productname-buffer)) 4)
+    (let [bytes (deref productname-buffer)
+          length (+ (buf-read-u8 bytes 0) (* 256 (buf-read-u8 bytes 1))
+                     (* 65536 (buf-read-u8 bytes 2)))]
+      (productname-check (<= length 65536) "NATIVE_SHOP_PRODUCTS_NAME_PACKET_LIMIT")
+      (if (>= (buf-len bytes) (+ 4 length))
+        (do
+          (reset! productname-buffer (buf-slice bytes (+ 4 length)
+                                         (- (buf-len bytes) (+ 4 length))))
+          (productname-frame (buf-slice bytes 4 length) (buf-read-u8 bytes 3))
+          (productname-drain))
+        nil))
+    nil))
+
+(defn native-shop-products-name-handler [event connection payload peer]
+  (try
+    (cond
+      (or (= event "connect") (= event "accept"))
+        (do (productname-check (nil? (deref productname-connection)) "NATIVE_SHOP_PRODUCTS_NAME_SINGLE_CONNECTION")
+            (reset! productname-connection connection))
+      (= event "data")
+        (do (reset! productname-buffer
+              (buf-concat [(deref productname-buffer) (buf-from-binary payload)]))
+            (productname-drain))
+      (= event "close")
+        (productname-check (deref productname-done) "NATIVE_SHOP_PRODUCTS_NAME_PREMATURE_CLOSE")
+      :else nil)
+    (catch [error]
+      (reset! productname-error (error_message error))
+      (reset! productname-done true))))
+
+(productname-check (not (nil? productname-control)) "NATIVE_SHOP_PRODUCTS_NAME_HOST_ENV_REQUIRED")
+(productname-check (not (file_exists (str productname-control "/ports.ready")))
+             "NATIVE_SHOP_PRODUCTS_NAME_CONTROL_NOT_FRESH")
+(let [bridge-port (tcp-client-free-port) daemon-port (tcp-client-free-port)]
+  (productname-check (and (number? bridge-port) (number? daemon-port)
+                    (not (= bridge-port daemon-port))) "NATIVE_SHOP_PRODUCTS_NAME_DISTINCT_PORTS")
+  (productname-check (= (tcp-server-raw bridge-port "native-shop-products-name-handler" "127.0.0.1") "ok")
+               "NATIVE_SHOP_PRODUCTS_NAME_LISTENER_START")
+  (try
+    (do
+      (file_write (str productname-control "/ports.json")
+                  (json_str {"bridge" bridge-port "daemon" daemon-port}))
+      (file_write (str productname-control "/ports.ready") "ready")
+      (let [deadline (+ (now-ms) 30000)]
+        (while (and (< (now-ms) deadline) (not (deref productname-done))) (fl-yield 10)))
+      (productname-check (deref productname-done) "NATIVE_SHOP_PRODUCTS_NAME_CONTRACT_TIMEOUT")
+      (if (nil? (deref productname-error)) nil (throw (deref productname-error)))
+      (productname-check (= (deref productname-stage) "done") "NATIVE_SHOP_PRODUCTS_NAME_CONTRACT_INCOMPLETE")
+      (productname-check (= (buf-len (deref productname-buffer)) 0) "NATIVE_SHOP_PRODUCTS_NAME_TRAILING_PACKET_BYTES"))
+    (finally (tcp-server-stop bridge-port))))
+(productname-check (= (count (deref productname-results)) 1) "NATIVE_SHOP_PRODUCTS_NAME_ONE_RESULT")
+(println (str "NATIVE_SHOP_PRODUCTS_NAME_RESULT "
+  (json_str {"ok" true "prepared_executions" 1 "prepared_select_executions" 1
+             "rows" 1 "exact_name_select" true "err_packets" 0
+             "results" (deref productname-results)})))
+(println "afj-db95 Native shop product name prepared SELECT PASS")
