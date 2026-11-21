@@ -1,0 +1,168 @@
+{
+  "schema": "db95-native-prepared-wire-packet-frames-v1",
+  "status": "SCOPED_PASS",
+  "date_local": "2026-11-21 Asia/Seoul",
+  "commercial": "HOLD",
+  "deployment": "NO",
+  "source": {
+    "baseHead": "30805723ab74106d4d946af6fe9dda21b350610e",
+    "newFlTest": "tests/native-mariadb-prepared-packets.fls",
+    "sourceSha256": {
+      "tests/native-mariadb-prepared-packets.fls": "09b626cd02857e06ceee007107b82ba75e6993797d252a82b47b527d09936686",
+      "src/mariadb-wire.fls": "ad22ba6ae03fa70388c6b3a0d1a930e574595b67e5cf58421ef3ea33b3c5c4ff",
+      "src/sha1.fls": "6fc4c3def2d56c4ff7eb76c7cd7917b6e268bdc070a75fe90959a49a08bf39cf"
+    },
+    "frozenSourceFilesIncludingNewTest": 430,
+    "newFlFiles": 1,
+    "existingCodecOrDaemonChanged": false,
+    "parserCompilerRuntimeOrTlsChanges": 0,
+    "allSourceAndSdkBytesUnchangedDuringTrial": true
+  },
+  "toolchain": {
+    "sdkManifestSha256": "c5c90ed5234dc8d5d321fe63950c6c20f87f9f12ac9e51bc4c2edc4ef0101233",
+    "compilerSha256": "f514e043d3f08115e273717462595a69ffd0522614aad5666dec576f04a46dac",
+    "runtimeArchiveSha256": "fe4308c19eba2142049100c17ac08979b5787c1698b6d5e0e9e082a1f6e691fe",
+    "freshGeneratedCSha256": "4c2da0bb7bacc4ab8d7b683ed1265e11affb8c7deb5ae69f43f59cbf031fce0f",
+    "freshElfSha256": "12836d5f38a5d94f12814a7851ddf3b2c1bcb9c769a02c6285e4d7bc06fef0ab",
+    "freshAot": true,
+    "gccFlagsUnchanged": true
+  },
+  "contract": {
+    "scope": "independent Native codec PREPARE/prepare ACK/bind/EXECUTE frame contract",
+    "frameCount": 3,
+    "checksPassed": 30,
+    "checksTotal": 30,
+    "prepare": {
+      "opcode": 22,
+      "sequence": 0,
+      "sql": "INSERT INTO packet_products (id,sku) VALUES (?,?)",
+      "placeholders": 2
+    },
+    "prepareAck": {
+      "sequence": 1,
+      "payloadBytes": 12,
+      "statementId": 16909060,
+      "statementIdHex": "0x01020304",
+      "statementIdLittleEndianBytes": [
+        4,
+        3,
+        2,
+        1
+      ],
+      "parameters": 2,
+      "columns": 0
+    },
+    "execute": {
+      "opcode": 23,
+      "sequence": 0,
+      "payloadBytes": 32,
+      "statementId": 16909060,
+      "flags": 0,
+      "iterationCount": 1,
+      "nullBitmap": 0,
+      "newTypes": 1,
+      "types": [
+        3,
+        253
+      ],
+      "unsigned": [
+        false,
+        false
+      ],
+      "values": [
+        513,
+        "packet-bind"
+      ],
+      "integerLittleEndianBytes": [
+        1,
+        2,
+        0,
+        0
+      ],
+      "stringLength": 11,
+      "decodedNextOffset": 32
+    },
+    "boundSql": "INSERT INTO packet_products (id,sku) VALUES (513,'packet-bind')",
+    "case71ClientUsed": false,
+    "liveDaemonExecuted": false,
+    "original66ProxyIntegrationCovered": false,
+    "existingCodecUsedWithoutModification": true
+  },
+  "observation": {
+    "passed": 1,
+    "total": 1,
+    "attempts": 1,
+    "hostExit": 0,
+    "wholeTrialSecondsIncludingFreshAot": 7.840209374997357,
+    "typedResult": {
+      "ok": true,
+      "frames": 3,
+      "prepared_parameters": 2,
+      "statement_id": 16909060,
+      "types": [
+        3,
+        253
+      ],
+      "values": [
+        513,
+        "packet-bind"
+      ],
+      "execute_payload_bytes": 32,
+      "sql_binding": "INSERT INTO packet_products (id,sku) VALUES (513,'packet-bind')",
+      "checks": 30
+    },
+    "nativeUnitElfExecutions": 1,
+    "daemonExecutions": 0,
+    "case71ClientExecutions": 0,
+    "stdoutSha256": "4600838430eed0ab55900da18e78286faa43175225cf046a9b1403e782ddda2d"
+  },
+  "bounds": {
+    "freshAotAndRuntimeSeconds": 120,
+    "addressSpaceBytes": 2147483648,
+    "sharedFlock": "existing /tmp/fl-heavy.lock; no force release",
+    "automaticRetries": 0
+  },
+  "audit": {
+    "traceSha256": "358a87a22d7184873df94a1108dbb8d12e0b29ad6b202543712cc7052f798d85",
+    "decodedExecs": 14,
+    "resumedExecsJoined": 6,
+    "allTerminalExecStatusesParsed": true,
+    "successfulNodeFamilyExecs": 0,
+    "failedNodeFamilyAttempts": 0,
+    "successfulPythonExecs": 0,
+    "allowedPrivateControllerPythonExecs": 0,
+    "successfulBasenameCounts": {
+      "as": 1,
+      "bash": 1,
+      "bwrap": 1,
+      "case-bin": 1,
+      "cc1": 2,
+      "collect2": 1,
+      "flc": 2,
+      "gcc": 2,
+      "grep": 1,
+      "ld": 1,
+      "timeout": 1
+    },
+    "timedTraceSha256": "14607823bd9aeb4f4f79c45081e42f9a9b49cd6cffae91258bd8ac4cb16f2e90",
+    "privatePythonQualifierOutsideProductTrace": 1,
+    "privateControllerSha256": "c62b4880d89f185a2bbacc1bf4eef6d7dd5cf62d25cf130a81eb9d71534072dd",
+    "privateReceiptSha256": "0b1d0f7b33dcf1c9b085a38c154bc185fdac8165a614b4ea3fc05338a621ea2d"
+  },
+  "preserved": {
+    "original66Input": "tests/mariadb-wire-prepared.js",
+    "original66InputSha256": "0dad73db1fa5c2f3e5edfa9afba6cda553be17b92da0ab5a0f37e42a13b7421b",
+    "originalJsAdapterSha256": "23f0c0c854440db1b88188d92189d5b2ec2d6845c0357c24d2aafb05a4f6f7bd",
+    "original66NativeGate": "FAIL retained; no JS port or proxy integration qualification",
+    "originalReleaseGateSha256": "e464a355883b76a7780707f5acb2a19f187a21961f6eaa2653abe828aa583f99",
+    "nativeReleaseGateSha256": "662e50036dbc8ec5abd7fafe6e3179f1a91427dc32fe3d1cfe4b36190888c250",
+    "existingPacketCodecCommit": "30805723ab74106d4d946af6fe9dda21b350610e",
+    "existingPreparedClientCommit": "28d41e38efe6b5d3eb0e6f4dda952bfa57860e6c",
+    "existingPreparedClientSha256": "76d33e64e3576560b814f7ba716273859cbbec81ea718417ec8079ea70177625",
+    "existingPreparedClientUsedForThisPass": false,
+    "walCommit": "1e55d063fe11b3905d79b2ca203f5eb384a7e317",
+    "existing349RegressionChecks": "retained; not rerun for a new independent packet test",
+    "original25": "TIMEOUT FAIL retained; unrelated local one-byte fixture change remains uncommitted",
+    "whole71GateRerun": false
+  }
+}
