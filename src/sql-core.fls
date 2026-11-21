@@ -269,6 +269,19 @@
 (defn parse-select-standard [raw-tokens]
   (let [tokens (sql-select-projection-tokens raw-tokens)]
   (if (and (= (count tokens) 6)
+           (= (str_upper (token-at tokens 1)) "COUNT(*)")
+           (keyword? (token-at tokens 2) "FROM")
+           (keyword? (token-at tokens 4) "WHERE")
+           (regex_match (token-at tokens 3) "^[A-Za-z_][A-Za-z0-9_]*$")
+           (= (count (regex_split (token-at tokens 5) "=")) 2)
+           (regex_match (first (regex_split (token-at tokens 5) "="))
+                        "^[A-Za-z_][A-Za-z0-9_]*$"))
+    (let [predicate (sql-assignment (token-at tokens 5))]
+      {"type" "select" "table" (token-at tokens 3)
+       "aggregate" {"function" "count" "column" "*" "alias" "COUNT(*)"}
+       "where" {"column" (get predicate "column")
+                 "equals" (get predicate "value")}})
+  (if (and (= (count tokens) 6)
            (keyword? (token-at tokens 2) "FROM")
            (keyword? (token-at tokens 4) "WHERE")
            (regex_match (token-at tokens 1) "^[A-Za-z_][A-Za-z0-9_]*(,[A-Za-z_][A-Za-z0-9_]*)*$")
@@ -329,7 +342,7 @@
          "join" {"type" "left" "table" join-table
                  "table-alias" join-alias "left" join-left "right" join-right}
          "group-by" group-by "order-by" order-by})
-      (parse-select-basic tokens)))))))
+      (parse-select-basic tokens))))))))
 
 (defn sql-join-qualified-column? [column]
   (regex_match column "^[A-Za-z_][A-Za-z0-9_]*\\.[A-Za-z_][A-Za-z0-9_]*$"))
@@ -936,6 +949,19 @@
     (if (= rejected true) true
       (throw "qualified IFNULL SUM WHERE scope guard failure"))))
 (println "afj-db95 qualified IFNULL SUM WHERE scope guards PASS")
+
+(doseq [query
+        ["SELECT COUNT(*) FROM shop_cart WHERE user_id=10 AND id=1"
+         "SELECT COUNT(*) FROM shop_cart WHERE user_id=10 ORDER BY id"
+         "SELECT COUNT(qty) FROM shop_cart WHERE user_id=10"
+         "SELECT COUNT(*) AS n FROM shop_cart WHERE user_id=10"]]
+  (let [rejected (try
+                   (do (parse-sql query) false)
+                   (catch [error]
+                     (str-includes (error_message error) "unsupported SELECT form")))]
+    (if (= rejected true) true
+      (throw "COUNT WHERE scope guard failure"))))
+(println "afj-db95 COUNT WHERE scope guards PASS")
 
 (doseq [query
         ["SELECT shop_cart.qty * shop_products.price FROM shop_cart JOIN shop_products ON shop_cart.product_id = shop_products.id ORDER BY other.id"

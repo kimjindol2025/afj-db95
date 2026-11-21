@@ -837,7 +837,12 @@
                        (nil? (deref total)))
                 0
                 (deref total)))])
-  (let [groups (atom {})
+  (let [groups (atom (if (and (= (get aggregate "function") "count")
+                              (= (get aggregate "column") "*")
+                              (= (count group-by) 0)
+                              (= (count rows) 0))
+                       {"__all__" {"group" "__all__" "count" 0}}
+                       {}))
         count-column (get aggregate "column")]
     (doseq [row rows]
       (let [key (if (= (count group-by) 0)

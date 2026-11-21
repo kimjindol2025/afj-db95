@@ -1,0 +1,225 @@
+;; Native empty per-user cart COUNT fixture agreed in msg_739fad3619cb.
+;; Only user20 seeded; COUNT(*) for user10 must be one server text0 row, no IFNULL/client conversion.
+(load "../src/sha1.fls")
+(define emptycount-control (env-get "AFJ_NATIVE_SHOP_CART_USER_EMPTY_COUNT_CONTROL"))
+(define emptycount-connection (atom nil))
+(define emptycount-buffer (atom ""))
+(define emptycount-stage (atom "handshake"))
+(define emptycount-sequence (atom 0))
+(define emptycount-columns (atom []))
+(define emptycount-rows (atom []))
+(define emptycount-error (atom nil))
+(define emptycount-done (atom false))
+(define emptycount-statement (atom nil))
+
+(defn emptycount-check [condition message]
+  (if (= condition true) true (throw message)))
+
+(defn emptycount-u32 [value]
+  (buf-concat [(buf-u8 (rem value 256))
+               (buf-u8 (rem (floor (/ value 256)) 256))
+               (buf-u8 (rem (floor (/ value 65536)) 256))
+               (buf-u8 (rem (floor (/ value 16777216)) 256))]))
+
+(defn emptycount-read-u32 [bytes offset]
+  (+ (buf-read-u8 bytes offset)
+     (* 256 (buf-read-u8 bytes (+ offset 1)))
+     (* 65536 (buf-read-u8 bytes (+ offset 2)))
+     (* 16777216 (buf-read-u8 bytes (+ offset 3)))))
+
+(defn emptycount-send [payload sequence next-stage response-sequence]
+  (let [length (buf-len payload)
+        frame (buf-concat [(buf-slice (emptycount-u32 length) 0 3)
+                           (buf-u8 sequence) payload])]
+    (reset! emptycount-stage next-stage)
+    (reset! emptycount-sequence response-sequence)
+    (emptycount-check (= (tcp-write (deref emptycount-connection) (buf-to-binary frame)) "ok")
+                 "NATIVE_SHOP_CART_USER_EMPTY_COUNT_PACKET_WRITE")))
+
+(defn emptycount-command [code text next-stage]
+  (emptycount-send (buf-concat [(buf-u8 code) (buf-str text)])
+              0 next-stage 1))
+
+(defn emptycount-text [bytes offset]
+  (emptycount-check (< offset (buf-len bytes)) "NATIVE_SHOP_CART_USER_EMPTY_COUNT_TEXT_PREFIX")
+  (let [length (buf-read-u8 bytes offset) next (+ offset 1 length)]
+    (emptycount-check (and (< length 251) (<= next (buf-len bytes)))
+                 "NATIVE_SHOP_CART_USER_EMPTY_COUNT_TEXT_LENGTH")
+    {"value" (buf-read-str bytes (+ offset 1) length)
+     "next" next}))
+
+(defn emptycount-column-name [bytes]
+  (loop [index 0 offset 0]
+    (let [field (emptycount-text bytes offset)]
+      (if (= index 4) (get field "value")
+        (recur (+ index 1) (get field "next"))))))
+
+(defn emptycount-login [bytes]
+  (emptycount-check (= (buf-read-u8 bytes 0) 10) "NATIVE_SHOP_CART_USER_EMPTY_COUNT_HANDSHAKE_VERSION")
+  (let [version-end
+          (loop [offset 1]
+            (do
+              (emptycount-check (< offset (buf-len bytes)) "NATIVE_SHOP_CART_USER_EMPTY_COUNT_HANDSHAKE_LENGTH")
+              (if (= (buf-read-u8 bytes offset) 0) offset (recur (+ offset 1)))))
+        first-offset (+ version-end 5)
+        second-offset (+ first-offset 27)]
+    (emptycount-check (<= (+ second-offset 12) (buf-len bytes))
+                 "NATIVE_SHOP_CART_USER_EMPTY_COUNT_SCRAMBLE_LENGTH")
+    (let [scramble (buf-concat [(buf-slice bytes first-offset 8)
+                                (buf-slice bytes second-offset 12)])
+          token (sha1-mysql-native-token "development-only" scramble)
+          login (buf-concat [(emptycount-u32 172545) (emptycount-u32 1048576)
+                             (buf-u8 33) (sha1-zero-bytes 23)
+                             (buf-str "root") (buf-u8 0)
+                             (buf-u8 20) token])]
+      (emptycount-check (= (buf-len token) 20) "NATIVE_SHOP_CART_USER_EMPTY_COUNT_TOKEN_LENGTH")
+      (emptycount-send login 1 "login" 2))))
+
+(defn emptycount-frame [bytes sequence]
+  (emptycount-check (> (buf-len bytes) 0) "NATIVE_SHOP_CART_USER_EMPTY_COUNT_EMPTY_PACKET")
+  (emptycount-check (= sequence (deref emptycount-sequence)) "NATIVE_SHOP_CART_USER_EMPTY_COUNT_PACKET_SEQUENCE")
+  (swap! emptycount-sequence + 1)
+  (let [stage (deref emptycount-stage) first-byte (buf-read-u8 bytes 0)]
+    (if (= first-byte 255)
+      (if (>= (buf-len bytes) 9)
+        (throw (str "NATIVE_SHOP_CART_USER_EMPTY_COUNT_SERVER_ERROR_" stage " code="
+                    (+ (buf-read-u8 bytes 1) (* 256 (buf-read-u8 bytes 2)))
+                    " message=" (buf-read-str bytes 9 (- (buf-len bytes) 9))))
+        (throw (str "NATIVE_SHOP_CART_USER_EMPTY_COUNT_SHORT_SERVER_ERROR_" stage)))
+      nil)
+    (cond
+      (= stage "handshake") (emptycount-login bytes)
+      (= stage "login")
+        (do
+          (emptycount-check (= first-byte 0) "NATIVE_SHOP_CART_USER_EMPTY_COUNT_LOGIN_ACK")
+          (emptycount-command 3 "CREATE TABLE shop_products (id INT PRIMARY KEY, sku TEXT, name TEXT, price INT)"
+                           "create"))
+      (= stage "create")
+        (do
+          (emptycount-check (= first-byte 0) "NATIVE_SHOP_CART_USER_EMPTY_COUNT_CREATE_ACK")
+          (emptycount-command 3 "INSERT INTO shop_products (id, sku, name, price) VALUES (1, 'SKU-1', 'Demo Widget', 1500)"
+                           "seed"))
+      (= stage "seed")
+        (do
+          (emptycount-check (= first-byte 0) "NATIVE_SHOP_CART_USER_EMPTY_COUNT_FIRST_SEED_ACK")
+          (emptycount-command 3 "INSERT INTO shop_products (id, sku, name, price) VALUES (2, 'SKU-2', 'Demo Gadget', 2200)"
+                            "second-seed"))
+      (= stage "second-seed")
+        (do
+          (emptycount-check (= first-byte 0) "NATIVE_SHOP_CART_USER_EMPTY_COUNT_SECOND_PRODUCT_SEED_ACK")
+          (emptycount-command 3 "CREATE TABLE shop_cart (id INT PRIMARY KEY, user_id INT, product_id INT, qty INT)" "cart-create"))
+      (= stage "cart-create")
+        (do
+          (emptycount-check (= first-byte 0) "NATIVE_SHOP_CART_USER_EMPTY_COUNT_CART_CREATE_ACK")
+          (emptycount-command 3 "INSERT INTO shop_cart (id, user_id, product_id, qty) VALUES (2, 20, 2, 1)" "second-cart-seed"))
+      (= stage "second-cart-seed")
+        (do
+          (emptycount-check (= first-byte 0) "NATIVE_SHOP_CART_USER_EMPTY_COUNT_SINGLE_CART_SEED_ACK")
+          (emptycount-command 22 "SELECT COUNT(*) FROM shop_cart WHERE user_id=?" "prepare"))
+      (= stage "prepare")
+        (do
+          (emptycount-check (and (= first-byte 0) (>= (buf-len bytes) 12))
+                       "NATIVE_SHOP_CART_USER_EMPTY_COUNT_PREPARE_ACK")
+          (emptycount-check (and (= (buf-read-u8 bytes 7) 1)
+                            (= (buf-read-u8 bytes 8) 0))
+                       "NATIVE_SHOP_CART_USER_EMPTY_COUNT_PREPARE_ONE_PARAMETER")
+          (reset! emptycount-statement (emptycount-read-u32 bytes 1))
+          (let [execute (buf-concat [(buf-u8 23) (emptycount-u32 (deref emptycount-statement))
+                                     (buf-u8 0) (emptycount-u32 1)
+                                     (buf-u8 0) (buf-u8 1) (buf-u8 3) (buf-u8 0)
+                                     (emptycount-u32 10)])]
+            (emptycount-send execute 0 "select" 1)))
+      (= stage "select")
+        (do
+          (emptycount-check (and (= first-byte 1) (= (buf-len bytes) 1))
+                       "NATIVE_SHOP_CART_USER_EMPTY_COUNT_SELECT_ONE_COLUMN")
+          (reset! emptycount-stage "columns"))
+      (= stage "columns")
+        (do
+          (swap! emptycount-columns conj (emptycount-column-name bytes))
+          (if (= (count (deref emptycount-columns)) 1)
+            (reset! emptycount-stage "columns-end") nil))
+      (= stage "columns-end")
+        (do
+          (emptycount-check (and (= first-byte 254) (= (buf-len bytes) 5))
+                       "NATIVE_SHOP_CART_USER_EMPTY_COUNT_COLUMN_EOF")
+          (emptycount-check (> (count (get (deref emptycount-columns) 0)) 0)
+                         "NATIVE_SHOP_CART_USER_EMPTY_COUNT_EXPRESSION_COLUMN")
+          (reset! emptycount-stage "rows"))
+      (= stage "rows")
+        (if (and (= first-byte 254) (= (buf-len bytes) 5))
+          (do
+            (emptycount-check (= (count (deref emptycount-rows)) 1)
+                           "NATIVE_SHOP_CART_USER_EMPTY_COUNT_EXACTLY_ONE_ROW")
+            (emptycount-check (= (get (deref emptycount-rows) 0) "0")
+                           "NATIVE_SHOP_CART_USER_EMPTY_COUNT_EXACT_SERVER_TOTAL")
+            (reset! emptycount-stage "done")
+            (reset! emptycount-done true))
+          (do
+            (emptycount-check (< (count (deref emptycount-rows)) 1)
+                           "NATIVE_SHOP_CART_USER_EMPTY_COUNT_EXTRA_ROW")
+            (let [field (emptycount-text bytes 0)]
+              (emptycount-check (= (get field "next") (buf-len bytes))
+                             "NATIVE_SHOP_CART_USER_EMPTY_COUNT_ROW_TRAILING_BYTES")
+              (swap! emptycount-rows conj (get field "value")))))
+      :else (throw "NATIVE_SHOP_CART_USER_EMPTY_COUNT_UNEXPECTED_STAGE"))))
+
+(defn emptycount-drain []
+  (if (>= (buf-len (deref emptycount-buffer)) 4)
+    (let [bytes (deref emptycount-buffer)
+          length (+ (buf-read-u8 bytes 0) (* 256 (buf-read-u8 bytes 1))
+                     (* 65536 (buf-read-u8 bytes 2)))]
+      (emptycount-check (<= length 65536) "NATIVE_SHOP_CART_USER_EMPTY_COUNT_PACKET_LIMIT")
+      (if (>= (buf-len bytes) (+ 4 length))
+        (do
+          (reset! emptycount-buffer (buf-slice bytes (+ 4 length)
+                                         (- (buf-len bytes) (+ 4 length))))
+          (emptycount-frame (buf-slice bytes 4 length) (buf-read-u8 bytes 3))
+          (emptycount-drain))
+        nil))
+    nil))
+
+(defn native-shop-cart-user-empty-count-handler [event connection payload peer]
+  (try
+    (cond
+      (or (= event "connect") (= event "accept"))
+        (do (emptycount-check (nil? (deref emptycount-connection)) "NATIVE_SHOP_CART_USER_EMPTY_COUNT_SINGLE_CONNECTION")
+            (reset! emptycount-connection connection))
+      (= event "data")
+        (do (reset! emptycount-buffer
+              (buf-concat [(deref emptycount-buffer) (buf-from-binary payload)]))
+            (emptycount-drain))
+      (= event "close")
+        (emptycount-check (deref emptycount-done) "NATIVE_SHOP_CART_USER_EMPTY_COUNT_PREMATURE_CLOSE")
+      :else nil)
+    (catch [error]
+      (reset! emptycount-error (error_message error))
+      (reset! emptycount-done true))))
+
+(emptycount-check (not (nil? emptycount-control)) "NATIVE_SHOP_CART_USER_EMPTY_COUNT_HOST_ENV_REQUIRED")
+(emptycount-check (not (file_exists (str emptycount-control "/ports.ready")))
+             "NATIVE_SHOP_CART_USER_EMPTY_COUNT_CONTROL_NOT_FRESH")
+(let [bridge-port (tcp-client-free-port) daemon-port (tcp-client-free-port)]
+  (emptycount-check (and (number? bridge-port) (number? daemon-port)
+                    (not (= bridge-port daemon-port))) "NATIVE_SHOP_CART_USER_EMPTY_COUNT_DISTINCT_PORTS")
+  (emptycount-check (= (tcp-server-raw bridge-port "native-shop-cart-user-empty-count-handler" "127.0.0.1") "ok")
+               "NATIVE_SHOP_CART_USER_EMPTY_COUNT_LISTENER_START")
+  (try
+    (do
+      (file_write (str emptycount-control "/ports.json")
+                  (json_str {"bridge" bridge-port "daemon" daemon-port}))
+      (file_write (str emptycount-control "/ports.ready") "ready")
+      (let [deadline (+ (now-ms) 30000)]
+        (while (and (< (now-ms) deadline) (not (deref emptycount-done))) (fl-yield 10)))
+      (emptycount-check (deref emptycount-done) "NATIVE_SHOP_CART_USER_EMPTY_COUNT_CONTRACT_TIMEOUT")
+      (if (nil? (deref emptycount-error)) nil (throw (deref emptycount-error)))
+      (emptycount-check (= (deref emptycount-stage) "done") "NATIVE_SHOP_CART_USER_EMPTY_COUNT_CONTRACT_INCOMPLETE")
+      (emptycount-check (= (buf-len (deref emptycount-buffer)) 0) "NATIVE_SHOP_CART_USER_EMPTY_COUNT_TRAILING_PACKET_BYTES"))
+    (finally (tcp-server-stop bridge-port))))
+(println (str "NATIVE_SHOP_CART_USER_EMPTY_COUNT_RESULT "
+  (json_str {"ok" true "prepared_parameters" 1
+             "query" "SELECT COUNT(*) FROM shop_cart WHERE user_id=?"
+             "bind" [10] "select_executions" 1 "rows" 1
+             "columns" (deref emptycount-columns) "data" (deref emptycount-rows)
+             "exact_count" true "client_computes_count" false})))
+(println "afj-db95 Native shop empty per-user cart COUNT prepared SELECT PASS")
