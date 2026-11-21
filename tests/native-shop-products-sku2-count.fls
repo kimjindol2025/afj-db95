@@ -1,0 +1,225 @@
+;; Native product SKU-2 COUNT fixture agreed in msg_e3e1b632c45b.
+;; Both original products remain seeded; server COUNT bind SKU-2 must return one text1 row.
+(load "../src/sha1.fls")
+(define sku2count-control (env-get "AFJ_NATIVE_SHOP_PRODUCTS_SKU2_COUNT_CONTROL"))
+(define sku2count-connection (atom nil))
+(define sku2count-buffer (atom ""))
+(define sku2count-stage (atom "handshake"))
+(define sku2count-sequence (atom 0))
+(define sku2count-columns (atom []))
+(define sku2count-rows (atom []))
+(define sku2count-error (atom nil))
+(define sku2count-done (atom false))
+(define sku2count-statement (atom nil))
+
+(defn sku2count-check [condition message]
+  (if (= condition true) true (throw message)))
+
+(defn sku2count-u32 [value]
+  (buf-concat [(buf-u8 (rem value 256))
+               (buf-u8 (rem (floor (/ value 256)) 256))
+               (buf-u8 (rem (floor (/ value 65536)) 256))
+               (buf-u8 (rem (floor (/ value 16777216)) 256))]))
+
+(defn sku2count-read-u32 [bytes offset]
+  (+ (buf-read-u8 bytes offset)
+     (* 256 (buf-read-u8 bytes (+ offset 1)))
+     (* 65536 (buf-read-u8 bytes (+ offset 2)))
+     (* 16777216 (buf-read-u8 bytes (+ offset 3)))))
+
+(defn sku2count-send [payload sequence next-stage response-sequence]
+  (let [length (buf-len payload)
+        frame (buf-concat [(buf-slice (sku2count-u32 length) 0 3)
+                           (buf-u8 sequence) payload])]
+    (reset! sku2count-stage next-stage)
+    (reset! sku2count-sequence response-sequence)
+    (sku2count-check (= (tcp-write (deref sku2count-connection) (buf-to-binary frame)) "ok")
+                 "NATIVE_SHOP_PRODUCTS_SKU2_COUNT_PACKET_WRITE")))
+
+(defn sku2count-command [code text next-stage]
+  (sku2count-send (buf-concat [(buf-u8 code) (buf-str text)])
+              0 next-stage 1))
+
+(defn sku2count-text [bytes offset]
+  (sku2count-check (< offset (buf-len bytes)) "NATIVE_SHOP_PRODUCTS_SKU2_COUNT_TEXT_PREFIX")
+  (let [length (buf-read-u8 bytes offset) next (+ offset 1 length)]
+    (sku2count-check (and (< length 251) (<= next (buf-len bytes)))
+                 "NATIVE_SHOP_PRODUCTS_SKU2_COUNT_TEXT_LENGTH")
+    {"value" (buf-read-str bytes (+ offset 1) length)
+     "next" next}))
+
+(defn sku2count-column-name [bytes]
+  (loop [index 0 offset 0]
+    (let [field (sku2count-text bytes offset)]
+      (if (= index 4) (get field "value")
+        (recur (+ index 1) (get field "next"))))))
+
+(defn sku2count-login [bytes]
+  (sku2count-check (= (buf-read-u8 bytes 0) 10) "NATIVE_SHOP_PRODUCTS_SKU2_COUNT_HANDSHAKE_VERSION")
+  (let [version-end
+          (loop [offset 1]
+            (do
+              (sku2count-check (< offset (buf-len bytes)) "NATIVE_SHOP_PRODUCTS_SKU2_COUNT_HANDSHAKE_LENGTH")
+              (if (= (buf-read-u8 bytes offset) 0) offset (recur (+ offset 1)))))
+        first-offset (+ version-end 5)
+        second-offset (+ first-offset 27)]
+    (sku2count-check (<= (+ second-offset 12) (buf-len bytes))
+                 "NATIVE_SHOP_PRODUCTS_SKU2_COUNT_SCRAMBLE_LENGTH")
+    (let [scramble (buf-concat [(buf-slice bytes first-offset 8)
+                                (buf-slice bytes second-offset 12)])
+          token (sha1-mysql-native-token "development-only" scramble)
+          login (buf-concat [(sku2count-u32 172545) (sku2count-u32 1048576)
+                             (buf-u8 33) (sha1-zero-bytes 23)
+                             (buf-str "root") (buf-u8 0)
+                             (buf-u8 20) token])]
+      (sku2count-check (= (buf-len token) 20) "NATIVE_SHOP_PRODUCTS_SKU2_COUNT_TOKEN_LENGTH")
+      (sku2count-send login 1 "login" 2))))
+
+(defn sku2count-frame [bytes sequence]
+  (sku2count-check (> (buf-len bytes) 0) "NATIVE_SHOP_PRODUCTS_SKU2_COUNT_EMPTY_PACKET")
+  (sku2count-check (= sequence (deref sku2count-sequence)) "NATIVE_SHOP_PRODUCTS_SKU2_COUNT_PACKET_SEQUENCE")
+  (swap! sku2count-sequence + 1)
+  (let [stage (deref sku2count-stage) first-byte (buf-read-u8 bytes 0)]
+    (if (= first-byte 255)
+      (if (>= (buf-len bytes) 9)
+        (throw (str "NATIVE_SHOP_PRODUCTS_SKU2_COUNT_SERVER_ERROR_" stage " code="
+                    (+ (buf-read-u8 bytes 1) (* 256 (buf-read-u8 bytes 2)))
+                    " message=" (buf-read-str bytes 9 (- (buf-len bytes) 9))))
+        (throw (str "NATIVE_SHOP_PRODUCTS_SKU2_COUNT_SHORT_SERVER_ERROR_" stage)))
+      nil)
+    (cond
+      (= stage "handshake") (sku2count-login bytes)
+      (= stage "login")
+        (do
+          (sku2count-check (= first-byte 0) "NATIVE_SHOP_PRODUCTS_SKU2_COUNT_LOGIN_ACK")
+          (sku2count-command 3 "CREATE TABLE shop_products (id INT PRIMARY KEY, sku TEXT, name TEXT, price INT, visible INT)"
+                           "create"))
+      (= stage "create")
+        (do
+          (sku2count-check (= first-byte 0) "NATIVE_SHOP_PRODUCTS_SKU2_COUNT_CREATE_ACK")
+          (sku2count-command 3 "INSERT INTO shop_products (id, sku, name, price, visible) VALUES (1, 'SKU-1', 'Demo Widget', 1500, 1)"
+                           "seed"))
+      (= stage "seed")
+        (do
+          (sku2count-check (= first-byte 0) "NATIVE_SHOP_PRODUCTS_SKU2_COUNT_FIRST_SEED_ACK")
+          (sku2count-command 3 "INSERT INTO shop_products (id, sku, name, price, visible) VALUES (2, 'SKU-2', 'Demo Gadget', 2200, 1)"
+                            "second-seed"))
+      (= stage "second-seed")
+        (do
+          (sku2count-check (= first-byte 0) "NATIVE_SHOP_PRODUCTS_SKU2_COUNT_SECOND_PRODUCT_SEED_ACK")
+          (sku2count-command 3 "CREATE TABLE shop_cart (id INT PRIMARY KEY, user_id INT, product_id INT, qty INT)" "cart-create"))
+      (= stage "cart-create")
+        (do
+          (sku2count-check (= first-byte 0) "NATIVE_SHOP_PRODUCTS_SKU2_COUNT_CART_CREATE_ACK")
+          (sku2count-command 3 "INSERT INTO shop_cart (id, user_id, product_id, qty) VALUES (2, 20, 2, 1)" "second-cart-seed"))
+      (= stage "second-cart-seed")
+        (do
+          (sku2count-check (= first-byte 0) "NATIVE_SHOP_PRODUCTS_SKU2_COUNT_SINGLE_CART_SEED_ACK")
+          (sku2count-command 22 "SELECT COUNT(*) FROM shop_products WHERE sku=?" "prepare"))
+      (= stage "prepare")
+        (do
+          (sku2count-check (and (= first-byte 0) (>= (buf-len bytes) 12))
+                       "NATIVE_SHOP_PRODUCTS_SKU2_COUNT_PREPARE_ACK")
+          (sku2count-check (and (= (buf-read-u8 bytes 7) 1)
+                            (= (buf-read-u8 bytes 8) 0))
+                       "NATIVE_SHOP_PRODUCTS_SKU2_COUNT_PREPARE_ONE_PARAMETER")
+          (reset! sku2count-statement (sku2count-read-u32 bytes 1))
+          (let [execute (buf-concat [(buf-u8 23) (sku2count-u32 (deref sku2count-statement))
+                                     (buf-u8 0) (sku2count-u32 1)
+                                     (buf-u8 0) (buf-u8 1) (buf-u8 253) (buf-u8 0)
+                                     (buf-u8 5) (buf-str "SKU-2")])]
+            (sku2count-send execute 0 "select" 1)))
+      (= stage "select")
+        (do
+          (sku2count-check (and (= first-byte 1) (= (buf-len bytes) 1))
+                       "NATIVE_SHOP_PRODUCTS_SKU2_COUNT_SELECT_ONE_COLUMN")
+          (reset! sku2count-stage "columns"))
+      (= stage "columns")
+        (do
+          (swap! sku2count-columns conj (sku2count-column-name bytes))
+          (if (= (count (deref sku2count-columns)) 1)
+            (reset! sku2count-stage "columns-end") nil))
+      (= stage "columns-end")
+        (do
+          (sku2count-check (and (= first-byte 254) (= (buf-len bytes) 5))
+                       "NATIVE_SHOP_PRODUCTS_SKU2_COUNT_COLUMN_EOF")
+          (sku2count-check (> (count (get (deref sku2count-columns) 0)) 0)
+                         "NATIVE_SHOP_PRODUCTS_SKU2_COUNT_EXPRESSION_COLUMN")
+          (reset! sku2count-stage "rows"))
+      (= stage "rows")
+        (if (and (= first-byte 254) (= (buf-len bytes) 5))
+          (do
+            (sku2count-check (= (count (deref sku2count-rows)) 1)
+                           "NATIVE_SHOP_PRODUCTS_SKU2_COUNT_EXACTLY_ONE_ROW")
+            (sku2count-check (= (get (deref sku2count-rows) 0) "1")
+                           "NATIVE_SHOP_PRODUCTS_SKU2_COUNT_EXACT_SERVER_TOTAL")
+            (reset! sku2count-stage "done")
+            (reset! sku2count-done true))
+          (do
+            (sku2count-check (< (count (deref sku2count-rows)) 1)
+                           "NATIVE_SHOP_PRODUCTS_SKU2_COUNT_EXTRA_ROW")
+            (let [field (sku2count-text bytes 0)]
+              (sku2count-check (= (get field "next") (buf-len bytes))
+                             "NATIVE_SHOP_PRODUCTS_SKU2_COUNT_ROW_TRAILING_BYTES")
+              (swap! sku2count-rows conj (get field "value")))))
+      :else (throw "NATIVE_SHOP_PRODUCTS_SKU2_COUNT_UNEXPECTED_STAGE"))))
+
+(defn sku2count-drain []
+  (if (>= (buf-len (deref sku2count-buffer)) 4)
+    (let [bytes (deref sku2count-buffer)
+          length (+ (buf-read-u8 bytes 0) (* 256 (buf-read-u8 bytes 1))
+                     (* 65536 (buf-read-u8 bytes 2)))]
+      (sku2count-check (<= length 65536) "NATIVE_SHOP_PRODUCTS_SKU2_COUNT_PACKET_LIMIT")
+      (if (>= (buf-len bytes) (+ 4 length))
+        (do
+          (reset! sku2count-buffer (buf-slice bytes (+ 4 length)
+                                         (- (buf-len bytes) (+ 4 length))))
+          (sku2count-frame (buf-slice bytes 4 length) (buf-read-u8 bytes 3))
+          (sku2count-drain))
+        nil))
+    nil))
+
+(defn native-shop-products-sku2-count-handler [event connection payload peer]
+  (try
+    (cond
+      (or (= event "connect") (= event "accept"))
+        (do (sku2count-check (nil? (deref sku2count-connection)) "NATIVE_SHOP_PRODUCTS_SKU2_COUNT_SINGLE_CONNECTION")
+            (reset! sku2count-connection connection))
+      (= event "data")
+        (do (reset! sku2count-buffer
+              (buf-concat [(deref sku2count-buffer) (buf-from-binary payload)]))
+            (sku2count-drain))
+      (= event "close")
+        (sku2count-check (deref sku2count-done) "NATIVE_SHOP_PRODUCTS_SKU2_COUNT_PREMATURE_CLOSE")
+      :else nil)
+    (catch [error]
+      (reset! sku2count-error (error_message error))
+      (reset! sku2count-done true))))
+
+(sku2count-check (not (nil? sku2count-control)) "NATIVE_SHOP_PRODUCTS_SKU2_COUNT_HOST_ENV_REQUIRED")
+(sku2count-check (not (file_exists (str sku2count-control "/ports.ready")))
+             "NATIVE_SHOP_PRODUCTS_SKU2_COUNT_CONTROL_NOT_FRESH")
+(let [bridge-port (tcp-client-free-port) daemon-port (tcp-client-free-port)]
+  (sku2count-check (and (number? bridge-port) (number? daemon-port)
+                    (not (= bridge-port daemon-port))) "NATIVE_SHOP_PRODUCTS_SKU2_COUNT_DISTINCT_PORTS")
+  (sku2count-check (= (tcp-server-raw bridge-port "native-shop-products-sku2-count-handler" "127.0.0.1") "ok")
+               "NATIVE_SHOP_PRODUCTS_SKU2_COUNT_LISTENER_START")
+  (try
+    (do
+      (file_write (str sku2count-control "/ports.json")
+                  (json_str {"bridge" bridge-port "daemon" daemon-port}))
+      (file_write (str sku2count-control "/ports.ready") "ready")
+      (let [deadline (+ (now-ms) 30000)]
+        (while (and (< (now-ms) deadline) (not (deref sku2count-done))) (fl-yield 10)))
+      (sku2count-check (deref sku2count-done) "NATIVE_SHOP_PRODUCTS_SKU2_COUNT_CONTRACT_TIMEOUT")
+      (if (nil? (deref sku2count-error)) nil (throw (deref sku2count-error)))
+      (sku2count-check (= (deref sku2count-stage) "done") "NATIVE_SHOP_PRODUCTS_SKU2_COUNT_CONTRACT_INCOMPLETE")
+      (sku2count-check (= (buf-len (deref sku2count-buffer)) 0) "NATIVE_SHOP_PRODUCTS_SKU2_COUNT_TRAILING_PACKET_BYTES"))
+    (finally (tcp-server-stop bridge-port))))
+(println (str "NATIVE_SHOP_PRODUCTS_SKU2_COUNT_RESULT "
+  (json_str {"ok" true "prepared_parameters" 1
+             "query" "SELECT COUNT(*) FROM shop_products WHERE sku=?"
+             "bind" ["SKU-2"] "select_executions" 1 "rows" 1
+             "columns" (deref sku2count-columns) "data" (deref sku2count-rows)
+             "exact_count" true "client_computes_count" false})))
+(println "afj-db95 Native shop product SKU-2 COUNT prepared SELECT PASS")
