@@ -271,7 +271,8 @@
     (if (and (or (= (count tokens) 11)
                  (and (= (count tokens) 13)
                       (keyword? (token-at tokens 11) "OFFSET")
-                      (= (token-at tokens 12) "1")))
+                      (or (= (token-at tokens 12) "1")
+                          (= (token-at tokens 12) "2"))))
              (regex_match (token-at tokens 1) "^[A-Za-z_][A-Za-z0-9_]*(,[A-Za-z_][A-Za-z0-9_]*)*$")
              (keyword? (token-at tokens 2) "FROM")
              (regex_match (token-at tokens 3) "^[A-Za-z_][A-Za-z0-9_]*$")
@@ -290,7 +291,9 @@
          "where" {"column" (get predicate "column")
                    "equals" (get predicate "value")}
          "order-by" (token-at tokens 8) "limit" 1}]
-        (if (= (count tokens) 13) (assoc ast "offset" 1) ast))
+        (if (= (count tokens) 13)
+          (assoc ast "offset" (if (= (token-at tokens 12) "1") 1 2))
+          ast))
       nil)))
 
 (defn parse-select-standard [raw-tokens]
@@ -1007,7 +1010,7 @@
 (println "afj-db95 ordered LIMIT 1 scope guards PASS")
 
 (doseq [query
-        ["SELECT sku, name, price FROM shop_products WHERE visible=1 ORDER BY id LIMIT 1 OFFSET 2"
+        ["SELECT sku, name, price FROM shop_products WHERE visible=1 ORDER BY id LIMIT 1 OFFSET 3"
          "SELECT sku, name, price FROM shop_products WHERE visible=1 ORDER BY id LIMIT 2 OFFSET 1"
          "SELECT sku, name, price FROM shop_products WHERE visible=1 ORDER BY id DESC LIMIT 1 OFFSET 1"
          "SELECT sku AS item, name, price FROM shop_products WHERE visible=1 ORDER BY id LIMIT 1 OFFSET 1"]]
