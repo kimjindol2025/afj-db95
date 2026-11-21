@@ -331,10 +331,77 @@
          "group-by" group-by "order-by" order-by})
       (parse-select-basic tokens)))))))
 
+(defn sql-join-qualified-column? [column]
+  (regex_match column "^[A-Za-z_][A-Za-z0-9_]*\\.[A-Za-z_][A-Za-z0-9_]*$"))
+
+(defn sql-join-projection-valid? [columns left-table right-table]
+  (loop [index 0 names []]
+    (if (= index (count columns))
+      true
+      (let [parts (regex_split (get columns index) "\\.")
+            qualifier (get parts 0)
+            name (get parts 1)]
+        ;; Projection output uses bare names; duplicate outputs are ambiguous.
+        (if (and (or (= qualifier left-table) (= qualifier right-table))
+                 (not (contains? names name)))
+          (recur (+ index 1) (conj names name))
+          false)))))
+
+(defn parse-select-qualified-inner-join [tokens]
+  (let [from-index (loop [index 1]
+                     (if (>= index (count tokens))
+                       nil
+                       (if (keyword? (token-at tokens index) "FROM")
+                         index
+                         (recur (+ index 1)))))]
+    (if (nil? from-index)
+      nil
+      (let [tail (drop from-index tokens)
+            projection (str_join (take (- from-index 1) (drop 1 tokens)) " ")]
+        ;; Exactly one JOIN, no SQL aliases, and a left-table equality filter.
+        (if (and (= (count tail) 10)
+                 (regex_match projection
+                   "^[A-Za-z_][A-Za-z0-9_]*\\.[A-Za-z_][A-Za-z0-9_]*(\\s*,\\s*[A-Za-z_][A-Za-z0-9_]*\\.[A-Za-z_][A-Za-z0-9_]*)*$")
+                 (regex_match (get tail 1) "^[A-Za-z_][A-Za-z0-9_]*$")
+                 (regex_match (get tail 3) "^[A-Za-z_][A-Za-z0-9_]*$")
+                 (not (= (get tail 1) (get tail 3)))
+                 (keyword? (get tail 2) "JOIN")
+                 (keyword? (get tail 4) "ON")
+                 (sql-join-qualified-column? (get tail 5))
+                 (= (get tail 6) "=")
+                 (sql-join-qualified-column? (get tail 7))
+                 (keyword? (get tail 8) "WHERE")
+                 (= (count (regex_split (get tail 9) "=")) 2))
+          (let [left-table (get tail 1)
+                right-table (get tail 3)
+                columns (map str-trim (regex_split projection ","))
+                left-key (regex_split (get tail 5) "\\.")
+                right-key (regex_split (get tail 7) "\\.")
+                predicate (sql-assignment (get tail 9))
+                predicate-column (get predicate "column")
+                predicate-key (regex_split predicate-column "\\.")]
+            (if (and (= (get left-key 0) left-table)
+                     (= (get right-key 0) right-table)
+                     (sql-join-qualified-column? predicate-column)
+                     (= (get predicate-key 0) left-table)
+                     (sql-join-projection-valid? columns left-table right-table))
+              {"type" "select" "columns" columns "table" left-table
+               ;; Use existing engine qualification with actual table names.
+               "table-alias" left-table
+               "join" {"type" "inner" "table" right-table
+                       "table-alias" right-table
+                       "left" (get tail 5) "right" (get tail 7)}
+               ;; Existing engine filters/indexes the left source before JOIN.
+               "where" {"column" (get predicate-key 1)
+                        "equals" (get predicate "value")}}
+              nil))
+          nil)))))
+
 (defn parse-select [tokens]
   (let [collation (parse-select-collation tokens)]
     (if (nil? collation)
-      (parse-select-standard tokens)
+      (let [joined (parse-select-qualified-inner-join tokens)]
+        (if (nil? joined) (parse-select-standard tokens) joined))
       collation)))
 
 (defn parse-create [tokens]
@@ -720,6 +787,19 @@
   (if (= missing-comma-rejected true)
     (println "afj-db95 SQL projection comma/space contract PASS")
     (throw "SQL projection comma/space contract failure")))
+
+(doseq [query
+        ["SELECT other.qty, shop_products.price FROM shop_cart JOIN shop_products ON shop_cart.product_id = shop_products.id WHERE shop_cart.id=1"
+         "SELECT c.qty, shop_products.price FROM shop_cart c JOIN shop_products ON c.product_id = shop_products.id WHERE c.id=1"
+         "SELECT shop_cart.qty, shop_products.price FROM shop_cart JOIN shop_products ON shop_cart.product_id = shop_products.id WHERE shop_products.id=1"
+         "SELECT shop_cart.id, shop_products.id FROM shop_cart JOIN shop_products ON shop_cart.product_id = shop_products.id WHERE shop_cart.id=1"]]
+  (let [rejected (try
+                   (do (parse-sql query) false)
+                   (catch [error]
+                     (str-includes (error_message error) "unsupported SELECT form")))]
+    (if (= rejected true) true
+      (throw "qualified INNER JOIN scope guard failure"))))
+(println "afj-db95 qualified INNER JOIN scope guards PASS")
 
 (let [aggregate (parse-sql "SELECT COUNT(*) AS remaining FROM users")
       schema-create (parse-sql

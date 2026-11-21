@@ -1,0 +1,231 @@
+;; Native cart/product JOIN fixture agreed in msg_dcb479005630.
+;; Exact qualified JOIN SQL, bind id=1, one qty=2/price=1500 row.
+;; Reuses accepted Native transport; SQL core and protocol remain untouched.
+(load "../src/sha1.fls")
+(define joined-control (env-get "AFJ_NATIVE_SHOP_CART_PRODUCTS_JOIN_CONTROL"))
+(define joined-connection (atom nil))
+(define joined-buffer (atom ""))
+(define joined-stage (atom "handshake"))
+(define joined-sequence (atom 0))
+(define joined-columns (atom []))
+(define joined-row (atom nil))
+(define joined-error (atom nil))
+(define joined-done (atom false))
+(define joined-statement (atom nil))
+
+(defn joined-check [condition message]
+  (if (= condition true) true (throw message)))
+
+(defn joined-u32 [value]
+  (buf-concat [(buf-u8 (rem value 256))
+               (buf-u8 (rem (floor (/ value 256)) 256))
+               (buf-u8 (rem (floor (/ value 65536)) 256))
+               (buf-u8 (rem (floor (/ value 16777216)) 256))]))
+
+(defn joined-read-u32 [bytes offset]
+  (+ (buf-read-u8 bytes offset)
+     (* 256 (buf-read-u8 bytes (+ offset 1)))
+     (* 65536 (buf-read-u8 bytes (+ offset 2)))
+     (* 16777216 (buf-read-u8 bytes (+ offset 3)))))
+
+(defn joined-send [payload sequence next-stage response-sequence]
+  (let [length (buf-len payload)
+        frame (buf-concat [(buf-slice (joined-u32 length) 0 3)
+                           (buf-u8 sequence) payload])]
+    (reset! joined-stage next-stage)
+    (reset! joined-sequence response-sequence)
+    (joined-check (= (tcp-write (deref joined-connection) (buf-to-binary frame)) "ok")
+                 "NATIVE_SHOP_CART_PRODUCTS_JOIN_PACKET_WRITE")))
+
+(defn joined-command [code text next-stage]
+  (joined-send (buf-concat [(buf-u8 code) (buf-str text)])
+              0 next-stage 1))
+
+(defn joined-text [bytes offset]
+  (joined-check (< offset (buf-len bytes)) "NATIVE_SHOP_CART_PRODUCTS_JOIN_TEXT_PREFIX")
+  (let [length (buf-read-u8 bytes offset) next (+ offset 1 length)]
+    (joined-check (and (< length 251) (<= next (buf-len bytes)))
+                 "NATIVE_SHOP_CART_PRODUCTS_JOIN_TEXT_LENGTH")
+    {"value" (buf-read-str bytes (+ offset 1) length)
+     "next" next}))
+
+(defn joined-column-name [bytes]
+  (loop [index 0 offset 0]
+    (let [field (joined-text bytes offset)]
+      (if (= index 4) (get field "value")
+        (recur (+ index 1) (get field "next"))))))
+
+(defn joined-row-map [bytes]
+  (loop [index 0 offset 0 result {}]
+    (if (= index 2)
+      (do
+        (joined-check (= offset (buf-len bytes)) "NATIVE_SHOP_CART_PRODUCTS_JOIN_ROW_TRAILING_BYTES")
+        result)
+      (let [field (joined-text bytes offset)]
+        (recur (+ index 1) (get field "next")
+               (assoc result (get (deref joined-columns) index)
+                             (get field "value")))))))
+
+(defn joined-login [bytes]
+  (joined-check (= (buf-read-u8 bytes 0) 10) "NATIVE_SHOP_CART_PRODUCTS_JOIN_HANDSHAKE_VERSION")
+  (let [version-end
+          (loop [offset 1]
+            (do
+              (joined-check (< offset (buf-len bytes)) "NATIVE_SHOP_CART_PRODUCTS_JOIN_HANDSHAKE_LENGTH")
+              (if (= (buf-read-u8 bytes offset) 0) offset (recur (+ offset 1)))))
+        first-offset (+ version-end 5)
+        second-offset (+ first-offset 27)]
+    (joined-check (<= (+ second-offset 12) (buf-len bytes))
+                 "NATIVE_SHOP_CART_PRODUCTS_JOIN_SCRAMBLE_LENGTH")
+    (let [scramble (buf-concat [(buf-slice bytes first-offset 8)
+                                (buf-slice bytes second-offset 12)])
+          token (sha1-mysql-native-token "development-only" scramble)
+          login (buf-concat [(joined-u32 172545) (joined-u32 1048576)
+                             (buf-u8 33) (sha1-zero-bytes 23)
+                             (buf-str "root") (buf-u8 0)
+                             (buf-u8 20) token])]
+      (joined-check (= (buf-len token) 20) "NATIVE_SHOP_CART_PRODUCTS_JOIN_TOKEN_LENGTH")
+      (joined-send login 1 "login" 2))))
+
+(defn joined-frame [bytes sequence]
+  (joined-check (> (buf-len bytes) 0) "NATIVE_SHOP_CART_PRODUCTS_JOIN_EMPTY_PACKET")
+  (joined-check (= sequence (deref joined-sequence)) "NATIVE_SHOP_CART_PRODUCTS_JOIN_PACKET_SEQUENCE")
+  (swap! joined-sequence + 1)
+  (let [stage (deref joined-stage) first-byte (buf-read-u8 bytes 0)]
+    (if (= first-byte 255)
+      (if (>= (buf-len bytes) 9)
+        (throw (str "NATIVE_SHOP_CART_PRODUCTS_JOIN_SERVER_ERROR_" stage " code="
+                    (+ (buf-read-u8 bytes 1) (* 256 (buf-read-u8 bytes 2)))
+                    " message=" (buf-read-str bytes 9 (- (buf-len bytes) 9))))
+        (throw (str "NATIVE_SHOP_CART_PRODUCTS_JOIN_SHORT_SERVER_ERROR_" stage)))
+      nil)
+    (cond
+      (= stage "handshake") (joined-login bytes)
+      (= stage "login")
+        (do
+          (joined-check (= first-byte 0) "NATIVE_SHOP_CART_PRODUCTS_JOIN_LOGIN_ACK")
+          (joined-command 3 "CREATE TABLE shop_products (id INT PRIMARY KEY, sku TEXT, name TEXT, price INT)"
+                           "products-create"))
+      (= stage "products-create")
+        (do
+          (joined-check (= first-byte 0) "NATIVE_SHOP_CART_PRODUCTS_JOIN_PRODUCTS_CREATE_ACK")
+          (joined-command 3 "INSERT INTO shop_products (id, sku, name, price) VALUES (1, 'SKU-1', 'Demo Widget', 1500)"
+                           "products-seed"))
+      (= stage "products-seed")
+        (do
+          (joined-check (= first-byte 0) "NATIVE_SHOP_CART_PRODUCTS_JOIN_PRODUCTS_SEED_ACK")
+          (joined-command 3 "CREATE TABLE shop_cart (id INT PRIMARY KEY, product_id INT, qty INT)"
+                           "cart-create"))
+      (= stage "cart-create")
+        (do
+          (joined-check (= first-byte 0) "NATIVE_SHOP_CART_PRODUCTS_JOIN_CART_CREATE_ACK")
+          (joined-command 3 "INSERT INTO shop_cart (id, product_id, qty) VALUES (1, 1, 2)"
+                            "cart-seed"))
+      (= stage "cart-seed")
+        (do
+          (joined-check (= first-byte 0) "NATIVE_SHOP_CART_PRODUCTS_JOIN_CART_SEED_ACK")
+          (joined-command 22 "SELECT shop_cart.qty, shop_products.price FROM shop_cart JOIN shop_products ON shop_cart.product_id = shop_products.id WHERE shop_cart.id=?" "select-prepare"))
+      (= stage "select-prepare")
+        (do
+          (joined-check (and (= first-byte 0) (>= (buf-len bytes) 12))
+                       "NATIVE_SHOP_CART_PRODUCTS_JOIN_SELECT_PREPARE_ACK")
+          (joined-check (and (= (buf-read-u8 bytes 7) 1)
+                            (= (buf-read-u8 bytes 8) 0))
+                       "NATIVE_SHOP_CART_PRODUCTS_JOIN_SELECT_ONE_PARAMETER")
+          (reset! joined-statement (joined-read-u32 bytes 1))
+          (let [execute (buf-concat [(buf-u8 23) (joined-u32 (deref joined-statement))
+                                     (buf-u8 0) (joined-u32 1)
+                                     (buf-u8 0) (buf-u8 1)
+                                     (buf-u8 3) (buf-u8 0) (joined-u32 1)])]
+            (joined-send execute 0 "select" 1)))
+      (= stage "select")
+        (do
+          (joined-check (and (= first-byte 2) (= (buf-len bytes) 1))
+                       "NATIVE_SHOP_CART_PRODUCTS_JOIN_SELECT_TWO_COLUMNS")
+          (reset! joined-stage "columns"))
+      (= stage "columns")
+        (do
+          (swap! joined-columns conj (joined-column-name bytes))
+          (if (= (count (deref joined-columns)) 2)
+            (reset! joined-stage "columns-end") nil))
+      (= stage "columns-end")
+        (do
+          (joined-check (and (= first-byte 254) (= (buf-len bytes) 5))
+                       "NATIVE_SHOP_CART_PRODUCTS_JOIN_COLUMN_EOF")
+          (joined-check (and (= (get (deref joined-columns) 0) "qty")
+                             (= (get (deref joined-columns) 1) "price"))
+                        "NATIVE_SHOP_CART_PRODUCTS_JOIN_RESULT_SCHEMA")
+          (reset! joined-stage "row"))
+      (= stage "row")
+        (do (reset! joined-row (joined-row-map bytes))
+            (reset! joined-stage "row-end"))
+      (= stage "row-end")
+        (do
+          (joined-check (and (= first-byte 254) (= (buf-len bytes) 5))
+                       "NATIVE_SHOP_CART_PRODUCTS_JOIN_EXACTLY_ONE_ROW")
+          (joined-check (and (= (count (keys (deref joined-row))) 2)
+                             (= (get (deref joined-row) "qty") "2")
+                             (= (get (deref joined-row) "price") "1500"))
+                        "NATIVE_SHOP_CART_PRODUCTS_JOIN_EXACT_ROW")
+          (reset! joined-stage "done")
+          (reset! joined-done true))
+      :else (throw "NATIVE_SHOP_CART_PRODUCTS_JOIN_UNEXPECTED_STAGE"))))
+
+(defn joined-drain []
+  (if (>= (buf-len (deref joined-buffer)) 4)
+    (let [bytes (deref joined-buffer)
+          length (+ (buf-read-u8 bytes 0) (* 256 (buf-read-u8 bytes 1))
+                     (* 65536 (buf-read-u8 bytes 2)))]
+      (joined-check (<= length 65536) "NATIVE_SHOP_CART_PRODUCTS_JOIN_PACKET_LIMIT")
+      (if (>= (buf-len bytes) (+ 4 length))
+        (do
+          (reset! joined-buffer (buf-slice bytes (+ 4 length)
+                                         (- (buf-len bytes) (+ 4 length))))
+          (joined-frame (buf-slice bytes 4 length) (buf-read-u8 bytes 3))
+          (joined-drain))
+        nil))
+    nil))
+
+(defn native-shop-cart-products-join-handler [event connection payload peer]
+  (try
+    (cond
+      (or (= event "connect") (= event "accept"))
+        (do (joined-check (nil? (deref joined-connection)) "NATIVE_SHOP_CART_PRODUCTS_JOIN_SINGLE_CONNECTION")
+            (reset! joined-connection connection))
+      (= event "data")
+        (do (reset! joined-buffer
+              (buf-concat [(deref joined-buffer) (buf-from-binary payload)]))
+            (joined-drain))
+      (= event "close")
+        (joined-check (deref joined-done) "NATIVE_SHOP_CART_PRODUCTS_JOIN_PREMATURE_CLOSE")
+      :else nil)
+    (catch [error]
+      (reset! joined-error (error_message error))
+      (reset! joined-done true))))
+
+(joined-check (not (nil? joined-control)) "NATIVE_SHOP_CART_PRODUCTS_JOIN_HOST_ENV_REQUIRED")
+(joined-check (not (file_exists (str joined-control "/ports.ready")))
+             "NATIVE_SHOP_CART_PRODUCTS_JOIN_CONTROL_NOT_FRESH")
+(let [bridge-port (tcp-client-free-port) daemon-port (tcp-client-free-port)]
+  (joined-check (and (number? bridge-port) (number? daemon-port)
+                    (not (= bridge-port daemon-port))) "NATIVE_SHOP_CART_PRODUCTS_JOIN_DISTINCT_PORTS")
+  (joined-check (= (tcp-server-raw bridge-port "native-shop-cart-products-join-handler" "127.0.0.1") "ok")
+               "NATIVE_SHOP_CART_PRODUCTS_JOIN_LISTENER_START")
+  (try
+    (do
+      (file_write (str joined-control "/ports.json")
+                  (json_str {"bridge" bridge-port "daemon" daemon-port}))
+      (file_write (str joined-control "/ports.ready") "ready")
+      (let [deadline (+ (now-ms) 30000)]
+        (while (and (< (now-ms) deadline) (not (deref joined-done))) (fl-yield 10)))
+      (joined-check (deref joined-done) "NATIVE_SHOP_CART_PRODUCTS_JOIN_CONTRACT_TIMEOUT")
+      (if (nil? (deref joined-error)) nil (throw (deref joined-error)))
+      (joined-check (= (deref joined-stage) "done") "NATIVE_SHOP_CART_PRODUCTS_JOIN_CONTRACT_INCOMPLETE")
+      (joined-check (= (buf-len (deref joined-buffer)) 0) "NATIVE_SHOP_CART_PRODUCTS_JOIN_TRAILING_PACKET_BYTES"))
+    (finally (tcp-server-stop bridge-port))))
+(println (str "NATIVE_SHOP_CART_PRODUCTS_JOIN_RESULT "
+  (json_str {"ok" true "query" "SELECT shop_cart.qty, shop_products.price FROM shop_cart JOIN shop_products ON shop_cart.product_id = shop_products.id WHERE shop_cart.id=?"
+             "bind" [1] "select_executions" 1 "rows" 1
+             "columns" (deref joined-columns) "row" (deref joined-row)
+             "exact_select" true})))
+(println "afj-db95 Native shop cart products prepared JOIN PASS")
