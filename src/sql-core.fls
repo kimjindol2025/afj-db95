@@ -356,6 +356,19 @@
                         "value" (sql-value (token-at tokens 11))}]}}
       nil)))
 
+(defn parse-select-numeric-between [raw-tokens]
+  (let [tokens (sql-select-projection-tokens raw-tokens)]
+    (if (and (= (count tokens) 10)
+             (keyword? (token-at tokens 6) "BETWEEN")
+             (keyword? (token-at tokens 8) "AND"))
+      (parse-select-numeric-interval
+        [(token-at tokens 0) (token-at tokens 1)
+         (token-at tokens 2) (token-at tokens 3)
+         (token-at tokens 4) (token-at tokens 5)
+         ">=" (token-at tokens 7) "AND" (token-at tokens 5)
+         "<=" (token-at tokens 9)])
+      nil)))
+
 (defn parse-select-equality-numeric-bound [raw-tokens]
   (let [tokens (sql-select-projection-tokens raw-tokens)]
     (if (and (= (count tokens) 10)
@@ -662,7 +675,10 @@
             (if (nil? ordered)
               (let [ranged (parse-select-numeric-bound tokens)]
                 (if (nil? ranged)
-                  (let [interval (parse-select-numeric-interval tokens)]
+                  (let [basic-interval (parse-select-numeric-interval tokens)
+                        interval (if (nil? basic-interval)
+                                   (parse-select-numeric-between tokens)
+                                   basic-interval)]
                     (if (nil? interval)
                       (let [combined (parse-select-equality-numeric-bound tokens)]
                         (if (nil? combined)
@@ -1226,6 +1242,19 @@
     (if (= rejected true) true
       (throw "projected numeric interval scope guard failure"))))
 (println "afj-db95 projected numeric interval scope guards PASS")
+
+(doseq [query
+        ["SELECT sku, name, price FROM shop_products WHERE price BETWEEN 1500 OR 2200"
+         "SELECT sku, name, price FROM shop_products WHERE price NOT BETWEEN 1500 AND 2200"
+         "SELECT sku, name, price FROM shop_products WHERE price BETWEEN 1500 AND 2200.5"
+         "SELECT sku AS item, name, price FROM shop_products WHERE price BETWEEN 1500 AND 2200"]]
+  (let [rejected (try
+                   (do (parse-sql query) false)
+                   (catch [error]
+                     (str-includes (error_message error) "unsupported SELECT form")))]
+    (if (= rejected true) true
+      (throw "projected numeric BETWEEN scope guard failure"))))
+(println "afj-db95 projected numeric BETWEEN scope guards PASS")
 
 (doseq [query
         ["SELECT sku, name, price FROM shop_products WHERE visible=1 OR price >= 2000"
