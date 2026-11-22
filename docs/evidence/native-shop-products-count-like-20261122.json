@@ -1,0 +1,28 @@
+{
+  "contract": "Native MariaDB prepared COUNT with bounded contains LIKE",
+  "sql": "SELECT COUNT(*) FROM shop_products WHERE name LIKE ?",
+  "bind": [
+    "%Widget%"
+  ],
+  "expectedRows": 1,
+  "expectedValue": 1,
+  "status": "PASS",
+  "passed": 1,
+  "total": 1,
+  "attempts": 1,
+  "nativeSeconds": 1.1237899450061377,
+  "daemonAotDuringNative": 0,
+  "flcGccLdDuringNative": 0,
+  "nativeClientResultLine": "NATIVE_SHOP_PRODUCTS_NAME_LIKE_COUNT_RESULT {\"ok\":true,\"prepared_parameters\":1,\"query\":\"SELECT COUNT(*) FROM shop_products WHERE name LIKE ?\",\"bind\":[\"%Widget%\"],\"select_executions\":1,\"rows\":1,\"columns\":[\"COUNT(*)\"],\"data\":[\"1\"],\"exact_count\":true,\"client_computes_count\":false}",
+  "daemonElfSha256": "710719891c9366f591c97bce85018615ab3ef59cba6f50bb15c49a81e5845743",
+  "daemonObjectSha256": "66e36b6fe4c9dce603bcc585e7f5cd7b8dabe36a5021d29b0722577f08f77f5e",
+  "generatedCSha256": "b9d6bc0b9353600237de4906496b8893c0e8b067998001d0cc739ae97b6854c7",
+  "sqlCoreWorkingSha256": "e8228756160ca8bc2de132478414c9430e875e1a468738bd4c60e049e369c937",
+  "nativeTestSha256": "6b256555c487e9f9b616a48048e18b18345b5e9c19616df14e7267d66fc9519d",
+  "reusedClientElfSha256": "de8435dbefd6f7e673fded5bae67a1c486af9ae5d4720dde18db116d17faf261",
+  "clientElfFixtureSha256": "6b256555c487e9f9b616a48048e18b18345b5e9c19616df14e7267d66fc9519d",
+  "hostExit": "HOST_COMPLETE",
+  "clientExit": 0,
+  "allChildrenReaped": true,
+  "protocolHostRequests": 0
+}

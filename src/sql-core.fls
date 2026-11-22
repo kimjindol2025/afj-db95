@@ -475,6 +475,19 @@
 
 (defn parse-select-standard [raw-tokens]
   (let [tokens (sql-select-projection-tokens raw-tokens)]
+  (if (and (= (count tokens) 8)
+           (= (str_upper (token-at tokens 1)) "COUNT(*)")
+           (keyword? (token-at tokens 2) "FROM")
+           (keyword? (token-at tokens 4) "WHERE")
+           (regex_match (token-at tokens 3) "^[A-Za-z_][A-Za-z0-9_]*$")
+           (regex_match (token-at tokens 5) "^[A-Za-z_][A-Za-z0-9_]*$")
+           (keyword? (token-at tokens 6) "LIKE")
+           (str_starts_with (token-at tokens 7) "'")
+           (str_ends_with (token-at tokens 7) "'"))
+    (let [pattern (sql-value (token-at tokens 7))]
+      {"type" "select" "table" (token-at tokens 3)
+       "aggregate" {"function" "count" "column" "*" "alias" "COUNT(*)"}
+       "where" {"column" (token-at tokens 5) "operator" "LIKE" "value" pattern}})
   (if (and (= (count tokens) 6)
            (= (str_upper (token-at tokens 1)) "COUNT(*)")
            (keyword? (token-at tokens 2) "FROM")
@@ -549,7 +562,7 @@
          "join" {"type" "left" "table" join-table
                  "table-alias" join-alias "left" join-left "right" join-right}
          "group-by" group-by "order-by" order-by})
-      (parse-select-basic tokens))))))))
+      (parse-select-basic tokens)))))))))
 
 (defn sql-join-qualified-column? [column]
   (regex_match column "^[A-Za-z_][A-Za-z0-9_]*\\.[A-Za-z_][A-Za-z0-9_]*$"))
