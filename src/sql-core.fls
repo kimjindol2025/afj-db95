@@ -371,13 +371,18 @@
 
 (defn parse-select-numeric-between-ordered [raw-tokens]
   (let [tokens (sql-select-projection-tokens raw-tokens)]
-    (if (and (= (count tokens) 13)
+    (if (and (or (= (count tokens) 13)
+                 (and (= (count tokens) 14)
+                      (keyword? (token-at tokens 13) "DESC")))
              (keyword? (token-at tokens 10) "ORDER")
              (keyword? (token-at tokens 11) "BY")
              (= (token-at tokens 12) (token-at tokens 5)))
       (let [between (parse-select-numeric-between (take 10 tokens))]
         (if (nil? between) nil
-          (assoc between "order-by" (token-at tokens 12))))
+          (let [ordered (assoc between "order-by" (token-at tokens 12))]
+            (if (= (count tokens) 14)
+              (assoc ordered "order-direction" "desc")
+              ordered))))
       nil)))
 
 (defn parse-select-equality-numeric-bound [raw-tokens]
@@ -1340,7 +1345,7 @@
 (doseq [query
         ["SELECT sku, name, price FROM shop_products WHERE price BETWEEN 1500 AND 2200 ORDER price"
          "SELECT sku, name, price FROM shop_products WHERE price BETWEEN 1500 AND 2200 ORDER BY name"
-         "SELECT sku, name, price FROM shop_products WHERE price BETWEEN 1500 AND 2200 ORDER BY price DESC"
+         "SELECT sku, name, price FROM shop_products WHERE price BETWEEN 1500 AND 2200 ORDER BY price ASC"
          "SELECT sku, name, price FROM shop_products WHERE price BETWEEN 1500 AND 2200 ORDER BY price LIMIT 1"]]
   (let [rejected (try
                    (do (parse-sql query) false)
