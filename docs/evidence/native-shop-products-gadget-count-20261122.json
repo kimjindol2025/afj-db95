@@ -1,0 +1,31 @@
+{
+  "contract": "Native MariaDB prepared exact-name COUNT",
+  "sql": "SELECT COUNT(*) FROM shop_products WHERE name=?",
+  "bind": [
+    "Demo Gadget"
+  ],
+  "expectedRows": 1,
+  "expectedValue": 1,
+  "result": "PASS",
+  "passed": 1,
+  "total": 1,
+  "attempts": 1,
+  "nativeSeconds": 6.374734464014182,
+  "daemonAotExecutionsDuringTrial": 0,
+  "responseColumns": [
+    "COUNT(*)"
+  ],
+  "responseRows": [
+    "1"
+  ],
+  "rowPayloadHex": "0131",
+  "errPackets": 0,
+  "preparedParameterCount": 1,
+  "parameterTypes": [
+    253
+  ],
+  "productSourceChanged": false,
+  "fixtureSha256": "a70c5fb60b8ea366be5ebb811c547b526a2180187f2e7283ea63447f9c807f08",
+  "daemonElfSha256": "51be1324dd0e8a47aa960ae276b1769d32093a467114a8be85b99bf00c3236ae",
+  "testedDaemonProducerCommit": "00c7c73d124659daf06b667ec0f67dee5cc50372"
+}

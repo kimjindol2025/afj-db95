@@ -1,0 +1,225 @@
+;; Native product name COUNT fixture agreed in msg_4bf25d9cc494.
+;; Both original products remain seeded; server COUNT bind Demo Gadget must return one text1 row.
+(load "../src/sha1.fls")
+(define gadgetcount-control (env-get "AFJ_NATIVE_SHOP_PRODUCTS_GADGET_COUNT_CONTROL"))
+(define gadgetcount-connection (atom nil))
+(define gadgetcount-buffer (atom ""))
+(define gadgetcount-stage (atom "handshake"))
+(define gadgetcount-sequence (atom 0))
+(define gadgetcount-columns (atom []))
+(define gadgetcount-rows (atom []))
+(define gadgetcount-error (atom nil))
+(define gadgetcount-done (atom false))
+(define gadgetcount-statement (atom nil))
+
+(defn gadgetcount-check [condition message]
+  (if (= condition true) true (throw message)))
+
+(defn gadgetcount-u32 [value]
+  (buf-concat [(buf-u8 (rem value 256))
+               (buf-u8 (rem (floor (/ value 256)) 256))
+               (buf-u8 (rem (floor (/ value 65536)) 256))
+               (buf-u8 (rem (floor (/ value 16777216)) 256))]))
+
+(defn gadgetcount-read-u32 [bytes offset]
+  (+ (buf-read-u8 bytes offset)
+     (* 256 (buf-read-u8 bytes (+ offset 1)))
+     (* 65536 (buf-read-u8 bytes (+ offset 2)))
+     (* 16777216 (buf-read-u8 bytes (+ offset 3)))))
+
+(defn gadgetcount-send [payload sequence next-stage response-sequence]
+  (let [length (buf-len payload)
+        frame (buf-concat [(buf-slice (gadgetcount-u32 length) 0 3)
+                           (buf-u8 sequence) payload])]
+    (reset! gadgetcount-stage next-stage)
+    (reset! gadgetcount-sequence response-sequence)
+    (gadgetcount-check (= (tcp-write (deref gadgetcount-connection) (buf-to-binary frame)) "ok")
+                 "NATIVE_SHOP_PRODUCTS_GADGET_COUNT_PACKET_WRITE")))
+
+(defn gadgetcount-command [code text next-stage]
+  (gadgetcount-send (buf-concat [(buf-u8 code) (buf-str text)])
+              0 next-stage 1))
+
+(defn gadgetcount-text [bytes offset]
+  (gadgetcount-check (< offset (buf-len bytes)) "NATIVE_SHOP_PRODUCTS_GADGET_COUNT_TEXT_PREFIX")
+  (let [length (buf-read-u8 bytes offset) next (+ offset 1 length)]
+    (gadgetcount-check (and (< length 251) (<= next (buf-len bytes)))
+                 "NATIVE_SHOP_PRODUCTS_GADGET_COUNT_TEXT_LENGTH")
+    {"value" (buf-read-str bytes (+ offset 1) length)
+     "next" next}))
+
+(defn gadgetcount-column-name [bytes]
+  (loop [index 0 offset 0]
+    (let [field (gadgetcount-text bytes offset)]
+      (if (= index 4) (get field "value")
+        (recur (+ index 1) (get field "next"))))))
+
+(defn gadgetcount-login [bytes]
+  (gadgetcount-check (= (buf-read-u8 bytes 0) 10) "NATIVE_SHOP_PRODUCTS_GADGET_COUNT_HANDSHAKE_VERSION")
+  (let [version-end
+          (loop [offset 1]
+            (do
+              (gadgetcount-check (< offset (buf-len bytes)) "NATIVE_SHOP_PRODUCTS_GADGET_COUNT_HANDSHAKE_LENGTH")
+              (if (= (buf-read-u8 bytes offset) 0) offset (recur (+ offset 1)))))
+        first-offset (+ version-end 5)
+        second-offset (+ first-offset 27)]
+    (gadgetcount-check (<= (+ second-offset 12) (buf-len bytes))
+                 "NATIVE_SHOP_PRODUCTS_GADGET_COUNT_SCRAMBLE_LENGTH")
+    (let [scramble (buf-concat [(buf-slice bytes first-offset 8)
+                                (buf-slice bytes second-offset 12)])
+          token (sha1-mysql-native-token "development-only" scramble)
+          login (buf-concat [(gadgetcount-u32 172545) (gadgetcount-u32 1048576)
+                             (buf-u8 33) (sha1-zero-bytes 23)
+                             (buf-str "root") (buf-u8 0)
+                             (buf-u8 20) token])]
+      (gadgetcount-check (= (buf-len token) 20) "NATIVE_SHOP_PRODUCTS_GADGET_COUNT_TOKEN_LENGTH")
+      (gadgetcount-send login 1 "login" 2))))
+
+(defn gadgetcount-frame [bytes sequence]
+  (gadgetcount-check (> (buf-len bytes) 0) "NATIVE_SHOP_PRODUCTS_GADGET_COUNT_EMPTY_PACKET")
+  (gadgetcount-check (= sequence (deref gadgetcount-sequence)) "NATIVE_SHOP_PRODUCTS_GADGET_COUNT_PACKET_SEQUENCE")
+  (swap! gadgetcount-sequence + 1)
+  (let [stage (deref gadgetcount-stage) first-byte (buf-read-u8 bytes 0)]
+    (if (= first-byte 255)
+      (if (>= (buf-len bytes) 9)
+        (throw (str "NATIVE_SHOP_PRODUCTS_GADGET_COUNT_SERVER_ERROR_" stage " code="
+                    (+ (buf-read-u8 bytes 1) (* 256 (buf-read-u8 bytes 2)))
+                    " message=" (buf-read-str bytes 9 (- (buf-len bytes) 9))))
+        (throw (str "NATIVE_SHOP_PRODUCTS_GADGET_COUNT_SHORT_SERVER_ERROR_" stage)))
+      nil)
+    (cond
+      (= stage "handshake") (gadgetcount-login bytes)
+      (= stage "login")
+        (do
+          (gadgetcount-check (= first-byte 0) "NATIVE_SHOP_PRODUCTS_GADGET_COUNT_LOGIN_ACK")
+          (gadgetcount-command 3 "CREATE TABLE shop_products (id INT PRIMARY KEY, sku TEXT, name TEXT, price INT, visible INT)"
+                           "create"))
+      (= stage "create")
+        (do
+          (gadgetcount-check (= first-byte 0) "NATIVE_SHOP_PRODUCTS_GADGET_COUNT_CREATE_ACK")
+          (gadgetcount-command 3 "INSERT INTO shop_products (id, sku, name, price, visible) VALUES (1, 'SKU-1', 'Demo Widget', 1500, 1)"
+                           "seed"))
+      (= stage "seed")
+        (do
+          (gadgetcount-check (= first-byte 0) "NATIVE_SHOP_PRODUCTS_GADGET_COUNT_FIRST_SEED_ACK")
+          (gadgetcount-command 3 "INSERT INTO shop_products (id, sku, name, price, visible) VALUES (2, 'SKU-2', 'Demo Gadget', 2200, 1)"
+                            "second-seed"))
+      (= stage "second-seed")
+        (do
+          (gadgetcount-check (= first-byte 0) "NATIVE_SHOP_PRODUCTS_GADGET_COUNT_SECOND_PRODUCT_SEED_ACK")
+          (gadgetcount-command 3 "CREATE TABLE shop_cart (id INT PRIMARY KEY, user_id INT, product_id INT, qty INT)" "cart-create"))
+      (= stage "cart-create")
+        (do
+          (gadgetcount-check (= first-byte 0) "NATIVE_SHOP_PRODUCTS_GADGET_COUNT_CART_CREATE_ACK")
+          (gadgetcount-command 3 "INSERT INTO shop_cart (id, user_id, product_id, qty) VALUES (2, 20, 2, 1)" "second-cart-seed"))
+      (= stage "second-cart-seed")
+        (do
+          (gadgetcount-check (= first-byte 0) "NATIVE_SHOP_PRODUCTS_GADGET_COUNT_SINGLE_CART_SEED_ACK")
+          (gadgetcount-command 22 "SELECT COUNT(*) FROM shop_products WHERE name=?" "prepare"))
+      (= stage "prepare")
+        (do
+          (gadgetcount-check (and (= first-byte 0) (>= (buf-len bytes) 12))
+                       "NATIVE_SHOP_PRODUCTS_GADGET_COUNT_PREPARE_ACK")
+          (gadgetcount-check (and (= (buf-read-u8 bytes 7) 1)
+                            (= (buf-read-u8 bytes 8) 0))
+                       "NATIVE_SHOP_PRODUCTS_GADGET_COUNT_PREPARE_ONE_PARAMETER")
+          (reset! gadgetcount-statement (gadgetcount-read-u32 bytes 1))
+          (let [execute (buf-concat [(buf-u8 23) (gadgetcount-u32 (deref gadgetcount-statement))
+                                     (buf-u8 0) (gadgetcount-u32 1)
+                                     (buf-u8 0) (buf-u8 1) (buf-u8 253) (buf-u8 0)
+                                     (buf-u8 11) (buf-str "Demo Gadget")])]
+            (gadgetcount-send execute 0 "select" 1)))
+      (= stage "select")
+        (do
+          (gadgetcount-check (and (= first-byte 1) (= (buf-len bytes) 1))
+                       "NATIVE_SHOP_PRODUCTS_GADGET_COUNT_SELECT_ONE_COLUMN")
+          (reset! gadgetcount-stage "columns"))
+      (= stage "columns")
+        (do
+          (swap! gadgetcount-columns conj (gadgetcount-column-name bytes))
+          (if (= (count (deref gadgetcount-columns)) 1)
+            (reset! gadgetcount-stage "columns-end") nil))
+      (= stage "columns-end")
+        (do
+          (gadgetcount-check (and (= first-byte 254) (= (buf-len bytes) 5))
+                       "NATIVE_SHOP_PRODUCTS_GADGET_COUNT_COLUMN_EOF")
+          (gadgetcount-check (> (count (get (deref gadgetcount-columns) 0)) 0)
+                         "NATIVE_SHOP_PRODUCTS_GADGET_COUNT_EXPRESSION_COLUMN")
+          (reset! gadgetcount-stage "rows"))
+      (= stage "rows")
+        (if (and (= first-byte 254) (= (buf-len bytes) 5))
+          (do
+            (gadgetcount-check (= (count (deref gadgetcount-rows)) 1)
+                           "NATIVE_SHOP_PRODUCTS_GADGET_COUNT_EXACTLY_ONE_ROW")
+            (gadgetcount-check (= (get (deref gadgetcount-rows) 0) "1")
+                           "NATIVE_SHOP_PRODUCTS_GADGET_COUNT_EXACT_SERVER_TOTAL")
+            (reset! gadgetcount-stage "done")
+            (reset! gadgetcount-done true))
+          (do
+            (gadgetcount-check (< (count (deref gadgetcount-rows)) 1)
+                           "NATIVE_SHOP_PRODUCTS_GADGET_COUNT_EXTRA_ROW")
+            (let [field (gadgetcount-text bytes 0)]
+              (gadgetcount-check (= (get field "next") (buf-len bytes))
+                             "NATIVE_SHOP_PRODUCTS_GADGET_COUNT_ROW_TRAILING_BYTES")
+              (swap! gadgetcount-rows conj (get field "value")))))
+      :else (throw "NATIVE_SHOP_PRODUCTS_GADGET_COUNT_UNEXPECTED_STAGE"))))
+
+(defn gadgetcount-drain []
+  (if (>= (buf-len (deref gadgetcount-buffer)) 4)
+    (let [bytes (deref gadgetcount-buffer)
+          length (+ (buf-read-u8 bytes 0) (* 256 (buf-read-u8 bytes 1))
+                     (* 65536 (buf-read-u8 bytes 2)))]
+      (gadgetcount-check (<= length 65536) "NATIVE_SHOP_PRODUCTS_GADGET_COUNT_PACKET_LIMIT")
+      (if (>= (buf-len bytes) (+ 4 length))
+        (do
+          (reset! gadgetcount-buffer (buf-slice bytes (+ 4 length)
+                                         (- (buf-len bytes) (+ 4 length))))
+          (gadgetcount-frame (buf-slice bytes 4 length) (buf-read-u8 bytes 3))
+          (gadgetcount-drain))
+        nil))
+    nil))
+
+(defn native-shop-products-name-count-handler [event connection payload peer]
+  (try
+    (cond
+      (or (= event "connect") (= event "accept"))
+        (do (gadgetcount-check (nil? (deref gadgetcount-connection)) "NATIVE_SHOP_PRODUCTS_GADGET_COUNT_SINGLE_CONNECTION")
+            (reset! gadgetcount-connection connection))
+      (= event "data")
+        (do (reset! gadgetcount-buffer
+              (buf-concat [(deref gadgetcount-buffer) (buf-from-binary payload)]))
+            (gadgetcount-drain))
+      (= event "close")
+        (gadgetcount-check (deref gadgetcount-done) "NATIVE_SHOP_PRODUCTS_GADGET_COUNT_PREMATURE_CLOSE")
+      :else nil)
+    (catch [error]
+      (reset! gadgetcount-error (error_message error))
+      (reset! gadgetcount-done true))))
+
+(gadgetcount-check (not (nil? gadgetcount-control)) "NATIVE_SHOP_PRODUCTS_GADGET_COUNT_HOST_ENV_REQUIRED")
+(gadgetcount-check (not (file_exists (str gadgetcount-control "/ports.ready")))
+             "NATIVE_SHOP_PRODUCTS_GADGET_COUNT_CONTROL_NOT_FRESH")
+(let [bridge-port (tcp-client-free-port) daemon-port (tcp-client-free-port)]
+  (gadgetcount-check (and (number? bridge-port) (number? daemon-port)
+                    (not (= bridge-port daemon-port))) "NATIVE_SHOP_PRODUCTS_GADGET_COUNT_DISTINCT_PORTS")
+  (gadgetcount-check (= (tcp-server-raw bridge-port "native-shop-products-name-count-handler" "127.0.0.1") "ok")
+               "NATIVE_SHOP_PRODUCTS_GADGET_COUNT_LISTENER_START")
+  (try
+    (do
+      (file_write (str gadgetcount-control "/ports.json")
+                  (json_str {"bridge" bridge-port "daemon" daemon-port}))
+      (file_write (str gadgetcount-control "/ports.ready") "ready")
+      (let [deadline (+ (now-ms) 30000)]
+        (while (and (< (now-ms) deadline) (not (deref gadgetcount-done))) (fl-yield 10)))
+      (gadgetcount-check (deref gadgetcount-done) "NATIVE_SHOP_PRODUCTS_GADGET_COUNT_CONTRACT_TIMEOUT")
+      (if (nil? (deref gadgetcount-error)) nil (throw (deref gadgetcount-error)))
+      (gadgetcount-check (= (deref gadgetcount-stage) "done") "NATIVE_SHOP_PRODUCTS_GADGET_COUNT_CONTRACT_INCOMPLETE")
+      (gadgetcount-check (= (buf-len (deref gadgetcount-buffer)) 0) "NATIVE_SHOP_PRODUCTS_GADGET_COUNT_TRAILING_PACKET_BYTES"))
+    (finally (tcp-server-stop bridge-port))))
+(println (str "NATIVE_SHOP_PRODUCTS_GADGET_COUNT_RESULT "
+  (json_str {"ok" true "prepared_parameters" 1
+             "query" "SELECT COUNT(*) FROM shop_products WHERE name=?"
+             "bind" ["Demo Gadget"] "select_executions" 1 "rows" 1
+             "columns" (deref gadgetcount-columns) "data" (deref gadgetcount-rows)
+             "exact_count" true "client_computes_count" false})))
+(println "afj-db95 Native shop product Gadget COUNT prepared SELECT PASS")
