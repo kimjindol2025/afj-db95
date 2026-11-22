@@ -1,0 +1,225 @@
+;; Native product name COUNT fixture agreed in msg_4bf25d9cc494.
+;; Both original products remain seeded; server COUNT bind Demo Widget must return one text1 row.
+(load "../src/sha1.fls")
+(define namecount-control (env-get "AFJ_NATIVE_SHOP_PRODUCTS_NAME_COUNT_CONTROL"))
+(define namecount-connection (atom nil))
+(define namecount-buffer (atom ""))
+(define namecount-stage (atom "handshake"))
+(define namecount-sequence (atom 0))
+(define namecount-columns (atom []))
+(define namecount-rows (atom []))
+(define namecount-error (atom nil))
+(define namecount-done (atom false))
+(define namecount-statement (atom nil))
+
+(defn namecount-check [condition message]
+  (if (= condition true) true (throw message)))
+
+(defn namecount-u32 [value]
+  (buf-concat [(buf-u8 (rem value 256))
+               (buf-u8 (rem (floor (/ value 256)) 256))
+               (buf-u8 (rem (floor (/ value 65536)) 256))
+               (buf-u8 (rem (floor (/ value 16777216)) 256))]))
+
+(defn namecount-read-u32 [bytes offset]
+  (+ (buf-read-u8 bytes offset)
+     (* 256 (buf-read-u8 bytes (+ offset 1)))
+     (* 65536 (buf-read-u8 bytes (+ offset 2)))
+     (* 16777216 (buf-read-u8 bytes (+ offset 3)))))
+
+(defn namecount-send [payload sequence next-stage response-sequence]
+  (let [length (buf-len payload)
+        frame (buf-concat [(buf-slice (namecount-u32 length) 0 3)
+                           (buf-u8 sequence) payload])]
+    (reset! namecount-stage next-stage)
+    (reset! namecount-sequence response-sequence)
+    (namecount-check (= (tcp-write (deref namecount-connection) (buf-to-binary frame)) "ok")
+                 "NATIVE_SHOP_PRODUCTS_NAME_COUNT_PACKET_WRITE")))
+
+(defn namecount-command [code text next-stage]
+  (namecount-send (buf-concat [(buf-u8 code) (buf-str text)])
+              0 next-stage 1))
+
+(defn namecount-text [bytes offset]
+  (namecount-check (< offset (buf-len bytes)) "NATIVE_SHOP_PRODUCTS_NAME_COUNT_TEXT_PREFIX")
+  (let [length (buf-read-u8 bytes offset) next (+ offset 1 length)]
+    (namecount-check (and (< length 251) (<= next (buf-len bytes)))
+                 "NATIVE_SHOP_PRODUCTS_NAME_COUNT_TEXT_LENGTH")
+    {"value" (buf-read-str bytes (+ offset 1) length)
+     "next" next}))
+
+(defn namecount-column-name [bytes]
+  (loop [index 0 offset 0]
+    (let [field (namecount-text bytes offset)]
+      (if (= index 4) (get field "value")
+        (recur (+ index 1) (get field "next"))))))
+
+(defn namecount-login [bytes]
+  (namecount-check (= (buf-read-u8 bytes 0) 10) "NATIVE_SHOP_PRODUCTS_NAME_COUNT_HANDSHAKE_VERSION")
+  (let [version-end
+          (loop [offset 1]
+            (do
+              (namecount-check (< offset (buf-len bytes)) "NATIVE_SHOP_PRODUCTS_NAME_COUNT_HANDSHAKE_LENGTH")
+              (if (= (buf-read-u8 bytes offset) 0) offset (recur (+ offset 1)))))
+        first-offset (+ version-end 5)
+        second-offset (+ first-offset 27)]
+    (namecount-check (<= (+ second-offset 12) (buf-len bytes))
+                 "NATIVE_SHOP_PRODUCTS_NAME_COUNT_SCRAMBLE_LENGTH")
+    (let [scramble (buf-concat [(buf-slice bytes first-offset 8)
+                                (buf-slice bytes second-offset 12)])
+          token (sha1-mysql-native-token "development-only" scramble)
+          login (buf-concat [(namecount-u32 172545) (namecount-u32 1048576)
+                             (buf-u8 33) (sha1-zero-bytes 23)
+                             (buf-str "root") (buf-u8 0)
+                             (buf-u8 20) token])]
+      (namecount-check (= (buf-len token) 20) "NATIVE_SHOP_PRODUCTS_NAME_COUNT_TOKEN_LENGTH")
+      (namecount-send login 1 "login" 2))))
+
+(defn namecount-frame [bytes sequence]
+  (namecount-check (> (buf-len bytes) 0) "NATIVE_SHOP_PRODUCTS_NAME_COUNT_EMPTY_PACKET")
+  (namecount-check (= sequence (deref namecount-sequence)) "NATIVE_SHOP_PRODUCTS_NAME_COUNT_PACKET_SEQUENCE")
+  (swap! namecount-sequence + 1)
+  (let [stage (deref namecount-stage) first-byte (buf-read-u8 bytes 0)]
+    (if (= first-byte 255)
+      (if (>= (buf-len bytes) 9)
+        (throw (str "NATIVE_SHOP_PRODUCTS_NAME_COUNT_SERVER_ERROR_" stage " code="
+                    (+ (buf-read-u8 bytes 1) (* 256 (buf-read-u8 bytes 2)))
+                    " message=" (buf-read-str bytes 9 (- (buf-len bytes) 9))))
+        (throw (str "NATIVE_SHOP_PRODUCTS_NAME_COUNT_SHORT_SERVER_ERROR_" stage)))
+      nil)
+    (cond
+      (= stage "handshake") (namecount-login bytes)
+      (= stage "login")
+        (do
+          (namecount-check (= first-byte 0) "NATIVE_SHOP_PRODUCTS_NAME_COUNT_LOGIN_ACK")
+          (namecount-command 3 "CREATE TABLE shop_products (id INT PRIMARY KEY, sku TEXT, name TEXT, price INT, visible INT)"
+                           "create"))
+      (= stage "create")
+        (do
+          (namecount-check (= first-byte 0) "NATIVE_SHOP_PRODUCTS_NAME_COUNT_CREATE_ACK")
+          (namecount-command 3 "INSERT INTO shop_products (id, sku, name, price, visible) VALUES (1, 'SKU-1', 'Demo Widget', 1500, 1)"
+                           "seed"))
+      (= stage "seed")
+        (do
+          (namecount-check (= first-byte 0) "NATIVE_SHOP_PRODUCTS_NAME_COUNT_FIRST_SEED_ACK")
+          (namecount-command 3 "INSERT INTO shop_products (id, sku, name, price, visible) VALUES (2, 'SKU-2', 'Demo Gadget', 2200, 1)"
+                            "second-seed"))
+      (= stage "second-seed")
+        (do
+          (namecount-check (= first-byte 0) "NATIVE_SHOP_PRODUCTS_NAME_COUNT_SECOND_PRODUCT_SEED_ACK")
+          (namecount-command 3 "CREATE TABLE shop_cart (id INT PRIMARY KEY, user_id INT, product_id INT, qty INT)" "cart-create"))
+      (= stage "cart-create")
+        (do
+          (namecount-check (= first-byte 0) "NATIVE_SHOP_PRODUCTS_NAME_COUNT_CART_CREATE_ACK")
+          (namecount-command 3 "INSERT INTO shop_cart (id, user_id, product_id, qty) VALUES (2, 20, 2, 1)" "second-cart-seed"))
+      (= stage "second-cart-seed")
+        (do
+          (namecount-check (= first-byte 0) "NATIVE_SHOP_PRODUCTS_NAME_COUNT_SINGLE_CART_SEED_ACK")
+          (namecount-command 22 "SELECT COUNT(*) FROM shop_products WHERE name=?" "prepare"))
+      (= stage "prepare")
+        (do
+          (namecount-check (and (= first-byte 0) (>= (buf-len bytes) 12))
+                       "NATIVE_SHOP_PRODUCTS_NAME_COUNT_PREPARE_ACK")
+          (namecount-check (and (= (buf-read-u8 bytes 7) 1)
+                            (= (buf-read-u8 bytes 8) 0))
+                       "NATIVE_SHOP_PRODUCTS_NAME_COUNT_PREPARE_ONE_PARAMETER")
+          (reset! namecount-statement (namecount-read-u32 bytes 1))
+          (let [execute (buf-concat [(buf-u8 23) (namecount-u32 (deref namecount-statement))
+                                     (buf-u8 0) (namecount-u32 1)
+                                     (buf-u8 0) (buf-u8 1) (buf-u8 253) (buf-u8 0)
+                                     (buf-u8 11) (buf-str "Demo Widget")])]
+            (namecount-send execute 0 "select" 1)))
+      (= stage "select")
+        (do
+          (namecount-check (and (= first-byte 1) (= (buf-len bytes) 1))
+                       "NATIVE_SHOP_PRODUCTS_NAME_COUNT_SELECT_ONE_COLUMN")
+          (reset! namecount-stage "columns"))
+      (= stage "columns")
+        (do
+          (swap! namecount-columns conj (namecount-column-name bytes))
+          (if (= (count (deref namecount-columns)) 1)
+            (reset! namecount-stage "columns-end") nil))
+      (= stage "columns-end")
+        (do
+          (namecount-check (and (= first-byte 254) (= (buf-len bytes) 5))
+                       "NATIVE_SHOP_PRODUCTS_NAME_COUNT_COLUMN_EOF")
+          (namecount-check (> (count (get (deref namecount-columns) 0)) 0)
+                         "NATIVE_SHOP_PRODUCTS_NAME_COUNT_EXPRESSION_COLUMN")
+          (reset! namecount-stage "rows"))
+      (= stage "rows")
+        (if (and (= first-byte 254) (= (buf-len bytes) 5))
+          (do
+            (namecount-check (= (count (deref namecount-rows)) 1)
+                           "NATIVE_SHOP_PRODUCTS_NAME_COUNT_EXACTLY_ONE_ROW")
+            (namecount-check (= (get (deref namecount-rows) 0) "1")
+                           "NATIVE_SHOP_PRODUCTS_NAME_COUNT_EXACT_SERVER_TOTAL")
+            (reset! namecount-stage "done")
+            (reset! namecount-done true))
+          (do
+            (namecount-check (< (count (deref namecount-rows)) 1)
+                           "NATIVE_SHOP_PRODUCTS_NAME_COUNT_EXTRA_ROW")
+            (let [field (namecount-text bytes 0)]
+              (namecount-check (= (get field "next") (buf-len bytes))
+                             "NATIVE_SHOP_PRODUCTS_NAME_COUNT_ROW_TRAILING_BYTES")
+              (swap! namecount-rows conj (get field "value")))))
+      :else (throw "NATIVE_SHOP_PRODUCTS_NAME_COUNT_UNEXPECTED_STAGE"))))
+
+(defn namecount-drain []
+  (if (>= (buf-len (deref namecount-buffer)) 4)
+    (let [bytes (deref namecount-buffer)
+          length (+ (buf-read-u8 bytes 0) (* 256 (buf-read-u8 bytes 1))
+                     (* 65536 (buf-read-u8 bytes 2)))]
+      (namecount-check (<= length 65536) "NATIVE_SHOP_PRODUCTS_NAME_COUNT_PACKET_LIMIT")
+      (if (>= (buf-len bytes) (+ 4 length))
+        (do
+          (reset! namecount-buffer (buf-slice bytes (+ 4 length)
+                                         (- (buf-len bytes) (+ 4 length))))
+          (namecount-frame (buf-slice bytes 4 length) (buf-read-u8 bytes 3))
+          (namecount-drain))
+        nil))
+    nil))
+
+(defn native-shop-products-name-count-handler [event connection payload peer]
+  (try
+    (cond
+      (or (= event "connect") (= event "accept"))
+        (do (namecount-check (nil? (deref namecount-connection)) "NATIVE_SHOP_PRODUCTS_NAME_COUNT_SINGLE_CONNECTION")
+            (reset! namecount-connection connection))
+      (= event "data")
+        (do (reset! namecount-buffer
+              (buf-concat [(deref namecount-buffer) (buf-from-binary payload)]))
+            (namecount-drain))
+      (= event "close")
+        (namecount-check (deref namecount-done) "NATIVE_SHOP_PRODUCTS_NAME_COUNT_PREMATURE_CLOSE")
+      :else nil)
+    (catch [error]
+      (reset! namecount-error (error_message error))
+      (reset! namecount-done true))))
+
+(namecount-check (not (nil? namecount-control)) "NATIVE_SHOP_PRODUCTS_NAME_COUNT_HOST_ENV_REQUIRED")
+(namecount-check (not (file_exists (str namecount-control "/ports.ready")))
+             "NATIVE_SHOP_PRODUCTS_NAME_COUNT_CONTROL_NOT_FRESH")
+(let [bridge-port (tcp-client-free-port) daemon-port (tcp-client-free-port)]
+  (namecount-check (and (number? bridge-port) (number? daemon-port)
+                    (not (= bridge-port daemon-port))) "NATIVE_SHOP_PRODUCTS_NAME_COUNT_DISTINCT_PORTS")
+  (namecount-check (= (tcp-server-raw bridge-port "native-shop-products-name-count-handler" "127.0.0.1") "ok")
+               "NATIVE_SHOP_PRODUCTS_NAME_COUNT_LISTENER_START")
+  (try
+    (do
+      (file_write (str namecount-control "/ports.json")
+                  (json_str {"bridge" bridge-port "daemon" daemon-port}))
+      (file_write (str namecount-control "/ports.ready") "ready")
+      (let [deadline (+ (now-ms) 30000)]
+        (while (and (< (now-ms) deadline) (not (deref namecount-done))) (fl-yield 10)))
+      (namecount-check (deref namecount-done) "NATIVE_SHOP_PRODUCTS_NAME_COUNT_CONTRACT_TIMEOUT")
+      (if (nil? (deref namecount-error)) nil (throw (deref namecount-error)))
+      (namecount-check (= (deref namecount-stage) "done") "NATIVE_SHOP_PRODUCTS_NAME_COUNT_CONTRACT_INCOMPLETE")
+      (namecount-check (= (buf-len (deref namecount-buffer)) 0) "NATIVE_SHOP_PRODUCTS_NAME_COUNT_TRAILING_PACKET_BYTES"))
+    (finally (tcp-server-stop bridge-port))))
+(println (str "NATIVE_SHOP_PRODUCTS_NAME_COUNT_RESULT "
+  (json_str {"ok" true "prepared_parameters" 1
+             "query" "SELECT COUNT(*) FROM shop_products WHERE name=?"
+             "bind" ["Demo Widget"] "select_executions" 1 "rows" 1
+             "columns" (deref namecount-columns) "data" (deref namecount-rows)
+             "exact_count" true "client_computes_count" false})))
+(println "afj-db95 Native shop product name COUNT prepared SELECT PASS")
