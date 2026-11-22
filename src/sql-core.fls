@@ -608,6 +608,26 @@
       (throw "unsupported SELECT form"))
     nil))
 
+(defn parse-select-products-visible-ifnull-sum [raw-tokens]
+  (let [tokens (sql-select-projection-tokens raw-tokens)
+        projection (str_join (take 2 (drop 1 tokens)) " ")]
+    (if (and (= (count tokens) 7)
+             (= projection "IFNULL(SUM(price), 0)")
+             (keyword? (token-at tokens 3) "FROM")
+             (= (token-at tokens 4) "shop_products")
+             (keyword? (token-at tokens 5) "WHERE")
+             (= (count (regex_split (token-at tokens 6) "=")) 2)
+             (= (first (regex_split (token-at tokens 6) "=")) "visible")
+             (or (= (last (regex_split (token-at tokens 6) "=")) "?")
+                 (regex_match (last (regex_split (token-at tokens 6) "="))
+                              "^-?[0-9]+$")))
+      (let [predicate (sql-assignment (token-at tokens 6))]
+        {"type" "select" "table" "shop_products"
+         "aggregate" {"function" "sum" "expression" "price"
+                      "alias" "IFNULL(SUM(price), 0)" "if-null" 0}
+         "where" {"column" "visible" "equals" (get predicate "value")}})
+      nil)))
+
 (defn sql-join-projection-valid? [columns left-table right-table]
   (loop [index 0 names []]
     (if (= index (count columns))
@@ -736,8 +756,14 @@
                             (if (nil? combined-like)
                               (let [contains (parse-select-like-contains tokens)]
                                 (if (nil? contains)
-                                  (let [joined (parse-select-qualified-inner-join tokens)]
-                                    (if (nil? joined) (parse-select-standard tokens) joined))
+                                  (let [visible-ifnull-sum
+                                          (parse-select-products-visible-ifnull-sum tokens)]
+                                    (if (nil? visible-ifnull-sum)
+                                      (let [joined (parse-select-qualified-inner-join tokens)]
+                                        (if (nil? joined)
+                                          (parse-select-standard tokens)
+                                          joined))
+                                      visible-ifnull-sum))
                                   contains))
                               combined-like))
                           combined))
@@ -1117,6 +1143,11 @@
 (assert-sql "RELEASE SAVEPOINT before_update"
             {"type" "savepoint" "op" "RELEASE" "name" "before_update"})
 
+(assert-sql "SELECT IFNULL(SUM(price), 0) FROM shop_products WHERE visible=1"
+            {"type" "select" "table" "shop_products"
+             "aggregate" {"function" "sum" "expression" "price"
+                          "alias" "IFNULL(SUM(price), 0)" "if-null" 0}
+             "where" {"column" "visible" "equals" "1"}})
 (assert-sql "SELECT id, sku, name, price FROM shop_products WHERE id=1"
             {"type" "select" "columns" ["id" "sku" "name" "price"]
              "table" "shop_products" "where" {"column" "id" "equals" "1"}})

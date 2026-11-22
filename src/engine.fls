@@ -834,8 +834,10 @@
     (let [expression (get aggregate "expression")
           total (atom nil)]
       (doseq [row rows]
-        (let [projected (engine-project-row row [expression])
-              value (get projected (get expression "name"))]
+        (let [value (if (string? expression)
+                      (get row expression)
+                      (let [projected (engine-project-row row [expression])]
+                        (get projected (get expression "name"))))]
           (if (nil? value)
             nil
             (reset! total (if (nil? (deref total))
