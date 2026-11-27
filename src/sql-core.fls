@@ -1007,6 +1007,9 @@
                "isolation-level" level}
               (throw "unsupported isolation level")))
         (if (and (= (count tokens) 1)
+                 (keyword? first "BEGIN"))
+          {"type" "transaction" "op" "BEGIN"}
+        (if (and (= (count tokens) 1)
                  (or (keyword? first "COMMIT")
                      (keyword? first "ROLLBACK")))
           (let [op (str_upper first)]
@@ -1025,7 +1028,7 @@
                        (= (str_upper second) "SAVEPOINT"))
                 {"type" "savepoint" "op" "RELEASE"
                  "name" (get tokens 2)}
-                (throw "unsupported SQL statement"))))))))
+                (throw "unsupported SQL statement")))))))))
   ))
 
 (defn parse-sql [sql]
