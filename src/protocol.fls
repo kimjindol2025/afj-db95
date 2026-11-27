@@ -11,11 +11,21 @@
   (reset! server-state {"status" "stopped" "sessions" {} "prepared" {}})
   {"ok" true "status" "stopped"})
 
+(defn server-session-token []
+  (let [token (auth-random-token 32)]
+    (if (and (string? token)
+             (= (count token) 64)
+             (regex_match token "^[0-9a-f]{64}$")
+             (not (has-key? (get (deref server-state) "sessions") token)))
+      token
+      (throw "AUTH_FAILED"))))
+
 (defn server-login [user]
-  (let [token (uuid_short)]
+  (let [token (server-session-token)
+        login {"ok" true "token" token "user" user}]
     (swap! server-state assoc "sessions"
            (assoc (get (deref server-state) "sessions") token user))
-    {"ok" true "token" token "user" user}))
+    login))
 
 (defn server-expire-session [token]
   (do

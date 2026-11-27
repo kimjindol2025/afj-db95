@@ -1583,7 +1583,8 @@
       true)))
 
 (defn afj-tcp-expire-token [token]
-  (let [tx-state (get (deref afj-tcp-transactions) token)]
+  (let [tx-state (get (deref afj-tcp-transactions) token)
+        session-user (get (deref afj-tcp-sessions) token "unknown")]
     (if (and (not (nil? tx-state))
              (= (get tx-state "status") "active")
              (afj-tcp-storage-healthy?))
@@ -1595,7 +1596,7 @@
     (swap! afj-tcp-transactions dissoc token)
     (afj-tcp-release-token token)
     (server-expire-session token)
-    (audit-event "session" token "expired")
+    (audit-event "session" session-user "expired")
     true))
 
 (defn afj-tcp-session-active? [token]
@@ -2209,20 +2210,45 @@
 ;; connection and is cleaned up by afj-tcp-close-connection.
 (defn afj-tcp-auth-query [request connection]
   (let [requested-user (get request "user")
-        auth (authenticate requested-user (get request "password"))]
-    (if (not (get auth "ok"))
-      (do
-        (audit-event "auth-query" requested-user "failure")
-        {"ok" false "error" "AUTH_FAILED"})
-      (let [login (server-login requested-user)
-            token (get login "token")]
-        (swap! afj-tcp-sessions assoc token requested-user)
-        (swap! afj-tcp-connection-tokens assoc connection token)
-        (swap! afj-tcp-session-expiries assoc token
-               (+ (now_ms) afj-tcp-session-ttl-ms))
-        (audit-event "auth-query" requested-user "success")
-        (afj-tcp-query {"token" token
-                        "statement" (get request "statement")})))))
+        issued-token (atom nil)
+        previous-token (get (deref afj-tcp-connection-tokens) connection)
+        login (try
+                (let [auth (authenticate requested-user (get request "password"))]
+                  (if (not (get auth "ok"))
+                    (do
+                      (audit-event "auth-query" requested-user "failure")
+                      {"ok" false "error" "AUTH_FAILED"})
+                    (let [issued (server-login requested-user)
+                          token (get issued "token")]
+                      (reset! issued-token token)
+                      (swap! afj-tcp-sessions assoc token requested-user)
+                      (swap! afj-tcp-connection-tokens assoc connection token)
+                      (swap! afj-tcp-session-expiries assoc token
+                             (+ (now_ms) afj-tcp-session-ttl-ms))
+                      (audit-event "auth-query" requested-user "success")
+                      issued)))
+                (catch [error]
+                  (try
+                    (if (not (nil? (deref issued-token)))
+                      (do
+                        ;; No SQL has run for this new token: only undo auth state.
+                        (swap! afj-tcp-sessions dissoc (deref issued-token))
+                        (swap! afj-tcp-session-expiries dissoc (deref issued-token))
+                        (if (= (get (deref afj-tcp-connection-tokens) connection)
+                               (deref issued-token))
+                          (if (nil? previous-token)
+                            (swap! afj-tcp-connection-tokens dissoc connection)
+                            (swap! afj-tcp-connection-tokens assoc connection previous-token))
+                          nil)
+                        (server-expire-session (deref issued-token)))
+                      nil)
+                    (catch [cleanup-error] nil))
+                  {"ok" false "error" "AUTH_FAILED"}))]
+    ;; SQL/storage errors retain the existing outer SQL error boundary.
+    (if (get login "ok")
+      (afj-tcp-query {"token" (get login "token")
+                      "statement" (get request "statement")})
+      login)))
 
 (defn afj-tcp-line [conn line]
   (if (not (afj-tcp-rate-allowed? conn))
@@ -2243,15 +2269,32 @@
               (if (>= (count (keys (deref afj-tcp-sessions))) afj-tcp-session-limit)
                 (afj-tcp-send conn {"ok" false "error" "SESSION_LIMIT"})
                 (if (get auth "ok")
-                  (let [login (server-login (get request "user"))
-                        token (get login "token")]
-                    (audit-event "login" requested-user "success")
-                (swap! afj-tcp-sessions assoc token (get request "user"))
-                (swap! afj-tcp-connection-tokens assoc conn token)
-                (swap! afj-tcp-session-expiries assoc token
-                       (+ (now_ms) afj-tcp-session-ttl-ms))
-                    (afj-tcp-send conn {"ok" true "token" token
-                                         "user" (get request "user")}))
+                  (let [issued-token (atom nil)
+                        login (try
+                                (let [issued (server-login requested-user)
+                                      token (get issued "token")]
+                                  (reset! issued-token token)
+                                  (swap! afj-tcp-sessions assoc token requested-user)
+                                  (swap! afj-tcp-connection-tokens assoc conn token)
+                                  (swap! afj-tcp-session-expiries assoc token
+                                         (+ (now_ms) afj-tcp-session-ttl-ms))
+                                  (audit-event "login" requested-user "success")
+                                  issued)
+                                (catch [error]
+                                  (try
+                                    (if (not (nil? (deref issued-token)))
+                                      (do
+                                        (swap! afj-tcp-sessions dissoc (deref issued-token))
+                                        (swap! afj-tcp-session-expiries dissoc (deref issued-token))
+                                        (if (= (get (deref afj-tcp-connection-tokens) conn)
+                                               (deref issued-token))
+                                          (swap! afj-tcp-connection-tokens dissoc conn)
+                                          nil)
+                                        (server-expire-session (deref issued-token)))
+                                      nil)
+                                    (catch [cleanup-error] nil))
+                                  {"ok" false "error" "AUTH_FAILED"}))]
+                    (afj-tcp-send conn login))
                   (do
                     (audit-event "login" requested-user "failure")
                     (afj-tcp-send conn {"ok" false "error" "AUTH_FAILED"}))))))
