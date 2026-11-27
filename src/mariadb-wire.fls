@@ -388,6 +388,9 @@
                (or (= (get ast "op") "BEGIN")
                    (= (get ast "op") "ROLLBACK")))
         (do
+          (if (= (get ast "op") "BEGIN")
+            (engine-catalog-begin)
+            (engine-catalog-rollback))
           (swap! mariadb-wire-sessions assoc conn
                  (assoc (get (deref mariadb-wire-sessions) conn)
                         "transaction-active" (= (get ast "op") "BEGIN")))

@@ -2,8 +2,31 @@
 ;; SQL parser AST is deliberately kept separate from storage internals.
 
 (define engine-catalog (atom {}))
+(define engine-catalog-snapshot (atom nil))
 (define engine-databases (atom {}))
 (define engine-indexes (atom {}))
+
+(defn engine-catalog-copy [catalog]
+  (json-parse (json_str catalog)))
+
+(defn engine-catalog-begin []
+  (reset! engine-catalog-snapshot
+          {"catalog" (engine-catalog-copy (deref engine-catalog))
+           "indexes" (engine-catalog-copy (deref engine-indexes))})
+  true)
+
+(defn engine-catalog-rollback []
+  (if (nil? (deref engine-catalog-snapshot))
+    false
+    (do
+      (reset! engine-catalog
+              (engine-catalog-copy
+                (get (deref engine-catalog-snapshot) "catalog")))
+      (reset! engine-indexes
+              (engine-catalog-copy
+                (get (deref engine-catalog-snapshot) "indexes")))
+      (reset! engine-catalog-snapshot nil)
+      true)))
 
 ;; A real runtime probe keeps the existing callback path on older hosts.
 ;; This is an optional generic collection operation, not a constraint bypass.
