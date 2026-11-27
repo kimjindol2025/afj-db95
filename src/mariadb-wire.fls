@@ -383,11 +383,20 @@
 
 (defn mariadb-wire-query [conn query]
   (try
-    (let [result (execute-ast (parse-sql query))
-          rows (get result "rows")]
-      (if (nil? rows)
-        (tcp-write conn (buf-to-binary (mariadb-packet 1 (mariadb-ok-payload 0 0))))
-        (mariadb-wire-result conn 1 rows)))
+    (let [ast (parse-sql query)]
+      (if (and (= (get ast "type") "transaction")
+               (= (get ast "op") "BEGIN"))
+        (do
+          (swap! mariadb-wire-sessions assoc conn
+                 (assoc (get (deref mariadb-wire-sessions) conn)
+                        "transaction-active" true))
+          (tcp-write conn (buf-to-binary
+                            (mariadb-packet 1 (mariadb-ok-payload 0 0)))))
+        (let [result (execute-ast ast)
+              rows (get result "rows")]
+          (if (nil? rows)
+            (tcp-write conn (buf-to-binary (mariadb-packet 1 (mariadb-ok-payload 0 0))))
+            (mariadb-wire-result conn 1 rows)))))
     (catch [error]
       (tcp-write conn (buf-to-binary
                         (mariadb-packet 1
@@ -468,7 +477,7 @@
     (do
       (swap! mariadb-wire-sessions assoc conn
              {"phase" "handshake" "buffer" "" "prepared" {}
-              "next-statement-id" 1})
+              "next-statement-id" 1 "transaction-active" false})
       (tcp-write conn (buf-to-binary (mariadb-packet 0 (mariadb-handshake-payload)))))
     (if (= event "data")
       (let [state (get (deref mariadb-wire-sessions) conn)
