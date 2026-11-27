@@ -385,11 +385,12 @@
   (try
     (let [ast (parse-sql query)]
       (if (and (= (get ast "type") "transaction")
-               (= (get ast "op") "BEGIN"))
+               (or (= (get ast "op") "BEGIN")
+                   (= (get ast "op") "ROLLBACK")))
         (do
           (swap! mariadb-wire-sessions assoc conn
                  (assoc (get (deref mariadb-wire-sessions) conn)
-                        "transaction-active" true))
+                        "transaction-active" (= (get ast "op") "BEGIN")))
           (tcp-write conn (buf-to-binary
                             (mariadb-packet 1 (mariadb-ok-payload 0 0)))))
         (let [result (execute-ast ast)
